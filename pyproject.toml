@@ -1,0 +1,25 @@
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "battleship"
+version = "0.0.1.dev0"
+description = "Battleship"
+repository = "https://github.com/TheerapakG/battleship"
+authors = [
+    "TheerapakG <theerapakg@gmail.com>",
+]
+
+packages = [
+    { include = "battleship" }
+]
+
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.11",
+]
+
+[tool.poetry.dependencies]
+python = "^3.11"
