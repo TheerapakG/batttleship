@@ -3,16 +3,16 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
-name = "battleship"
+name = "tsocket"
 version = "0.0.1.dev0"
-description = "Battleship"
+description = "Raw async socket communication library"
 repository = "https://github.com/TheerapakG/battleship"
 authors = [
     "TheerapakG <theerapakg@gmail.com>",
 ]
 
 packages = [
-    { include = "battleship" }
+    { include = "tsocket" }
 ]
 
 classifiers = [
@@ -23,3 +23,4 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.11"
+cattrs = "^23.1.2"
