@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 
 from cattrs.preconf.cbor2 import Cbor2Converter
 
-from .shared import DisconnectedError, Message, ResponseError, Session
+from .shared import ConnectedError, DisconnectedError, Message, ResponseError, Session
 
 log = logging.getLogger(__name__)
 
@@ -103,6 +103,8 @@ class Client(metaclass=ClientMeta):
         port: int | str | None,
         ssl: ssl.SSLContext | bool | None = None,  # pylint: disable=W0621
     ):
+        if self.session is not None:
+            raise ConnectedError()
         reader, writer = await asyncio.open_connection(host, port, ssl=ssl)
         self.session = ClientSession(Session(uuid4(), reader, writer), self)
 

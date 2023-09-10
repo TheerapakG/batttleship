@@ -6,6 +6,10 @@ from uuid import UUID, uuid4
 log = logging.getLogger(__name__)
 
 
+class ConnectedError(Exception):
+    pass
+
+
 class DisconnectedError(Exception):
     pass
 

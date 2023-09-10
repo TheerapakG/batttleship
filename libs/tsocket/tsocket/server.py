@@ -79,7 +79,6 @@ class Server:
             else:
                 break
 
-        writer.write_eof()
         await writer.drain()
         writer.close()
         del self.sessions[session.id]
