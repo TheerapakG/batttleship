@@ -3,19 +3,20 @@ from dataclasses import dataclass, field
 from functools import wraps
 import inspect
 import logging
+import ssl
 from typing import Any, Awaitable, Callable, ClassVar, Generic, TypeVar
 from uuid import UUID, uuid4
 
-from cattrs.preconf.json import JsonConverter
+from cattrs.preconf.cbor2 import Cbor2Converter
 
-from .shared import Session
+from .shared import DisconnectedError, Message, ResponseError, Session
 
 log = logging.getLogger(__name__)
 
-converter = JsonConverter()
+converter = Cbor2Converter()
 
-converter.register_structure_hook(UUID, lambda d, t: UUID(d))
-converter.register_unstructure_hook(UUID, str)
+converter.register_structure_hook(UUID, lambda d, t: UUID(bytes=d))
+converter.register_unstructure_hook(UUID, lambda u: u.bytes)
 
 T = TypeVar("T")
 U = TypeVar("U")
@@ -34,25 +35,22 @@ def route(func: Callable[["Client", T], Awaitable[U]]):
     return Route(func)
 
 
+@dataclass
 class ClientSession:
     session: Session
     client: "Client"
-    read_task: asyncio.Task
+    read_task: asyncio.Task = field(init=False)
 
-    def __init__(self, session: Session, client: "Client"):
-        self.session = session
-        self.client = client
+    def __post_init__(self):
         self.read_task = asyncio.create_task(self.reader())
 
     async def write(
         self,
-        msg_method: str,
-        data: str,
+        msg: Message,
         *,
-        msg_id: UUID | None = None,
         wait: bool = True,
     ):
-        return await self.session.write(msg_method, data, msg_id=msg_id, wait=wait)
+        return await self.session.write(msg, wait=wait)
 
     async def reader(self):
         while True:
@@ -62,14 +60,17 @@ class ClientSession:
                 break
 
 
-def get_fake_route(name: str, route: Route[T, U]):
-    @wraps(route.func)
+def get_fake_route(name: str, rte: Route[T, U]):
+    @wraps(rte.func)
     async def fake_route(self: "Client", data: T) -> U:
-        return await self.request(
-            name,
-            converter.dumps(data),
-            inspect.signature(route.func).return_annotation,
-        )
+        try:
+            return await self.request(
+                name,
+                converter.dumps(data),
+                inspect.signature(rte.func).return_annotation,
+            )
+        except ResponseError as err:
+            raise ResponseError(err.method, err.data) from None
 
     return fake_route
 
@@ -96,29 +97,42 @@ class Client(metaclass=ClientMeta):
     ]
     session: ClientSession | None = field(default=None)
 
-    async def connect(self, host: str | None, port: int | str | None):
-        # TODO: SSL
-        reader, writer = await asyncio.open_connection(host, port)
+    async def connect(
+        self,
+        host: str | None,
+        port: int | str | None,
+        ssl: ssl.SSLContext | bool | None = None,  # pylint: disable=W0621
+    ):
+        reader, writer = await asyncio.open_connection(host, port, ssl=ssl)
         self.session = ClientSession(Session(uuid4(), reader, writer), self)
 
     async def disconnect(self):
-        await self.write("close", "close")
-        await self.session.read_task
+        if self.session is None:
+            raise DisconnectedError()
+        session = self.session
         self.session = None
+        await session.write(Message("close", b"close"))
+        await session.read_task
 
     async def write(
         self,
-        msg_method: str,
-        data: str,
+        msg: Message,
         *,
-        msg_id: UUID | None = None,
         wait: bool = True,
     ):
-        return await self.session.write(msg_method, data, msg_id=msg_id, wait=wait)
+        if self.session is None:
+            raise DisconnectedError()
+        try:
+            return await self.session.write(msg, wait=wait)
+        except ResponseError as err:
+            raise ResponseError(err.method, err.data) from None
 
-    async def request(self, msg_method: str, data: str, cl: type[T]):
-        return converter.loads(await self.write(msg_method, data), cl)
+    async def request(self, msg_method: str, data: bytes, cls: type[T]):
+        try:
+            return converter.loads(await self.write(Message(msg_method, data)), cls)
+        except ResponseError as err:
+            raise ResponseError(err.method, err.data) from None
 
-    async def emit(self, msg_method, data):
+    async def emit(self, msg_method: str, data: bytes):
         log.info("EMIT: %s %s", msg_method, data)
-        pass  # TODO
+        # TODO

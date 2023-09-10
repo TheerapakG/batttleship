@@ -24,3 +24,4 @@ classifiers = [
 [tool.poetry.dependencies]
 python = "^3.11"
 cattrs = "^23.1.2"
+cbor2 = "^5.4.6"

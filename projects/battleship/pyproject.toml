@@ -25,3 +25,4 @@ classifiers = [
 python = "^3.11"
 rich = "^13.5.2"
 tsocket = { path="../../libs/tsocket", develop=true }
+python-dotenv = "^1.0.0"

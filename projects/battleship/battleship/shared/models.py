@@ -4,7 +4,7 @@ from uuid import UUID
 
 @dataclass
 class Player:
-    id: UUID
+    id: UUID  # pylint: disable=C0103
     name: str
 
     def serialize_id(self):
@@ -16,7 +16,7 @@ class Player:
 
 @dataclass
 class Board:
-    id: UUID
+    id: UUID  # pylint: disable=C0103
     player: UUID  # Player.id
 
     def serialize_id(self):
@@ -28,7 +28,7 @@ class Board:
 
 @dataclass
 class Room:
-    id: UUID
+    id: UUID  # pylint: disable=C0103
     name: str
     players: list[UUID] = field(default_factory=list)  # list[Player.id]
     boards: dict[UUID, UUID] = field(default_factory=dict)  # dict[Player.id, Board.id]
@@ -36,7 +36,7 @@ class Room:
 
 @dataclass
 class RoomId:
-    id: UUID
+    id: UUID  # pylint: disable=C0103
 
     @classmethod
     def from_room(cls, room: Room):
@@ -53,9 +53,9 @@ class RoomCreateArgs:
 
 @dataclass
 class RoomGetArgs:
-    id: str
+    id: str  # pylint: disable=C0103
 
 
 @dataclass
 class RoomDeleteArgs:
-    id: str
+    id: str  # pylint: disable=C0103
