@@ -1,15 +1,32 @@
 import asyncio
+from collections.abc import Awaitable, AsyncIterator, Callable
 from dataclasses import dataclass, field
 from functools import wraps
 import inspect
 import logging
 import ssl
-from typing import Any, Awaitable, Callable, ClassVar, Generic, TypeVar
+from typing import (
+    Any,
+    ClassVar,
+    Generic,
+    Protocol,
+    TypeVar,
+    get_args,
+    runtime_checkable,
+)
 from uuid import UUID, uuid4
 
 from cattrs.preconf.cbor2 import Cbor2Converter
 
-from .shared import ConnectedError, DisconnectedError, Message, ResponseError, Session
+from .shared import (
+    Channel,
+    ConnectedError,
+    DisconnectedError,
+    Message,
+    MessageFlag,
+    ResponseError,
+    Session,
+)
 
 log = logging.getLogger(__name__)
 
@@ -22,17 +39,180 @@ T = TypeVar("T")
 U = TypeVar("U")
 
 
+@runtime_checkable  # yikes?
+class _Route(Protocol):
+    def get_fake_route(self, name: str) -> Callable[["Client", Any], Any]:
+        ...
+
+
+async def simple_writer(channel: Channel, name: str, data: T):
+    await channel.write(Message(name, converter.dumps(data)))
+
+
+async def stream_writer(channel: Channel, name: str, data: AsyncIterator[T]):
+    try:
+        async for content in data:
+            await channel.write(
+                Message(name, converter.dumps(content), MessageFlag.NONE)
+            )
+        await channel.write(Message(name, b""))
+    except Exception:  # pylint: disable=W0718
+        await channel.write(
+            Message("", b"client error", MessageFlag.ERROR | MessageFlag.END)
+        )
+
+
+async def simple_reader(channel: Channel, cls: type[T]):
+    msg = await channel.read()
+    return converter.loads(msg.to_content(), cls)
+
+
+async def stream_reader(channel: Channel, cls: type[T]):
+    while True:
+        msg = await channel.read()
+        content = msg.to_content()
+        if content:
+            yield converter.loads(content, cls)
+        if MessageFlag.END in msg.flag:
+            break
+
+
 @dataclass
-class Route(Generic[T, U]):
+class _SimpleRoute(Generic[T, U]):
     func: Callable[["Client", T], Awaitable[U]]
+
+    def get_fake_route(self, name: str):
+        func = self.func
+
+        @wraps(func)
+        async def fake_route(self: "Client", data: T) -> U:
+            with self.session.create_channel() as channel:
+                write_task = asyncio.create_task(simple_writer(channel, name, data))
+                try:
+                    content = await simple_reader(
+                        channel, inspect.signature(func).return_annotation
+                    )
+                    await write_task
+                    return content
+                except ResponseError as err:
+                    await write_task
+                    raise ResponseError(err.method, err.content) from None
+
+        return fake_route
 
     async def __call__(self, data: T) -> U:
         # For tricking LSP / type checker
         raise NotImplementedError()
 
 
-def route(func: Callable[["Client", T], Awaitable[U]]):
-    return Route(func)
+@dataclass
+class _StreamInRoute(Generic[T, U]):
+    func: Callable[["Client", AsyncIterator[T]], U]
+
+    def get_fake_route(self, name: str):
+        func = self.func
+
+        @wraps(func)
+        async def fake_route(self: "Client", data: AsyncIterator[T]) -> U:
+            with self.session.create_channel() as channel:
+                write_task = asyncio.create_task(stream_writer(channel, name, data))
+                try:
+                    content = await simple_reader(
+                        channel, inspect.signature(func).return_annotation
+                    )
+                    await write_task
+                    return content
+                except ResponseError as err:
+                    await write_task
+                    raise ResponseError(err.method, err.content) from None
+
+        return fake_route
+
+    async def __call__(self, data: AsyncIterator[T]) -> U:
+        # For tricking LSP / type checker
+        raise NotImplementedError()
+
+
+@dataclass
+class _StreamOutRoute(Generic[T, U]):
+    func: Callable[["Client", T], AsyncIterator[U]]
+
+    def get_fake_route(self, name: str):
+        func = self.func
+
+        @wraps(func)
+        async def fake_route(self: "Client", data: T) -> AsyncIterator[U]:
+            with self.session.create_channel() as channel:
+                write_task = asyncio.create_task(simple_writer(channel, name, data))
+                try:
+                    async for content in stream_reader(
+                        channel, get_args(inspect.signature(func).return_annotation)[0]
+                    ):
+                        yield content
+                    await write_task
+                except ResponseError as err:
+                    await write_task
+                    raise ResponseError(err.method, err.content) from None
+
+        return fake_route
+
+    async def __call__(self, data: T) -> AsyncIterator[U]:
+        # For tricking LSP / type checker
+        raise NotImplementedError()
+
+
+@dataclass
+class _StreamInOutRoute(Generic[T, U]):
+    func: Callable[["Client", T], AsyncIterator[U]]
+
+    def get_fake_route(self, name: str):
+        func = self.func
+
+        @wraps(func)
+        async def fake_route(
+            self: "Client", data: AsyncIterator[T]
+        ) -> AsyncIterator[U]:
+            with self.session.create_channel() as channel:
+                write_task = asyncio.create_task(stream_writer(channel, name, data))
+                try:
+                    async for content in stream_reader(
+                        channel, get_args(inspect.signature(func).return_annotation)[0]
+                    ):
+                        yield content
+                    await write_task
+                except ResponseError as err:
+                    await write_task
+                    raise ResponseError(err.method, err.content) from None
+
+        return fake_route
+
+    async def __call__(self, data: AsyncIterator[T]) -> AsyncIterator[U]:
+        # For tricking LSP / type checker
+        raise NotImplementedError()
+
+
+class Route:
+    @classmethod
+    def simple(cls, func: Callable[["Client", T], Awaitable[U]]) -> _SimpleRoute[T, U]:
+        return _SimpleRoute[T, U](func)
+
+    @classmethod
+    def stream_in(
+        cls, func: Callable[["Client", AsyncIterator[T]], Awaitable[U]]
+    ) -> _StreamInRoute[T, U]:
+        return _StreamInRoute[T, U](func)
+
+    @classmethod
+    def stream_out(
+        cls, func: Callable[["Client", T], AsyncIterator[U]]
+    ) -> _StreamOutRoute[T, U]:
+        return _StreamOutRoute[T, U](func)
+
+    @classmethod
+    def stream_in_out(
+        cls, func: Callable[["Client", AsyncIterator[T]], AsyncIterator[U]]
+    ) -> _StreamInOutRoute[T, U]:
+        return _StreamInOutRoute[T, U](func)
 
 
 @dataclass
@@ -44,45 +224,31 @@ class ClientSession:
     def __post_init__(self):
         self.read_task = asyncio.create_task(self.reader())
 
-    async def write(
-        self,
-        msg: Message,
-        *,
-        wait: bool = True,
-    ):
-        return await self.session.write(msg, wait=wait)
+    def create_channel(self):
+        return self.session.create_channel()
+
+    def destroy_channel(self, channel: Channel):
+        self.session.destroy_channel(channel)
 
     async def reader(self):
         while True:
-            if msg := await self.session.read():
-                await self.client.emit(msg.method, msg.data)
+            if channel_method := await self.session.read():
+                channel, _ = channel_method
+                self.destroy_channel(channel)
+                msg = await channel.read()
+                await self.client.emit(msg.method, msg.content)
             else:
                 break
-
-
-def get_fake_route(name: str, rte: Route[T, U]):
-    @wraps(rte.func)
-    async def fake_route(self: "Client", data: T) -> U:
-        try:
-            return await self.request(
-                name,
-                converter.dumps(data),
-                inspect.signature(rte.func).return_annotation,
-            )
-        except ResponseError as err:
-            raise ResponseError(err.method, err.data) from None
-
-    return fake_route
 
 
 class ClientMeta(type):
     def __new__(mcs, name: str, bases: tuple[type, ...], attrs: dict[str, Any]):
         routes = {
-            name: route for name, route in attrs.items() if isinstance(route, Route)
+            name: route for name, route in attrs.items() if isinstance(route, _Route)
         }
         attrs["routes"] = routes
         attrs.update(
-            {name: get_fake_route(name, route) for name, route in routes.items()}
+            {name: route.get_fake_route(name) for name, route in routes.items()}
         )
         return super().__new__(mcs, name, bases, attrs)
 
@@ -92,7 +258,7 @@ class Client(metaclass=ClientMeta):
     routes: ClassVar[
         dict[
             str,
-            Route[Any, Any],
+            _Route,
         ]
     ]
     session: ClientSession | None = field(default=None)
@@ -113,27 +279,10 @@ class Client(metaclass=ClientMeta):
             raise DisconnectedError()
         session = self.session
         self.session = None
-        await session.write(Message("close", b"close"))
+        with session.create_channel() as channel:
+            await channel.write(Message("close", b""))
+            await channel.read()
         await session.read_task
-
-    async def write(
-        self,
-        msg: Message,
-        *,
-        wait: bool = True,
-    ):
-        if self.session is None:
-            raise DisconnectedError()
-        try:
-            return await self.session.write(msg, wait=wait)
-        except ResponseError as err:
-            raise ResponseError(err.method, err.data) from None
-
-    async def request(self, msg_method: str, data: bytes, cls: type[T]):
-        try:
-            return converter.loads(await self.write(Message(msg_method, data)), cls)
-        except ResponseError as err:
-            raise ResponseError(err.method, err.data) from None
 
     async def emit(self, msg_method: str, data: bytes):
         log.info("EMIT: %s %s", msg_method, data)

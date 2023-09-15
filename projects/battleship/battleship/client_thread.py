@@ -9,7 +9,7 @@ from uuid import UUID
 from cattrs.preconf.json import JsonConverter
 from dotenv import load_dotenv
 from rich.prompt import Prompt
-from tsocket.client_thread import ClientThread, route
+from tsocket.client_thread import ClientThread, Route
 from tsocket.shared import Empty
 
 from .shared import models
@@ -25,23 +25,23 @@ converter.register_unstructure_hook(UUID, lambda u: u.bytes)
 
 @dataclass
 class BattleshipClientThread(ClientThread):
-    @route
+    @Route.simple
     async def ping(self, _: Empty) -> Future[Empty]:
         raise NotImplementedError()
 
-    @route
+    @Route.simple
     async def room_create(self, args: models.RoomCreateArgs) -> Future[models.RoomId]:
         raise NotImplementedError()
 
-    @route
+    @Route.simple
     async def room_get(self, args: models.RoomGetArgs) -> Future[models.Room]:
         raise NotImplementedError()
 
-    @route
+    @Route.simple
     async def room_delete(self, args: models.RoomDeleteArgs) -> Future[models.RoomId]:
         raise NotImplementedError()
 
-    @route
+    @Route.simple
     async def room_list(self, _: Empty) -> Future[list[models.RoomId]]:
         raise NotImplementedError()
 

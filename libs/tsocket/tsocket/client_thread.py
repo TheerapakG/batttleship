@@ -1,19 +1,21 @@
 import asyncio
+from collections.abc import Awaitable, AsyncIterator, Callable
 from concurrent.futures import Future
 from dataclasses import dataclass, field
 from functools import partial, wraps
 import inspect
 import logging
-from queue import Queue
+import queue
 import ssl
 from threading import Thread
-from typing import Any, Callable, Generic, TypeVar, get_args
+from typing import Any, Generic, Protocol, TypeVar, get_args, runtime_checkable
+
 from uuid import UUID
 
 from cattrs.preconf.cbor2 import Cbor2Converter
 
-from .client import Client
-from .shared import ConnectedError, DisconnectedError, Message
+from .client import Client, simple_writer, stream_writer, simple_reader, stream_reader
+from .shared import ConnectedError, DisconnectedError, ResponseError
 
 log = logging.getLogger(__name__)
 
@@ -26,59 +28,311 @@ T = TypeVar("T")
 U = TypeVar("U")
 
 
+@runtime_checkable  # yikes?
+class _Route(Protocol):
+    def get_fake_route(self, name: str) -> Callable[["Client", Any], Any]:
+        ...
+
+
+class WorkItem(Protocol):
+    async def run(self, client: Client):
+        ...
+
+
 @dataclass
-class Route(Generic[T, U]):
+class DisconnectItem:
+    async def run(self, client: Client):
+        await client.disconnect()
+
+
+async def queue_to_asynciterator(content_queue: queue.SimpleQueue[Future[T]]):
+    while True:
+        while True:
+            try:
+                content = content_queue.get_nowait()
+                break
+            except queue.Empty:
+                await asyncio.sleep(0)
+                continue
+
+        while True:
+            try:
+                yield content.result(0)
+            except TimeoutError:
+                await asyncio.sleep(0)
+                continue
+
+
+async def awaitable_to_future(content_aw: Awaitable[T], future: Future[T]):
+    try:
+        content = await content_aw
+    except ResponseError as err:
+        future.set_exception(ResponseError(err.method, err.content))
+    except Exception as err:  # pylint: disable=W0718
+        future.set_exception(err)
+    else:
+        future.set_result(content)
+
+
+async def asynciterator_to_queue(
+    content_it: AsyncIterator[T], content_queue: queue.SimpleQueue[Future[T]]
+):
+    try:
+        async for content in content_it:
+            future = Future()
+            future.set_result(content)
+            content_queue.put(future)
+    except ResponseError as err:
+        future = Future()
+        future.set_exception(ResponseError(err.method, err.content))
+        content_queue.put(future)
+    except Exception as err:  # pylint: disable=W0718
+        future = Future()
+        future.set_exception(err)
+        content_queue.put(future)
+    else:
+        future = Future()
+        future.set_exception(StopIteration())
+        content_queue.put(future)
+
+
+@dataclass
+class SimpleWorkItem(Generic[T, U]):
+    name: str
+    content: T
+    cls: type[U]
+    future: Future[U] = field(default_factory=Future)
+
+    async def run(self, client: Client):
+        if self.future.set_running_or_notify_cancel():
+            with client.session.create_channel() as channel:
+                write_task = asyncio.create_task(
+                    simple_writer(channel, self.name, self.content)
+                )
+                await awaitable_to_future(simple_reader(channel, self.cls), self.future)
+                await write_task
+
+
+@dataclass
+class _SimpleRoute(Generic[T, U]):
     func: Callable[["Client", T], Future[U]]
 
     def __call__(self, data: T) -> Future[U]:
         # For tricking LSP / type checker
         raise NotImplementedError()
 
+    def get_fake_route(self, name: str) -> Callable[["Client", T], Future[U]]:
+        func = self.func
 
-def route(func: Callable[["Client", T], Future[U]]):
-    return Route(func)
+        @wraps(func)
+        def fake_route(self: "ClientThread", data: T) -> Future[U]:
+            work = SimpleWorkItem(
+                name, data, get_args(inspect.signature(func).return_annotation)[0]
+            )
+            self.work_queue.put(work)
+            return work.future
+
+        return fake_route
 
 
-def get_fake_route(name: str, rte: Route[T, U]):
-    @wraps(rte.func)
-    def fake_route(self: "ClientThread", data: T) -> Future[U]:
-        return self.request(
-            name,
-            converter.dumps(data),
-            get_args(inspect.signature(rte.func).return_annotation)[0],
-        )
+@dataclass
+class StreamInWorkItem(Generic[T, U]):
+    name: str
+    content: queue.SimpleQueue[Future[T]]
+    cls: type[U]
+    future: Future[U] = field(default_factory=Future)
 
-    return fake_route
+    async def run(self, client: Client):
+        if self.future.set_running_or_notify_cancel():
+            with client.session.create_channel() as channel:
+                write_task = asyncio.create_task(
+                    stream_writer(
+                        channel, self.name, queue_to_asynciterator(self.content)
+                    )
+                )
+                await awaitable_to_future(simple_reader(channel, self.cls), self.future)
+                await write_task
+
+
+@dataclass
+class _StreamInRoute(Generic[T, U]):
+    func: Callable[["Client", queue.SimpleQueue[Future[T]]], Future[U]]
+
+    def __call__(self, data: T) -> Future[U]:
+        # For tricking LSP / type checker
+        raise NotImplementedError()
+
+    def get_fake_route(
+        self, name: str
+    ) -> Callable[["Client", queue.SimpleQueue[Future[T]]], Future[U]]:
+        func = self.func
+
+        @wraps(func)
+        def fake_route(
+            self: "ClientThread", data: queue.SimpleQueue[Future[T]]
+        ) -> Future[U]:
+            work = StreamInWorkItem(
+                name, data, get_args(inspect.signature(func).return_annotation)[0]
+            )
+            self.work_queue.put(work)
+            return work.future
+
+        return fake_route
+
+
+@dataclass
+class StreamOutWorkItem(Generic[T, U]):
+    name: str
+    content: T
+    cls: type[U]
+    future: Future[queue.SimpleQueue[Future[U]]] = field(default_factory=Future)
+
+    async def run(self, client: Client):
+        if self.future.set_running_or_notify_cancel():
+            out_queue = queue.SimpleQueue()
+            self.future.set_result(out_queue)
+            with client.session.create_channel() as channel:
+                write_task = asyncio.create_task(
+                    simple_writer(channel, self.name, self.content)
+                )
+                await asynciterator_to_queue(
+                    stream_reader(channel, self.cls), out_queue
+                )
+                await write_task
+
+
+@dataclass
+class _StreamOutRoute(Generic[T, U]):
+    func: Callable[["Client", T], Future[queue.SimpleQueue[Future[U]]]]
+
+    def __call__(self, data: T) -> Future[queue.SimpleQueue[Future[U]]]:
+        # For tricking LSP / type checker
+        raise NotImplementedError()
+
+    def get_fake_route(
+        self, name: str
+    ) -> Callable[["Client", T], Future[queue.SimpleQueue[Future[U]]]]:
+        func = self.func
+
+        @wraps(func)
+        def fake_route(
+            self: "ClientThread", data: T
+        ) -> Future[queue.SimpleQueue[Future[U]]]:
+            work = StreamOutWorkItem(
+                name,
+                data,
+                get_args(
+                    get_args(get_args(inspect.signature(func).return_annotation)[0])[0]
+                )[0],
+            )
+            self.work_queue.put(work)
+            return work.future
+
+        return fake_route
+
+
+@dataclass
+class StreamInOutWorkItem(Generic[T, U]):
+    name: str
+    content: queue.SimpleQueue[Future[T]]
+    cls: type[U]
+    future: Future[queue.SimpleQueue[Future[U]]] = field(default_factory=Future)
+
+    async def run(self, client: Client):
+        if self.future.set_running_or_notify_cancel():
+            out_queue = queue.SimpleQueue()
+            self.future.set_result(out_queue)
+            with client.session.create_channel() as channel:
+                write_task = asyncio.create_task(
+                    stream_writer(
+                        channel, self.name, queue_to_asynciterator(self.content)
+                    )
+                )
+                await asynciterator_to_queue(
+                    stream_reader(channel, self.cls), out_queue
+                )
+                await write_task
+
+
+@dataclass
+class _StreamInOutRoute(Generic[T, U]):
+    func: Callable[
+        ["Client", queue.SimpleQueue[Future[T]]], Future[queue.SimpleQueue[Future[U]]]
+    ]
+
+    def __call__(
+        self, data: queue.SimpleQueue[Future[T]]
+    ) -> Future[queue.SimpleQueue[Future[U]]]:
+        # For tricking LSP / type checker
+        raise NotImplementedError()
+
+    def get_fake_route(
+        self, name: str
+    ) -> Callable[
+        ["Client", queue.SimpleQueue[Future[T]]], Future[queue.SimpleQueue[Future[U]]]
+    ]:
+        func = self.func
+
+        @wraps(func)
+        def fake_route(
+            self: "ClientThread", data: queue.SimpleQueue[Future[T]]
+        ) -> Future[queue.SimpleQueue[Future[U]]]:
+            work = StreamInOutWorkItem(
+                name,
+                data,
+                get_args(
+                    get_args(get_args(inspect.signature(func).return_annotation)[0])[0]
+                )[0],
+            )
+            self.work_queue.put(work)
+            return work.future
+
+        return fake_route
+
+
+class Route:
+    @classmethod
+    def simple(cls, func: Callable[["Client", T], Future[U]]) -> _SimpleRoute[T, U]:
+        return _SimpleRoute[T, U](func)
+
+    @classmethod
+    def stream_in(
+        cls, func: Callable[["Client", queue.SimpleQueue[Future[T]]], Future[U]]
+    ) -> _StreamInRoute[T, U]:
+        return _StreamInRoute[T, U](func)
+
+    @classmethod
+    def stream_out(
+        cls, func: Callable[["Client", T], Future[queue.SimpleQueue[Future[U]]]]
+    ) -> _StreamOutRoute[T, U]:
+        return _StreamOutRoute[T, U](func)
+
+    @classmethod
+    def stream_in_out(
+        cls,
+        func: Callable[
+            ["Client", queue.SimpleQueue[Future[T]]],
+            Future[queue.SimpleQueue[Future[U]]],
+        ],
+    ) -> _StreamInOutRoute[T, U]:
+        return _StreamInOutRoute[T, U](func)
 
 
 class ClientThreadMeta(type):
     def __new__(mcs, name: str, bases: tuple[type, ...], attrs: dict[str, Any]):
         routes = {
-            name: route for name, route in attrs.items() if isinstance(route, Route)
+            name: route for name, route in attrs.items() if isinstance(route, _Route)
         }
         attrs["routes"] = routes
         attrs.update(
-            {name: get_fake_route(name, route) for name, route in routes.items()}
+            {name: route.get_fake_route(name) for name, route in routes.items()}
         )
         return super().__new__(mcs, name, bases, attrs)
 
 
 @dataclass
-class DisconnectItem:
-    pass
-
-
-@dataclass
-class WorkItem(Generic[T]):
-    msg: Message
-    wait: bool
-    cls: type[T] | None = field(default=None)
-    future: Future[T | None] = field(default_factory=Future)
-
-
-@dataclass
 class ClientThread(metaclass=ClientThreadMeta):
-    work_queue: Queue[DisconnectItem | WorkItem] = field(default=Queue())
+    work_queue: queue.SimpleQueue[WorkItem] = field(default_factory=queue.SimpleQueue)
     thread: Thread | None = field(default=None)
 
     async def _runner(
@@ -89,22 +343,23 @@ class ClientThread(metaclass=ClientThreadMeta):
     ):
         client = Client()
         await client.connect(host, port, ssl=ssl)
+        is_exit = False
+        running_tasks = set[asyncio.Task]()
         while True:
-            work = self.work_queue.get()
+            running_tasks = {task for task in running_tasks if not task.done()}
+            try:
+                work = self.work_queue.get_nowait()
+            except queue.Empty:
+                if is_exit:
+                    await asyncio.gather(*running_tasks, return_exceptions=True)
+                    break
+                await asyncio.sleep(0)
+                continue
+
             if isinstance(work, DisconnectItem):
-                await client.disconnect()
-                self.work_queue.task_done()
-            else:
-                if work.future.set_running_or_notify_cancel():
-                    try:
-                        data = await client.write(work.msg, wait=work.wait)
-                        if work.cls:
-                            work.future.set_result(converter.loads(data, work.cls))
-                        else:
-                            work.future.set_result(data)
-                    except Exception as err:  # pylint: disable=W0718
-                        work.future.set_exception(err)
-                self.work_queue.task_done()
+                is_exit = True
+
+            running_tasks.add(asyncio.create_task(work.run(client)))
 
     def connect(
         self,
@@ -122,21 +377,7 @@ class ClientThread(metaclass=ClientThreadMeta):
     def disconnect(self):
         if self.thread is None:
             raise DisconnectedError()
+        thread = self.thread
         self.thread = None
         self.work_queue.put(DisconnectItem())
-        self.work_queue.join()
-
-    def write(
-        self,
-        msg: Message,
-        *,
-        wait: bool = True,
-    ):
-        work = WorkItem(msg, wait=wait)
-        self.work_queue.put(work)
-        return work.future
-
-    def request(self, msg_method: str, data: bytes, cls: type[T]) -> Future[T]:
-        work = WorkItem(Message(msg_method, data), wait=True, cls=cls)
-        self.work_queue.put(work)
-        return work.future
+        thread.join()
