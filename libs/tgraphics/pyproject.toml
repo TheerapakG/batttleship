@@ -3,16 +3,16 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
-name = "battleship"
+name = "tgraphics"
 version = "0.0.1.dev0"
-description = "Battleship"
-repository = "https://github.com/TheerapakG/battleship"
+description = "GUI library"
+repository = "https://github.com/TheerapakG/tgraphics"
 authors = [
     "TheerapakG <theerapakg@gmail.com>",
 ]
 
 packages = [
-    { include = "battleship" }
+    { include = "tgraphics" }
 ]
 
 classifiers = [
@@ -23,7 +23,5 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.11"
-rich = "^13.5.2"
-tsocket = { path="../../libs/tsocket", develop=true }
-tgraphics = { path="../../libs/tgraphics", develop=true }
-python-dotenv = "^1.0.0"
+pyglet = "^2.0.9"
+
