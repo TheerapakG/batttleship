@@ -1,8 +1,13 @@
 from collections import deque
 from collections.abc import Callable
+from concurrent.futures import Future
+from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import ClassVar, Generic, Protocol, TypeGuard, TypeVar
+from queue import Empty, SimpleQueue
+from typing import Any, ClassVar, Generic, Protocol, TypeGuard, TypeVar, overload
 import weakref
+
+import pyglet
 
 T = TypeVar("T")
 
@@ -14,7 +19,7 @@ class Triggerable(Protocol):
 
 @dataclass
 class Effect:
-    tracking: ClassVar["Effect | None"]
+    tracking: ClassVar[list["Effect | None"]] = []
     update_queue: ClassVar[deque[weakref.ref[Triggerable]]] = deque()
     update_set: ClassVar[set[weakref.ref[Triggerable]]] = set()
     watchers: weakref.WeakSet["Watcher"] = field(default_factory=weakref.WeakSet)
@@ -23,14 +28,25 @@ class Effect:
     def __hash__(self) -> int:
         return id(self)
 
+    @contextmanager
     def track(self):
-        Effect.tracking = self
+        Effect.tracking.append(self)
+        try:
+            yield
+        finally:
+            Effect.tracking.pop()
 
-    def untrack(self):
-        Effect.tracking = None
+    @classmethod
+    @contextmanager
+    def track_barrier(cls):
+        Effect.tracking.append(None)
+        try:
+            yield
+        finally:
+            Effect.tracking.pop()
 
     def add_tracking_dependent(self):
-        if (tracking := Effect.tracking) is not None:
+        if Effect.tracking and (tracking := Effect.tracking[-1]) is not None:
             self.dependents.add(tracking)
 
     def update(self):
@@ -87,14 +103,46 @@ class Computed(ReadRef[T]):
     def __init__(self, func: Callable[[], T]):
         self._func = func
         super().__init__(None)
-        self.track()
-        self._value = self._func()
-        self.untrack()
+        with self.track():
+            self._value = self._func()
 
     def trigger(self):
-        self.track()
-        new_value = self._func()
-        self.untrack()
+        with self.track():
+            new_value = self._func()
+        if self._value != new_value:
+            self._value = new_value
+            self.update()
+
+
+_future_update_queue = SimpleQueue[tuple["ComputedFuture", Any]]()
+
+
+def update_computed_future(_dt):
+    try:
+        while True:
+            computed_fut, value = _future_update_queue.get_nowait()
+            computed_fut._set_value(value)  # pylint: disable=W0212
+    except Empty:
+        return
+
+
+pyglet.clock.schedule(update_computed_future)
+
+
+class ComputedFuture(ReadRef[T]):
+    _fut: Future[T]
+
+    def __init__(self, fut: Future[T]):
+        super().__init__(None)
+        self.set_future(fut)
+
+    def set_future(self, fut: Future[T]):
+        self._fut = fut
+        self._fut.add_done_callback(
+            lambda fut: _future_update_queue.put(self, fut.result())
+        )
+
+    def _set_value(self, new_value: T):
         if self._value != new_value:
             self._value = new_value
             self.update()
@@ -136,7 +184,17 @@ def isref(maybe_ref: ReadRef[T] | T) -> TypeGuard[ReadRef[T]]:
     return isinstance(maybe_ref, ReadRef)
 
 
-def unref(maybe_ref: ReadRef[T] | T) -> T:
+@overload
+def unref(maybe_ref: ReadRef[T]) -> T:
+    ...
+
+
+@overload
+def unref(maybe_ref: T) -> T:
+    ...
+
+
+def unref(maybe_ref):
     if isref(maybe_ref):
         return maybe_ref.value
     else:
