@@ -115,13 +115,13 @@ class SimpleWorkItem(Generic[T, U]):
 
 @dataclass
 class _SimpleRoute(Generic[T, U]):
-    func: Callable[["Client", T], Future[U]]
+    func: Callable[["ClientThread", T], Future[U]]
 
     def __call__(self, data: T) -> Future[U]:
         # For tricking LSP / type checker
         raise NotImplementedError()
 
-    def get_fake_route(self, name: str) -> Callable[["Client", T], Future[U]]:
+    def get_fake_route(self, name: str) -> Callable[["ClientThread", T], Future[U]]:
         func = self.func
 
         @wraps(func)
@@ -156,7 +156,7 @@ class StreamInWorkItem(Generic[T, U]):
 
 @dataclass
 class _StreamInRoute(Generic[T, U]):
-    func: Callable[["Client", queue.SimpleQueue[Future[T]]], Future[U]]
+    func: Callable[["ClientThread", queue.SimpleQueue[Future[T]]], Future[U]]
 
     def __call__(self, data: T) -> Future[U]:
         # For tricking LSP / type checker
@@ -164,7 +164,7 @@ class _StreamInRoute(Generic[T, U]):
 
     def get_fake_route(
         self, name: str
-    ) -> Callable[["Client", queue.SimpleQueue[Future[T]]], Future[U]]:
+    ) -> Callable[["ClientThread", queue.SimpleQueue[Future[T]]], Future[U]]:
         func = self.func
 
         @wraps(func)
@@ -203,7 +203,7 @@ class StreamOutWorkItem(Generic[T, U]):
 
 @dataclass
 class _StreamOutRoute(Generic[T, U]):
-    func: Callable[["Client", T], Future[queue.SimpleQueue[Future[U]]]]
+    func: Callable[["ClientThread", T], Future[queue.SimpleQueue[Future[U]]]]
 
     def __call__(self, data: T) -> Future[queue.SimpleQueue[Future[U]]]:
         # For tricking LSP / type checker
@@ -211,7 +211,7 @@ class _StreamOutRoute(Generic[T, U]):
 
     def get_fake_route(
         self, name: str
-    ) -> Callable[["Client", T], Future[queue.SimpleQueue[Future[U]]]]:
+    ) -> Callable[["ClientThread", T], Future[queue.SimpleQueue[Future[U]]]]:
         func = self.func
 
         @wraps(func)
@@ -257,7 +257,8 @@ class StreamInOutWorkItem(Generic[T, U]):
 @dataclass
 class _StreamInOutRoute(Generic[T, U]):
     func: Callable[
-        ["Client", queue.SimpleQueue[Future[T]]], Future[queue.SimpleQueue[Future[U]]]
+        ["ClientThread", queue.SimpleQueue[Future[T]]],
+        Future[queue.SimpleQueue[Future[U]]],
     ]
 
     def __call__(
@@ -269,7 +270,8 @@ class _StreamInOutRoute(Generic[T, U]):
     def get_fake_route(
         self, name: str
     ) -> Callable[
-        ["Client", queue.SimpleQueue[Future[T]]], Future[queue.SimpleQueue[Future[U]]]
+        ["ClientThread", queue.SimpleQueue[Future[T]]],
+        Future[queue.SimpleQueue[Future[U]]],
     ]:
         func = self.func
 
@@ -292,18 +294,20 @@ class _StreamInOutRoute(Generic[T, U]):
 
 class Route:
     @classmethod
-    def simple(cls, func: Callable[["Client", T], Future[U]]) -> _SimpleRoute[T, U]:
+    def simple(
+        cls, func: Callable[["ClientThread", T], Future[U]]
+    ) -> _SimpleRoute[T, U]:
         return _SimpleRoute[T, U](func)
 
     @classmethod
     def stream_in(
-        cls, func: Callable[["Client", queue.SimpleQueue[Future[T]]], Future[U]]
+        cls, func: Callable[["ClientThread", queue.SimpleQueue[Future[T]]], Future[U]]
     ) -> _StreamInRoute[T, U]:
         return _StreamInRoute[T, U](func)
 
     @classmethod
     def stream_out(
-        cls, func: Callable[["Client", T], Future[queue.SimpleQueue[Future[U]]]]
+        cls, func: Callable[["ClientThread", T], Future[queue.SimpleQueue[Future[U]]]]
     ) -> _StreamOutRoute[T, U]:
         return _StreamOutRoute[T, U](func)
 
@@ -311,7 +315,7 @@ class Route:
     def stream_in_out(
         cls,
         func: Callable[
-            ["Client", queue.SimpleQueue[Future[T]]],
+            ["ClientThread", queue.SimpleQueue[Future[T]]],
             Future[queue.SimpleQueue[Future[U]]],
         ],
     ) -> _StreamInOutRoute[T, U]:

@@ -30,6 +30,10 @@ class BattleshipClient(Client):
         raise NotImplementedError()
 
     @Route.simple
+    async def online(self, _: Empty) -> int:
+        raise NotImplementedError()
+
+    @Route.simple
     async def room_create(self, args: models.RoomCreateArgs) -> models.RoomId:
         raise NotImplementedError()
 
@@ -46,13 +50,11 @@ class BattleshipClient(Client):
         raise NotImplementedError()
 
 
-client = BattleshipClient()
-
-
 async def run_client(host: str | None, port: int | str | None):
     ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
     ssl_context.load_verify_locations(os.environ["SSL_CERT"])
     ssl_context.check_hostname = False
+    client = BattleshipClient()
     await client.connect(host, port, ssl=ssl_context)
     while True:
         data = Prompt.ask(">")

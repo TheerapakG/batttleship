@@ -22,6 +22,10 @@ class BattleshipServer(Server):
         return Empty()
 
     @Route.simple
+    async def online(self, _session: Session, _: Empty) -> int:
+        return len(self.sessions)
+
+    @Route.simple
     async def room_create(
         self, _session: Session, args: models.RoomCreateArgs
     ) -> models.RoomId:

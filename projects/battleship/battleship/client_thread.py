@@ -26,33 +26,35 @@ converter.register_unstructure_hook(UUID, lambda u: u.bytes)
 @dataclass
 class BattleshipClientThread(ClientThread):
     @Route.simple
-    async def ping(self, _: Empty) -> Future[Empty]:
+    def ping(self, _: Empty) -> Future[Empty]:
         raise NotImplementedError()
 
     @Route.simple
-    async def room_create(self, args: models.RoomCreateArgs) -> Future[models.RoomId]:
+    def online(self, _: Empty) -> Future[int]:
         raise NotImplementedError()
 
     @Route.simple
-    async def room_get(self, args: models.RoomGetArgs) -> Future[models.Room]:
+    def room_create(self, args: models.RoomCreateArgs) -> Future[models.RoomId]:
         raise NotImplementedError()
 
     @Route.simple
-    async def room_delete(self, args: models.RoomDeleteArgs) -> Future[models.RoomId]:
+    def room_get(self, args: models.RoomGetArgs) -> Future[models.Room]:
         raise NotImplementedError()
 
     @Route.simple
-    async def room_list(self, _: Empty) -> Future[list[models.RoomId]]:
+    def room_delete(self, args: models.RoomDeleteArgs) -> Future[models.RoomId]:
         raise NotImplementedError()
 
-
-client = BattleshipClientThread()
+    @Route.simple
+    def room_list(self, _: Empty) -> Future[list[models.RoomId]]:
+        raise NotImplementedError()
 
 
 def run_client(host: str | None, port: int | str | None):
     ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
     ssl_context.load_verify_locations(os.environ["SSL_CERT"])
     ssl_context.check_hostname = False
+    client = BattleshipClientThread()
     client.connect(host, port, ssl=ssl_context)
     while True:
         data = Prompt.ask(">")
