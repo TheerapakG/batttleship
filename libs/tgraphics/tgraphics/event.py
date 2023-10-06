@@ -1,9 +1,27 @@
 from dataclasses import dataclass
-from typing import ClassVar, Protocol
+from typing import Any, ClassVar, Protocol
+
+
+class EventMeta(type):
+    _events: ClassVar[dict[str, type["Event"]]] = dict()
+
+    def __new__(
+        mcs: type["Event"],
+        name: str,
+        bases: tuple[type, ...],
+        attrs: dict[str, Any],
+    ):
+        cls = super().__new__(mcs, name, bases, attrs)
+        mcs._events[name] = cls
+        return cls
+
+    @classmethod
+    def from_name(mcs, name: str):
+        return mcs._events[name]
 
 
 @dataclass
-class Event:
+class Event(metaclass=EventMeta):
     pass
 
 
@@ -34,6 +52,14 @@ class MouseEnterEvent(Event):
 class MouseLeaveEvent(Event):
     x: float
     y: float
+
+
+class ComponentMountedEvent(Event):
+    pass
+
+
+class ComponentUnmountedEvent(Event):
+    pass
 
 
 class ComponentFocusEvent(Event):

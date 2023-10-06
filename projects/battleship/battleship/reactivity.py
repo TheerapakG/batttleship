@@ -1,9 +1,9 @@
-from tgraphics.reactivity import Computed, Ref, Watcher
+from tgraphics.reactivity import computed, Ref, Watcher
 
 x = Ref("1")
 y = Ref("1")
 
-z = Computed(lambda: x.value + y.value)
+z = computed(lambda: x.value + y.value)
 watcher = Watcher([z], lambda: print(z.value), trigger_init=True)
 
 x.value = "2"
