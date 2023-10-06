@@ -34,12 +34,10 @@ window.scene = Column(
                 computed(
                     lambda: [
                         Row(
-                            computed(
-                                lambda: [
-                                    Rect(color, width=16, height=16)
-                                    for _ in range(unref(grid_size))
-                                ]
-                            ),
+                            [
+                                Rect(color, width=16, height=16)
+                                for _ in range(unref(grid_size))
+                            ],
                             gap=gap_size,
                         )
                         for _ in range(unref(grid_size))
@@ -49,42 +47,36 @@ window.scene = Column(
             ),
             Label(text, (255, 255, 255, 255)),
             Row(
-                computed(
-                    lambda: [
-                        Layer(
-                            computed(
-                                lambda: [
-                                    Rect((255, 255, 255, 255), width=50, height=30),
-                                    Input(
-                                        grid_size_input,
-                                        (0, 0, 0, 255),
-                                        (0, 0, 0, 255),
-                                        (127, 127, 127, 255),
-                                        (0, 0, 0, 255),
-                                        width=50,
-                                        height=20,
-                                    ),
-                                ]
-                            )
-                        ),
-                        Layer(
-                            computed(
-                                lambda: [
-                                    Rect((255, 255, 255, 255), width=50, height=30),
-                                    Input(
-                                        gap_size_input,
-                                        (0, 0, 0, 255),
-                                        (0, 0, 0, 255),
-                                        (127, 127, 127, 255),
-                                        (0, 0, 0, 255),
-                                        width=50,
-                                        height=20,
-                                    ),
-                                ]
-                            )
-                        ),
-                    ]
-                ),
+                [
+                    Layer(
+                        [
+                            Rect((255, 255, 255, 255), width=50, height=30),
+                            Input(
+                                grid_size_input,
+                                (0, 0, 0, 255),
+                                (0, 0, 0, 255),
+                                (127, 127, 127, 255),
+                                (0, 0, 0, 255),
+                                width=50,
+                                height=20,
+                            ),
+                        ]
+                    ),
+                    Layer(
+                        [
+                            Rect((255, 255, 255, 255), width=50, height=30),
+                            Input(
+                                gap_size_input,
+                                (0, 0, 0, 255),
+                                (0, 0, 0, 255),
+                                (127, 127, 127, 255),
+                                (0, 0, 0, 255),
+                                width=50,
+                                height=20,
+                            ),
+                        ]
+                    ),
+                ],
                 gap=16,
             ),
         ]
