@@ -91,6 +91,9 @@ class ReadRef(Effect, Generic[T_co]):
         self.add_tracking_dependent()
         return self._value
 
+    def __repr__(self):
+        return f"{type(self).__name__}({repr(self._value)})"
+
 
 class Ref(ReadRef[T_contra]):
     @property
@@ -127,7 +130,8 @@ class Computed(ReadRef[T_co]):
 def computed(func: Callable[[], T]):
     computed_instance = Computed(func)
     if len(computed_instance.depends) == 0:
-        return computed_instance.value
+        with Effect.track_barrier():
+            return computed_instance.value
     return computed_instance
 
 
@@ -202,7 +206,8 @@ class Watcher:
                 pass
 
     def trigger(self):
-        self._func()
+        with Effect.track_barrier():
+            self._func()
 
     @classmethod
     def ifref(
@@ -212,11 +217,13 @@ class Watcher:
         *,
         trigger_init: bool = False,
     ):
-        return (
-            cls([maybe_ref], lambda: func(unref(maybe_ref)), trigger_init=trigger_init)
-            if isref(maybe_ref)
-            else None
-        )
+        if isref(maybe_ref):
+            return cls(
+                [maybe_ref], lambda: func(unref(maybe_ref)), trigger_init=trigger_init
+            )
+        if trigger_init:
+            func(maybe_ref)
+        return None
 
 
 def isref(maybe_ref: ReadRef[T] | T) -> TypeGuard[ReadRef[T]]:

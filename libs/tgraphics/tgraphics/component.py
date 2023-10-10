@@ -1,11 +1,15 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace, InitVar
-from functools import partial
 import inspect
-from typing import Any, ClassVar, ParamSpec
+import re
+import time
+from typing import Any, ClassVar, Generic, ParamSpec, TypeVar
 from xml.etree import ElementTree
 
+import pyglet
+from pyglet import gl
 from pyglet.graphics import Batch
+from pyglet.graphics.vertexdomain import VertexList
 from pyglet.image import TextureRegion
 from pyglet.resource import Loader
 from pyglet.shapes import Rectangle
@@ -13,8 +17,7 @@ from pyglet.sprite import Sprite
 from pyglet.text import Label as _Label
 from pyglet.text.document import UnformattedDocument
 from pyglet.text.layout import IncrementalTextLayout
-from pyglet.text.caret import Caret
-from pyglet.window import Window as _Window
+from pyglet.window import Window as _Window, key
 
 from .event import (
     Event,
@@ -38,8 +41,9 @@ from .event import (
     ComponentUnmountedEvent,
     ComponentFocusEvent,
     ComponentBlurEvent,
+    InputEvent,
 )
-from .reactivity import ReadRef, Ref, Watcher, computed, isref, unref
+from .reactivity import ReadRef, Ref, Watcher, computed, unref
 
 loader = Loader(["resources"])
 
@@ -49,7 +53,7 @@ P = ParamSpec("P")
 @dataclass
 class _EventCapturer:
     event: type[Event]
-    func: Callable[["Component", Event], Any]
+    func: Callable[["ComponentInstance", Event], Any]
 
     def __call__(self, event: Event):
         # For tricking LSP / type checker
@@ -59,7 +63,7 @@ class _EventCapturer:
 @dataclass
 class _EventHandler:
     event: type[Event]
-    func: Callable[["Component", Event], Any]
+    func: Callable[["ComponentInstance", Event], Any]
 
     def __call__(self, event: Event):
         # For tricking LSP / type checker
@@ -67,14 +71,14 @@ class _EventHandler:
 
 
 def event_capturer(cls: type[Event]):
-    def make_capturer(func: Callable[["Component", Event], Any]):
+    def make_capturer(func: Callable[["ComponentInstance", Event], Any]):
         return _EventCapturer(cls, func)
 
     return make_capturer
 
 
 def event_handler(cls: type[Event]):
-    def make_handler(func: Callable[["Component", Event], Any]):
+    def make_handler(func: Callable[["ComponentInstance", Event], Any]):
         return _EventHandler(cls, func)
 
     return make_handler
@@ -140,8 +144,9 @@ class ElementComponentData:
             Event.from_name(k): eval(v, frame.frame.f_globals, init_locals)
             for k, v in self.capturers.items()
         }
+
         if (capturers := init_vars.get("event_capturers", None)) is not None:
-            capturers.update()
+            capturers.update(event_capturers)
         else:
             init_vars["event_capturers"] = event_capturers
 
@@ -156,28 +161,56 @@ class ElementComponentData:
             init_vars["event_handlers"] = event_handlers
 
         if len(self.element) > 0:
+            render_results = [
+                Component.render_element(children, frame, init_locals)
+                for children in self.element
+            ]
             init_vars["children"] = computed(
                 lambda: [
                     component
-                    for children in self.element
-                    for component in unref(
-                        Component.render_element(children, frame, init_locals)
-                    )
+                    for render_result in render_results
+                    for component in unref(render_result)
                 ]
             )
 
         return init_vars
 
 
-class ComponentMeta(type):
-    _components: ClassVar[dict[str, Callable[..., "Component"]]] = dict()
-    _cls_event_capturers: dict[type[Event], Callable[["Component", Event], Any]]
-    _cls_event_handlers: dict[type[Event], Callable[["Component", Event], Any]]
-    _flat_event_capturers: dict[type[Event], Callable[["Component", Event], Any]]
-    _flat_event_handlers: dict[type[Event], Callable[["Component", Event], Any]]
+@dataclass
+class BeforeMountedComponentInstanceData:
+    offset_x: float | ReadRef[float]  # actual x offset of child relative to parent
+    offset_y: float | ReadRef[float]  # actual y offset of child relative to parent
+    acc_offset_x: float | ReadRef[float]  # actual x offset of child relative to window
+    acc_offset_y: float | ReadRef[float]  # actual y offset of child relative to window
+    scale_x: float | ReadRef[float]  # x scaling relative to parent
+    scale_y: float | ReadRef[float]  # y scaling relative to parent
+    acc_scale_x: float | ReadRef[float]  # x scaling relative to window
+    acc_scale_y: float | ReadRef[float]  # y scaling relative to window
+
+
+@dataclass
+class AfterMountedComponentInstanceData:
+    width: float | ReadRef[float]  # what component think its width is without scaling
+    height: float | ReadRef[float]  # what component think its height is without scaling
+    children: list["ComponentInstance" | ReadRef["ComponentInstance"]] | ReadRef[
+        list["ComponentInstance" | ReadRef["ComponentInstance"]]
+    ] = field(default_factory=list["ComponentInstance" | ReadRef["ComponentInstance"]])
+
+
+C = TypeVar("C", bound="Component")
+
+
+class ComponentInstanceMeta(type):
+    _cls_event_capturers: dict[type[Event], Callable[["ComponentInstance", Event], Any]]
+    _cls_event_handlers: dict[type[Event], Callable[["ComponentInstance", Event], Any]]
+    _flat_event_capturers: dict[
+        type[Event], Callable[["ComponentInstance", Event], Any]
+    ]
+    _flat_event_handlers: dict[type[Event], Callable[["ComponentInstance", Event], Any]]
+    _focus: Ref["ComponentInstance | None"]
 
     def __new__(
-        mcs: type["ComponentMeta"],
+        mcs: type["ComponentInstanceMeta"],
         name: str,
         bases: tuple[type, ...],
         attrs: dict[str, Any],
@@ -206,6 +239,367 @@ class ComponentMeta(type):
         for base in reversed(cls.mro()):
             cls._flat_event_capturers.update(getattr(base, "_cls_event_capturers", {}))
             cls._flat_event_handlers.update(getattr(base, "_cls_event_handlers", {}))
+        return cls
+
+    @property
+    def focus(cls):
+        return cls._focus
+
+    @focus.setter
+    def focus(cls, instance: "ComponentInstance"):
+        focus = unref(ComponentInstance._focus)
+        if focus is instance:
+            return StopPropagate
+
+        if instance.capture(ComponentFocusEvent()) is StopPropagate:
+            return StopPropagate
+
+        if cls.blur() is StopPropagate:  # pylint: disable=E1120
+            return StopPropagate
+
+        cls._focus.value = instance
+
+    def blur(cls):
+        if (focus := unref(cls._focus)) is not None:
+            focus: ComponentInstance  # type: ignore[no-redef]
+            if focus.capture(ComponentBlurEvent()) is StopPropagate:
+                return StopPropagate
+            cls._focus.value = None
+
+
+@dataclass(kw_only=True)
+class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
+    _cls_event_capturers: ClassVar[
+        dict[type[Event], Callable[["ComponentInstance", Event], Any]]
+    ]
+    _cls_event_handlers: ClassVar[
+        dict[type[Event], Callable[["ComponentInstance", Event], Any]]
+    ]
+    _flat_event_capturers: ClassVar[
+        dict[type[Event], Callable[["ComponentInstance", Event], Any]]
+    ]
+    _flat_event_handlers: ClassVar[
+        dict[type[Event], Callable[["ComponentInstance", Event], Any]]
+    ]
+    _focus: ClassVar[Ref["ComponentInstance | None"]] = Ref(None)
+    component: C
+    event_capturers: dict[
+        type[Event], Callable[["ComponentInstance", Event], Any]
+    ] = field(init=False)
+    event_handlers: dict[
+        type[Event], Callable[["ComponentInstance", Event], Any]
+    ] = field(init=False)
+    before_mounted_data: Ref[BeforeMountedComponentInstanceData | None] = field(
+        init=False, default_factory=lambda: Ref(None)
+    )
+    after_mounted_data: Ref["AfterMountedComponentInstanceData | None"] = field(
+        init=False, default_factory=lambda: Ref(None)
+    )
+    child_hover: Ref["ComponentInstance | None"] = field(
+        init=False, default_factory=lambda: Ref(None)
+    )
+    bound_watchers: set[Watcher] = field(init=False, default_factory=set)
+
+    def __post_init__(self):
+        # TODO: merge capturer / handler
+        capturers = self._flat_event_capturers.copy()
+        handlers = self._flat_event_handlers.copy()
+        capturers.update(
+            {
+                event: lambda _, e: capturer(e)
+                for event, capturer in self.component.event_capturers.items()
+            }
+        )
+        handlers.update(
+            {
+                event: lambda _, e: handler(e)
+                for event, handler in self.component.event_handlers.items()
+            }
+        )
+        self.event_capturers = capturers
+        self.event_handlers = handlers
+
+    def __hash__(self) -> int:
+        return id(self)
+
+    def _draw(self, _dt: float):
+        pass
+
+    def draw(self, dt: float):
+        self._draw(dt)
+        for children in unref(use_children(self)):
+            unref(children).draw(dt)
+
+    def capture(self, event: Event):
+        if not unref(self.component.disabled):
+            for event_type in type(event).mro():
+                if (capturer := self.event_capturers.get(event_type)) is not None:
+                    return capturer(self, event)
+
+    def dispatch(self, event: Event):
+        if not unref(self.component.disabled):
+            for event_type in type(event).mro():
+                if (handler := self.event_handlers.get(event_type)) is not None:
+                    return handler(self, event)
+
+    def get_child_at(self, p: Positional) -> "ComponentInstance | None":
+        for child in reversed(unref(use_children(self))):
+            unref_child = unref(child)
+            if (
+                not unref(unref_child.component.disabled)
+                and unref(use_offset_x(unref_child))
+                < p.x
+                < (
+                    unref(use_offset_x(unref_child))
+                    + unref(use_width(unref_child)) * unref(use_scale_x(self))
+                )
+                and unref(use_offset_y(unref_child))
+                < p.y
+                < (
+                    unref(use_offset_y(unref_child))
+                    + unref(use_height(unref_child)) * unref(use_scale_y(self))
+                )
+            ):
+                return unref_child
+        return None
+
+    @event_capturer(FocusEvent)
+    def focus_capturer(self, event: FocusEvent):
+        if (focus := unref(ComponentInstance.focus)) is not None:
+            focus: ComponentInstance  # type: ignore[no-redef]
+            return focus.dispatch(event)
+
+    @event_capturer(BubblingEvent)
+    def bubbling_capturer(self, event: BubblingEvent):
+        if (child := self.get_child_at(event)) is not None:
+            if (
+                child.capture(
+                    replace(
+                        event,
+                        x=(event.x - unref(use_offset_x(child)))
+                        / unref(use_scale_x(self)),
+                        y=(event.y - unref(use_offset_y(child)))
+                        / unref(use_scale_y(self)),
+                    )
+                )
+                is StopPropagate
+            ):
+                return StopPropagate
+        if 0 < event.x < unref(use_width(self)) and 0 < event.y < unref(
+            use_height(self)
+        ):
+            return self.dispatch(event)
+
+    @event_capturer(Event)
+    def generic_capturer(self, event: Event):
+        return self.dispatch(event)
+
+    def _process_child_leave(
+        self, p: Positional, new_child: "ComponentInstance | None" = None
+    ):
+        if child := unref(self.child_hover):
+            child: "ComponentInstance"  # type: ignore[no-redef]
+            child.capture(
+                MouseLeaveEvent(
+                    (p.x - unref(use_offset_x(child))) / unref(use_scale_x(self)),
+                    (p.y - unref(use_offset_y(child))) / unref(use_scale_y(self)),
+                )
+            )
+        self.child_hover.value = new_child
+
+    def _process_child_position(self, p: Positional) -> "ComponentInstance | None":
+        if (new_child := self.get_child_at(p)) is not None:
+            if self.child_hover.value is not new_child:
+                self._process_child_leave(p, new_child)
+                new_child.capture(
+                    MouseEnterEvent(
+                        (p.x - unref(use_offset_x(new_child)))
+                        / unref(use_scale_x(self)),
+                        (p.y - unref(use_offset_y(new_child)))
+                        / unref(use_scale_y(self)),
+                    )
+                )
+                self.child_hover.value = new_child
+            return new_child
+        else:
+            self._process_child_leave(p, None)
+            return None
+
+    @event_capturer(MouseEnterEvent)
+    def mouse_enter_capturer(self, event: MouseEnterEvent):
+        self.child_hover.value = None
+        self._process_child_position(event)
+        return self.dispatch(event)
+
+    @event_capturer(MouseMotionEvent)
+    def mouse_motion_capturer(self, event: MouseMotionEvent):
+        if (child := self._process_child_position(event)) is not None:
+            if (
+                child.capture(
+                    replace(
+                        event,
+                        x=(event.x - unref(use_offset_x(child)))
+                        / unref(use_scale_x(self)),
+                        y=(event.y - unref(use_offset_y(child)))
+                        / unref(use_scale_y(self)),
+                    )
+                )
+                is StopPropagate
+            ):
+                return StopPropagate
+        return self.dispatch(event)
+
+    @event_capturer(MouseLeaveEvent)
+    def mouse_leave_capturer(self, event: MouseLeaveEvent):
+        self._process_child_leave(event, None)
+        return self.dispatch(event)
+
+    @event_handler(MousePressEvent)
+    def mouse_press_handler(self, _event: MousePressEvent):
+        if unref(ComponentInstance.focus) is not self:
+            ComponentInstance.blur()
+
+    @event_handler(ComponentUnmountedEvent)
+    def component_unmounted_handler(self, _: ComponentUnmountedEvent):
+        for watcher in self.bound_watchers:
+            watcher.unwatch()
+        for child in unref(use_children(self)):
+            unref(child).capture(ComponentUnmountedEvent())
+        self.bound_watchers.clear()
+        self.before_mounted_data.value = None
+        self.after_mounted_data.value = None
+
+
+def use_offset_x(
+    instance: ComponentInstance | ReadRef[ComponentInstance],
+) -> float | ReadRef[float]:
+    return computed(
+        lambda: unref(data.offset_x)
+        if (data := unref(unref(instance).before_mounted_data)) is not None
+        else 0
+    )
+
+
+def use_offset_y(
+    instance: ComponentInstance | ReadRef[ComponentInstance],
+) -> float | ReadRef[float]:
+    return computed(
+        lambda: unref(data.offset_y)
+        if (data := unref(unref(instance).before_mounted_data)) is not None
+        else 0
+    )
+
+
+def use_acc_offset_x(
+    instance: ComponentInstance | ReadRef[ComponentInstance],
+) -> float | ReadRef[float]:
+    return computed(
+        lambda: unref(data.acc_offset_x)
+        if (data := unref(unref(instance).before_mounted_data)) is not None
+        else 0
+    )
+
+
+def use_acc_offset_y(
+    instance: ComponentInstance | ReadRef[ComponentInstance],
+) -> float | ReadRef[float]:
+    return computed(
+        lambda: unref(data.acc_offset_y)
+        if (data := unref(unref(instance).before_mounted_data)) is not None
+        else 0
+    )
+
+
+def use_scale_x(
+    instance: ComponentInstance | ReadRef[ComponentInstance],
+) -> float | ReadRef[float]:
+    return computed(
+        lambda: unref(data.scale_x)
+        if (data := unref(unref(instance).before_mounted_data)) is not None
+        else 1
+    )
+
+
+def use_scale_y(
+    instance: ComponentInstance | ReadRef[ComponentInstance],
+) -> float | ReadRef[float]:
+    return computed(
+        lambda: unref(data.scale_y)
+        if (data := unref(unref(instance).before_mounted_data)) is not None
+        else 1
+    )
+
+
+def use_acc_scale_x(
+    instance: ComponentInstance | ReadRef[ComponentInstance],
+) -> float | ReadRef[float]:
+    return computed(
+        lambda: unref(data.acc_scale_x)
+        if (data := unref(unref(instance).before_mounted_data)) is not None
+        else 1
+    )
+
+
+def use_acc_scale_y(
+    instance: ComponentInstance | ReadRef[ComponentInstance],
+) -> float | ReadRef[float]:
+    return computed(
+        lambda: unref(data.acc_scale_y)
+        if (data := unref(unref(instance).before_mounted_data)) is not None
+        else 1
+    )
+
+
+def use_width(
+    instance: ComponentInstance | ReadRef[ComponentInstance],
+) -> float | ReadRef[float]:
+    return computed(
+        lambda: unref(data.width)
+        if (data := unref(unref(instance).after_mounted_data)) is not None
+        else 0
+    )
+
+
+def use_height(
+    instance: ComponentInstance | ReadRef[ComponentInstance],
+) -> float | ReadRef[float]:
+    return computed(
+        lambda: unref(data.height)
+        if (data := unref(unref(instance).after_mounted_data)) is not None
+        else 0
+    )
+
+
+def use_children(
+    instance: ComponentInstance | ReadRef[ComponentInstance],
+) -> (
+    list[ComponentInstance | ReadRef[ComponentInstance]]
+    | ReadRef[list[ComponentInstance | ReadRef[ComponentInstance]]]
+):
+    return computed(
+        lambda: unref(data.children)
+        if (data := unref(unref(instance).after_mounted_data)) is not None
+        else []
+    )
+
+
+def is_mounted(instance: ComponentInstance):
+    return computed(
+        lambda: unref(instance.before_mounted_data) is not None
+        and unref(instance.after_mounted_data) is not None
+    )
+
+
+class ComponentMeta(type):
+    _components: ClassVar[dict[str, Callable[..., "Component"]]] = dict()
+
+    def __new__(
+        mcs: type["ComponentMeta"],
+        name: str,
+        bases: tuple[type, ...],
+        attrs: dict[str, Any],
+    ):
+        cls = super().__new__(mcs, name, bases, attrs)
         mcs._components[name] = cls
         return cls
 
@@ -231,13 +625,15 @@ class ComponentMeta(type):
         """MAKE SURE THAT INPUTTED XML IS SAFE"""
 
         if scope_values is None:
-            scope_values = dict()
+            scope_values = {}
 
         frame_locals = _get_merged_locals(frame, **scope_values)
 
         data = ElementComponentData(element)
 
-        def render_fn(**additional_scope_values):
+        def render_fn(
+            **additional_scope_values,
+        ) -> list["Component"]:
             return [
                 data.cls(
                     **data.get_init_vars(
@@ -250,7 +646,10 @@ class ComponentMeta(type):
             match directive_key:
                 case "for":
 
-                    def for_render_fn_wrapper(old_render_fn, directive_value):
+                    def for_render_fn_wrapper(
+                        old_render_fn: Callable[..., list["Component"]],
+                        directive_value: str,
+                    ):
                         for_var, for_values = [
                             s.strip() for s in directive_value.split("in")
                         ]
@@ -261,30 +660,28 @@ class ComponentMeta(type):
                         )
 
                         def render_fn(**additional_scope_values):
-                            return computed(
-                                lambda: [
-                                    component
-                                    for components in [
-                                        unref(
-                                            old_render_fn(
-                                                **(
-                                                    {for_var: v}
-                                                    | additional_scope_values
-                                                ),
-                                            )
+                            return [
+                                component
+                                for components in [
+                                    unref(
+                                        old_render_fn(
+                                            **({for_var: v} | additional_scope_values),
                                         )
-                                        for v in unref(eval_for_values)
-                                    ]
-                                    for component in components
+                                    )
+                                    for v in unref(eval_for_values)
                                 ]
-                            )
+                                for component in components
+                            ]
 
                         return render_fn
 
                     render_fn = for_render_fn_wrapper(render_fn, directive_value)
                 case "if":
 
-                    def if_render_fn_wrapper(old_render_fn, directive_value):
+                    def if_render_fn_wrapper(
+                        old_render_fn: Callable[..., list["Component"]],
+                        directive_value: str,
+                    ):
                         eval_val = computed(
                             lambda: unref(
                                 eval(
@@ -294,8 +691,8 @@ class ComponentMeta(type):
                         )
 
                         def render_fn(**additional_scope_values):
-                            return computed(
-                                lambda: unref(old_render_fn(**additional_scope_values))
+                            return (
+                                unref(old_render_fn(**additional_scope_values))
                                 if unref(eval_val)
                                 else []
                             )
@@ -304,8 +701,7 @@ class ComponentMeta(type):
 
                     render_fn = if_render_fn_wrapper(render_fn, directive_value)
 
-        x = computed(render_fn)
-        return x
+        return computed(render_fn)
 
     @classmethod
     def render_root_element(
@@ -325,606 +721,385 @@ class ComponentMeta(type):
         )
 
 
-@dataclass
-class BeforeMountedComponentData:
-    offset_x: float | ReadRef[float]  # actual x offset of child relative to parent
-    offset_y: float | ReadRef[float]  # actual y offset of child relative to parent
-    acc_offset_x: float | ReadRef[float]  # actual x offset of child relative to window
-    acc_offset_y: float | ReadRef[float]  # actual y offset of child relative to window
-    scale_x: float | ReadRef[float]  # x scaling relative to normal
-    scale_y: float | ReadRef[float]  # y scaling relative to normal
-
-
-@dataclass
-class AfterMountedComponentData:
-    width: float | ReadRef[float]  # what component think its width is without scaling
-    height: float | ReadRef[float]  # what component think its height is without scaling
-
-
 @dataclass(kw_only=True)
 class Component(metaclass=ComponentMeta):
-    _focus: ClassVar[Ref["Component | None"]] = Ref(None)
-    _cls_event_capturers: ClassVar[
-        dict[type[Event], Callable[["Component", Event], Any]]
-    ]
-    _cls_event_handlers: ClassVar[
-        dict[type[Event], Callable[["Component", Event], Any]]
-    ]
-    _flat_event_capturers: ClassVar[
-        dict[type[Event], Callable[["Component", Event], Any]]
-    ]
-    _flat_event_handlers: ClassVar[
-        dict[type[Event], Callable[["Component", Event], Any]]
-    ]
     disabled: bool | ReadRef[bool] = field(default=False)
     event_capturers: dict[type[Event], Callable[[Event], Any]] = field(
-        default_factory=dict
+        default_factory=dict, repr=False
     )
     event_handlers: dict[type[Event], Callable[[Event], Any]] = field(
-        default_factory=dict
+        default_factory=dict, repr=False
     )
-    children: list["Component"] | ReadRef[list["Component"]] = field(
-        default_factory=list["Component"]
-    )
-    before_mounted_component_data: BeforeMountedComponentData = field(init=False)
-    after_mounted_component_data: AfterMountedComponentData = field(init=False)
-    children_hover: Ref["Component | None"] = field(
-        init=False, default_factory=lambda: Ref(None)
-    )
-    bound_watchers: set[Watcher] = field(init=False, default_factory=set)
+    children: list["Component" | ReadRef["Component"]] | ReadRef[
+        list["Component" | ReadRef["Component"]]
+    ] = field(default_factory=list["Component" | ReadRef["Component"]])
 
-    def __post_init__(self):
-        capturers = {
-            event: partial(capturers, self)
-            for event, capturers in self._flat_event_capturers.items()
-        }
-        handlers = {
-            event: partial(handler, self)
-            for event, handler in self._flat_event_handlers.items()
-        }
-        capturers.update(self.event_capturers)
-        handlers.update(self.event_handlers)
-        self.event_capturers = capturers
-        self.event_handlers = handlers
+    def get_instance(self):
+        return ComponentInstance(component=self)
 
-    def focus(self):
-        focus = unref(Component._focus)
-        if focus is self:
-            return StopPropagate
 
-        if self.capture(ComponentFocusEvent()) is StopPropagate:
-            return StopPropagate
+@dataclass
+class PadInstance(ComponentInstance["Pad"]):
+    def __hash__(self) -> int:
+        return id(self)
 
-        if Component.blur() is StopPropagate:
-            return StopPropagate
-        Component._focus.value = self
-
-    @classmethod
-    def blur(cls):
-        if (focus := unref(Component._focus)) is not None:
-            focus: Component  # type: ignore[no-redef]
-            if focus.capture(ComponentBlurEvent()) is StopPropagate:
-                return StopPropagate
-            Component._focus.value = None
-
-    def _draw(self, _dt: float):
-        pass
-
-    def draw(self, dt: float):
-        self._draw(dt)
-        for children in unref(self.children):
-            children.draw(dt)
-
-    def capture(self, event: Event):
-        if not unref(self.disabled):
-            for event_type in type(event).mro():
-                if (capturer := self.event_capturers.get(event_type)) is not None:
-                    return capturer(event)
-
-    def dispatch(self, event: Event):
-        if not unref(self.disabled):
-            for event_type in type(event).mro():
-                if (handler := self.event_handlers.get(event_type)) is not None:
-                    return handler(event)
-
-    def get_relative_x_multiplier(self, comp: "Component"):
-        return unref(comp.before_mounted_component_data.scale_x) / unref(
-            self.before_mounted_component_data.scale_x
+    @event_handler(ComponentMountedEvent)
+    def component_mounted_handler(self, _: ComponentMountedEvent):
+        child = computed(
+            lambda: unref(unref(self.component.children)[0]).get_instance()
         )
 
-    def get_relative_y_multiplier(self, comp: "Component"):
-        return unref(comp.before_mounted_component_data.scale_y) / unref(
-            self.before_mounted_component_data.scale_y
-        )
-
-    def get_children_at(self, p: Positional) -> "Component | None":
-        for children in reversed(unref(self.children)):
-            if (
-                not unref(children.disabled)
-                and unref(children.before_mounted_component_data.offset_x)
-                < p.x
-                < (
-                    unref(children.before_mounted_component_data.offset_x)
-                    + unref(children.after_mounted_component_data.width)
-                    * self.get_relative_x_multiplier(children)
-                )
-                and unref(children.before_mounted_component_data.offset_y)
-                < p.y
-                < (
-                    unref(children.before_mounted_component_data.offset_y)
-                    + unref(children.after_mounted_component_data.height)
-                    * self.get_relative_y_multiplier(children)
-                )
-            ):
-                return children
-        return None
-
-    @event_capturer(FocusEvent)
-    def focus_capturer(self, event: FocusEvent):
-        if (focus := unref(Component._focus)) is not None:
-            focus: Component  # type: ignore[no-redef]
-            return focus.dispatch(event)
-
-    @event_capturer(BubblingEvent)
-    def bubbling_capturer(self, event: BubblingEvent):
-        if (children := self.get_children_at(event)) is not None:
-            if (
-                children.capture(
-                    replace(
-                        event,
-                        x=(
-                            event.x
-                            - unref(children.before_mounted_component_data.offset_x)
-                        )
-                        * self.get_relative_x_multiplier(children),
-                        y=(
-                            event.y
-                            - unref(children.before_mounted_component_data.offset_y)
-                        )
-                        * self.get_relative_y_multiplier(children),
-                    )
-                )
-                is StopPropagate
-            ):
-                return StopPropagate
-        if 0 < event.x < unref(
-            self.after_mounted_component_data.width
-        ) and 0 < event.y < unref(self.after_mounted_component_data.height):
-            return self.dispatch(event)
-
-    @event_capturer(Event)
-    def generic_capturer(self, event: Event):
-        return self.dispatch(event)
-
-    def _process_children_leave(
-        self, p: Positional, new_children: "Component | None" = None
-    ):
-        if children := unref(self.children_hover):
-            children: "Component"  # type: ignore[no-redef]
-            children.capture(
-                MouseLeaveEvent(
-                    (p.x - unref(children.before_mounted_component_data.offset_x))
-                    * self.get_relative_x_multiplier(children),
-                    (p.y - unref(children.before_mounted_component_data.offset_y))
-                    * self.get_relative_y_multiplier(children),
-                )
+        def mount_child(child: ComponentInstance):
+            off_x = computed(
+                lambda: unref(self.component.pad_left) * unref(use_acc_scale_x(self))
             )
-        self.children_hover.value = new_children
+            off_y = computed(
+                lambda: unref(self.component.pad_bottom) * unref(use_acc_scale_y(self))
+            )
+            child.before_mounted_data.value = BeforeMountedComponentInstanceData(
+                off_x,
+                off_y,
+                computed(lambda: unref(use_acc_offset_x(self)) + unref(off_x)),
+                computed(lambda: unref(use_acc_offset_y(self)) + unref(off_y)),
+                1,
+                1,
+                use_acc_scale_x(self),
+                use_acc_scale_y(self),
+            )
+            child.capture(ComponentMountedEvent())
 
-    def _process_children_position(self, p: Positional) -> "Component | None":
-        if (new_children := self.get_children_at(p)) is not None:
-            if self.children_hover.value is not new_children:
-                self._process_children_leave(p, new_children)
-                new_children.capture(
-                    MouseEnterEvent(
-                        (
-                            p.x
-                            - unref(new_children.before_mounted_component_data.offset_x)
-                        )
-                        * self.get_relative_x_multiplier(new_children),
-                        (
-                            p.y
-                            - unref(new_children.before_mounted_component_data.offset_y)
-                        )
-                        * self.get_relative_y_multiplier(new_children),
-                    )
-                )
-                self.children_hover.value = new_children
-            return new_children
-        else:
-            self._process_children_leave(p, None)
-            return None
+        self.bound_watchers.update(
+            [
+                w
+                for w in [
+                    Watcher.ifref(child, mount_child, trigger_init=True),
+                ]
+                if w is not None
+            ]
+        )
 
-    @event_capturer(MouseEnterEvent)
-    def mouse_enter_capturer(self, event: MouseEnterEvent):
-        self.children_hover.value = None
-        self._process_children_position(event)
-        return self.dispatch(event)
-
-    @event_capturer(MouseMotionEvent)
-    def mouse_motion_capturer(self, event: MouseMotionEvent):
-        if (children := self._process_children_position(event)) is not None:
-            if (
-                children.capture(
-                    replace(
-                        event,
-                        x=(
-                            event.x
-                            - unref(children.before_mounted_component_data.offset_x)
-                        )
-                        * self.get_relative_x_multiplier(children),
-                        y=(
-                            event.y
-                            - unref(children.before_mounted_component_data.offset_y)
-                        )
-                        * self.get_relative_y_multiplier(children),
-                    )
-                )
-                is StopPropagate
-            ):
-                return StopPropagate
-        return self.dispatch(event)
-
-    @event_capturer(MouseLeaveEvent)
-    def mouse_leave_capturer(self, event: MouseLeaveEvent):
-        self._process_children_leave(event, None)
-        return self.dispatch(event)
-
-    @event_handler(MousePressEvent)
-    def mouse_press_handler(self, _event: MousePressEvent):
-        if unref(Component._focus) is not self:
-            Component.blur()
-
-    @event_handler(ComponentUnmountedEvent)
-    def component_unmounted_handler(self, _: ComponentUnmountedEvent):
-        for watcher in self.bound_watchers:
-            watcher.unwatch()
-        for children in unref(self.children):
-            children.capture(ComponentUnmountedEvent())
-        self.bound_watchers.clear()
+        self.after_mounted_data.value = AfterMountedComponentInstanceData(
+            computed(
+                lambda: unref(use_width(unref(child)[0]))
+                + unref(self.component.pad_left)
+                + unref(self.component.pad_right)
+            ),
+            computed(
+                lambda: unref(use_height(unref(child)[0]))
+                + unref(self.component.pad_bottom)
+                + unref(self.component.pad_top)
+            ),
+            computed(lambda: [unref(child)]),
+        )
 
 
 @dataclass
 class Pad(Component):
-    children: list["Component"] | ReadRef[list["Component"]] = field(
-        default_factory=list["Component"]
-    )
+    children: list["Component" | ReadRef["Component"]] | ReadRef[
+        list["Component" | ReadRef["Component"]]
+    ] = field(default_factory=list["Component" | ReadRef["Component"]])
     pad_bottom: int | float | ReadRef[int | float] = field(default=0, kw_only=True)
     pad_top: int | float | ReadRef[int | float] = field(default=0, kw_only=True)
     pad_left: int | float | ReadRef[int | float] = field(default=0, kw_only=True)
     pad_right: int | float | ReadRef[int | float] = field(default=0, kw_only=True)
-    _children_width: Ref[float | ReadRef[float]] = field(
-        init=False, default_factory=lambda: Ref(0)
-    )
-    _children_height: Ref[float | ReadRef[float]] = field(
-        init=False, default_factory=lambda: Ref(0)
-    )
+
+    def get_instance(self):
+        return PadInstance(component=self)
+
+
+@dataclass
+class LayerInstance(ComponentInstance["Layer"]):
+    def __hash__(self) -> int:
+        return id(self)
 
     @event_handler(ComponentMountedEvent)
     def component_mounted_handler(self, _: ComponentMountedEvent):
-        self.after_mounted_component_data = AfterMountedComponentData(
-            computed(
-                lambda: unref(unref(self._children_width))
-                + unref(self.pad_left)
-                + unref(self.pad_right)
-            ),
-            computed(
-                lambda: unref(unref(self._children_height))
-                + unref(self.pad_bottom)
-                + unref(self.pad_top)
-            ),
+        children = computed(
+            lambda: [
+                computed(lambda c=c: unref(c).get_instance())
+                for c in unref(self.component.children)
+            ]
         )
+        collapsed_children = computed(lambda: [unref(c) for c in unref(children)])
+        previous_collapsed_children: list[ComponentInstance] = []
 
-        def mount_children():
-            children = unref(self.children)[0]
-            before_mounted_component_data = self.before_mounted_component_data
-            acc_offset_x = before_mounted_component_data.acc_offset_x
-            acc_offset_y = before_mounted_component_data.acc_offset_y
-            off_x = computed(
-                lambda: unref(self.pad_left)
-                * unref(before_mounted_component_data.scale_x)
+        def mount_child(index: int):
+            child = unref(collapsed_children)[index]
+
+            pad_x = computed(
+                lambda: (unref(use_width(self)) - unref(use_width(child))) / 2
             )
-            off_y = computed(
-                lambda: unref(self.pad_bottom)
-                * unref(before_mounted_component_data.scale_y)
+            pad_y = computed(
+                lambda: (unref(use_height(self)) - unref(use_height(child))) / 2
             )
-            children.before_mounted_component_data = BeforeMountedComponentData(
+
+            off_x = computed(lambda: unref(pad_x) * unref(use_acc_scale_x(self)))
+            off_y = computed(lambda: unref(pad_y) * unref(use_acc_scale_y(self)))
+            child.before_mounted_data.value = BeforeMountedComponentInstanceData(
                 off_x,
                 off_y,
-                computed(lambda: unref(acc_offset_x) + unref(off_x)),
-                computed(lambda: unref(acc_offset_y) + unref(off_y)),
-                before_mounted_component_data.scale_x,
-                before_mounted_component_data.scale_y,
+                computed(lambda: unref(use_acc_offset_x(self)) + unref(off_x)),
+                computed(lambda: unref(use_acc_offset_y(self)) + unref(off_y)),
+                1,
+                1,
+                use_acc_scale_x(self),
+                use_acc_scale_y(self),
             )
-            children.capture(ComponentMountedEvent())
-            self._children_width.value = children.after_mounted_component_data.width
-            self._children_height.value = children.after_mounted_component_data.height
+            child.capture(ComponentMountedEvent())
 
-        if isref(self.children):
-            self.bound_watchers.add(
-                Watcher([self.children], mount_children, trigger_init=True)
-            )
-        else:
-            mount_children()
+        def mount_children(current_collapsed_children: list[ComponentInstance]):
+            nonlocal previous_collapsed_children
+            child_lookup = {
+                child: i for i, child in enumerate(unref(current_collapsed_children))
+            }
+            current = set(current_collapsed_children)
+            previous = set(previous_collapsed_children)
+            for child in previous - current:
+                child.capture(ComponentUnmountedEvent())
+            for child in current - previous:
+                mount_child(child_lookup[child])
+
+            previous_collapsed_children = current_collapsed_children
+
+        self.bound_watchers.update(
+            [
+                w
+                for w in [
+                    Watcher.ifref(children, mount_children, trigger_init=True),
+                ]
+                if w is not None
+            ]
+        )
+
+        self.after_mounted_data.value = AfterMountedComponentInstanceData(
+            computed(lambda: max(unref(use_width(child)) for child in unref(children))),
+            computed(
+                lambda: max(unref(use_height(child)) for child in unref(children))
+            ),
+            children,
+        )
 
 
 @dataclass
 class Layer(Component):
-    children: list["Component"] | ReadRef[list["Component"]] = field(
-        default_factory=list["Component"]
-    )
-    _width: Ref[ReadRef[float] | None] = field(
-        init=False, default_factory=lambda: Ref(None)
-    )
-    _height: Ref[ReadRef[float] | None] = field(
-        init=False, default_factory=lambda: Ref(None)
-    )
+    children: list["Component" | ReadRef["Component"]] | ReadRef[
+        list["Component" | ReadRef["Component"]]
+    ] = field(default_factory=list["Component" | ReadRef["Component"]])
+
+    def get_instance(self):
+        return LayerInstance(component=self)
+
+
+@dataclass
+class RowInstance(ComponentInstance["Row"]):
+    def __hash__(self) -> int:
+        return id(self)
 
     @event_handler(ComponentMountedEvent)
     def component_mounted_handler(self, _: ComponentMountedEvent):
-        def do_mount_children(children: Component):
-            before_mounted_component_data = self.before_mounted_component_data
-            acc_offset_x = before_mounted_component_data.acc_offset_x
-            acc_offset_y = before_mounted_component_data.acc_offset_y
-            pad_x_ref = Ref(0)
-            pad_y_ref = Ref(0)
-            off_x = computed(
-                lambda: unref(unref(pad_x_ref))
-                * unref(before_mounted_component_data.scale_x)
+        children = computed(
+            lambda: [
+                computed(lambda c=c: unref(c).get_instance())
+                for c in unref(self.component.children)
+            ]
+        )
+        children_width = computed(lambda: [use_width(c) for c in unref(children)])
+        collapsed_children = computed(lambda: [unref(c) for c in unref(children)])
+        previous_collapsed_children: list[ComponentInstance] = []
+
+        sum_width = computed(
+            lambda: sum(unref(c_w) for c_w in unref(children_width))
+            + (len(unref(children_width)) - 1) * unref(self.component.gap)
+        )
+
+        width = computed(
+            lambda: unref(self.component.width)
+            if unref(self.component.width) is not None
+            else unref(sum_width)
+        )
+
+        height = computed(
+            lambda: unref(self.component.height)
+            if unref(self.component.height) is not None
+            else max(unref(use_height(child)) for child in unref(children))
+        )
+
+        def mount_child(index: int):
+            child = unref(collapsed_children)[index]
+
+            pad_x = computed(
+                lambda: ((unref(width) - unref(sum_width)) / 2)
+                + sum(unref(c_w) for c_w in unref(children_width)[:index])
+                + index * unref(self.component.gap)
             )
-            off_y = computed(
-                lambda: unref(unref(pad_y_ref))
-                * unref(before_mounted_component_data.scale_y)
-            )
-            children.before_mounted_component_data = BeforeMountedComponentData(
+            pad_y = computed(lambda: (unref(height) - unref(use_height(child))) / 2)
+
+            off_x = computed(lambda: unref(pad_x) * unref(use_acc_scale_x(self)))
+            off_y = computed(lambda: unref(pad_y) * unref(use_acc_scale_y(self)))
+            child.before_mounted_data.value = BeforeMountedComponentInstanceData(
                 off_x,
                 off_y,
-                computed(lambda: unref(acc_offset_x) + unref(off_x)),
-                computed(lambda: unref(acc_offset_y) + unref(off_y)),
-                before_mounted_component_data.scale_x,
-                before_mounted_component_data.scale_y,
+                computed(lambda: unref(use_acc_offset_x(self)) + unref(off_x)),
+                computed(lambda: unref(use_acc_offset_y(self)) + unref(off_y)),
+                1,
+                1,
+                use_acc_scale_x(self),
+                use_acc_scale_y(self),
             )
-            children.capture(ComponentMountedEvent())
-            pad_x_ref.value = computed(
-                lambda: (
-                    unref(width) - unref(children.after_mounted_component_data.width)
-                )
-                / 2
-                if ((width := unref(self._width)) is not None)
-                else 0
-            )
-            pad_y_ref.value = computed(
-                lambda: (
-                    unref(height) - unref(children.after_mounted_component_data.height)
-                )
-                / 2
-                if ((height := unref(self._height)) is not None)
-                else 0
-            )
+            child.capture(ComponentMountedEvent())
 
-        def mount_children():
-            for children in unref(self.children):
-                do_mount_children(children)
+        def mount_children(current_collapsed_children: list[ComponentInstance]):
+            nonlocal previous_collapsed_children
+            child_lookup = {
+                child: i for i, child in enumerate(unref(current_collapsed_children))
+            }
+            current = set(current_collapsed_children)
+            previous = set(previous_collapsed_children)
+            for child in previous - current:
+                child.capture(ComponentUnmountedEvent())
+            for child in current - previous:
+                mount_child(child_lookup[child])
 
-        if isref(self.children):
-            self.bound_watchers.add(
-                Watcher([self.children], mount_children, trigger_init=True)
-            )
-        else:
-            mount_children()
+            previous_collapsed_children = current_collapsed_children
 
-        _width = computed(
-            lambda: max(
-                unref(children.after_mounted_component_data.width)
-                for children in unref(self.children)
-            )
+        self.bound_watchers.update(
+            [
+                w
+                for w in [
+                    Watcher.ifref(
+                        collapsed_children, mount_children, trigger_init=True
+                    ),
+                ]
+                if w is not None
+            ]
         )
-        self._width.value = _width
-        _height = computed(
-            lambda: max(
-                unref(children.after_mounted_component_data.height)
-                for children in unref(self.children)
-            )
-        )
-        self._height.value = _height
 
-        self.after_mounted_component_data = AfterMountedComponentData(_width, _height)
+        self.after_mounted_data.value = AfterMountedComponentInstanceData(
+            width, height, children
+        )
 
 
 @dataclass
 class Row(Component):
-    children: list["Component"] | ReadRef[list["Component"]] = field(
-        default_factory=list["Component"]
-    )
+    children: list["Component" | ReadRef["Component"]] | ReadRef[
+        list["Component" | ReadRef["Component"]]
+    ] = field(default_factory=list["Component" | ReadRef["Component"]])
     gap: int | float | ReadRef[int | float] = field(default=0, kw_only=True)
     width: int | float | None | ReadRef[int | float | None] = field(default=None)
     height: int | float | None | ReadRef[int | float | None] = field(default=None)
-    _children_width: Ref[ReadRef[float] | None] = field(
-        init=False, default_factory=lambda: Ref(None)
-    )
-    _height: Ref[ReadRef[float] | None] = field(
-        init=False, default_factory=lambda: Ref(None)
-    )
+
+    def get_instance(self):
+        return RowInstance(component=self)
+
+
+@dataclass
+class ColumnInstance(ComponentInstance["Column"]):
+    def __hash__(self) -> int:
+        return id(self)
 
     @event_handler(ComponentMountedEvent)
     def component_mounted_handler(self, _: ComponentMountedEvent):
-        def do_mount_children(children: Component, pad_x: float | ReadRef[float]):
-            before_mounted_component_data = self.before_mounted_component_data
-            acc_offset_x = before_mounted_component_data.acc_offset_x
-            acc_offset_y = before_mounted_component_data.acc_offset_y
-            pad_y_ref = Ref(0)
-            off_x = computed(
-                lambda: unref(pad_x) * unref(before_mounted_component_data.scale_x)
+        children = computed(
+            lambda: [
+                computed(lambda c=c: unref(c).get_instance())
+                for c in unref(self.component.children)
+            ]
+        )
+        children_height = computed(lambda: [use_height(c) for c in unref(children)])
+        collapsed_children = computed(lambda: [unref(c) for c in unref(children)])
+        previous_collapsed_children: list[ComponentInstance] = []
+
+        sum_height = computed(
+            lambda: sum(unref(c_w) for c_w in unref(children_height))
+            + (len(unref(children_height)) - 1) * unref(self.component.gap)
+        )
+
+        width = computed(
+            lambda: unref(self.component.width)
+            if unref(self.component.width) is not None
+            else max(unref(use_width(child)) for child in unref(children))
+        )
+
+        height = computed(
+            lambda: unref(self.component.height)
+            if unref(self.component.height) is not None
+            else unref(sum_height)
+        )
+
+        def mount_child(index: int):
+            child = unref(collapsed_children)[index]
+
+            pad_x = computed(lambda: (unref(width) - unref(use_width(child))) / 2)
+            pad_y = computed(
+                lambda: ((unref(height) - unref(sum_height)) / 2)
+                + sum(unref(c_h) for c_h in unref(children_height)[:index])
+                + index * unref(self.component.gap)
             )
-            off_y = computed(
-                lambda: unref(unref(pad_y_ref))
-                * unref(before_mounted_component_data.scale_y)
-            )
-            children.before_mounted_component_data = BeforeMountedComponentData(
+
+            off_x = computed(lambda: unref(pad_x) * unref(use_acc_scale_x(self)))
+            off_y = computed(lambda: unref(pad_y) * unref(use_acc_scale_y(self)))
+            child.before_mounted_data.value = BeforeMountedComponentInstanceData(
                 off_x,
                 off_y,
-                computed(lambda: unref(acc_offset_x) + unref(off_x)),
-                computed(lambda: unref(acc_offset_y) + unref(off_y)),
-                before_mounted_component_data.scale_x,
-                before_mounted_component_data.scale_y,
+                computed(lambda: unref(use_acc_offset_x(self)) + unref(off_x)),
+                computed(lambda: unref(use_acc_offset_y(self)) + unref(off_y)),
+                1,
+                1,
+                use_acc_scale_x(self),
+                use_acc_scale_y(self),
             )
-            children.capture(ComponentMountedEvent())
-            pad_y_ref.value = computed(
-                lambda: (
-                    unref(height) - unref(children.after_mounted_component_data.height)
-                )
-                / 2
-                if ((height := unref(self._height)) is not None)
-                else 0
-            )
+            child.capture(ComponentMountedEvent())
 
-            return computed(
-                lambda: unref(pad_x)
-                + unref(children.after_mounted_component_data.width)
-                + unref(self.gap)
-            )
+        def mount_children(current_collapsed_children: list[ComponentInstance]):
+            nonlocal previous_collapsed_children
+            child_lookup = {
+                child: i for i, child in enumerate(unref(current_collapsed_children))
+            }
+            current = set(current_collapsed_children)
+            previous = set(previous_collapsed_children)
+            for child in previous - current:
+                child.capture(ComponentUnmountedEvent())
+            for child in current - previous:
+                mount_child(child_lookup[child])
 
-        def mount_children():
-            pad_x = computed(
-                lambda: 0
-                if unref(self.width) is None
-                or unref(unref(self._children_width)) is None
-                else (unref(self.width) - unref(unref(self._children_width))) / 2
-            )
-            for children in unref(self.children):
-                pad_x = do_mount_children(children, pad_x)
+            previous_collapsed_children = current_collapsed_children
 
-        if isref(self.children):
-            self.bound_watchers.add(
-                Watcher([self.children], mount_children, trigger_init=True)
-            )
-        else:
-            mount_children()
-
-        _children_width = computed(
-            lambda: sum(
-                unref(children.after_mounted_component_data.width)
-                for children in unref(self.children)
-            )
-            + unref(self.gap) * max(len(unref(self.children)) - 1, 0)
+        self.bound_watchers.update(
+            [
+                w
+                for w in [
+                    Watcher.ifref(
+                        collapsed_children, mount_children, trigger_init=True
+                    ),
+                ]
+                if w is not None
+            ]
         )
-        self._children_width.value = _children_width
-        _height = computed(
-            lambda: unref(self.height)
-            if unref(self.height) is not None
-            else max(
-                unref(children.after_mounted_component_data.height)
-                for children in unref(self.children)
-            )
-        )
-        self._height.value = _height
 
-        self.after_mounted_component_data = AfterMountedComponentData(
-            unref(self.width) if unref(self.width) is not None else _children_width,
-            _height,
+        self.after_mounted_data.value = AfterMountedComponentInstanceData(
+            width, height, children
         )
 
 
 @dataclass
 class Column(Component):
-    children: list["Component"] | ReadRef[list["Component"]] = field(
-        default_factory=list["Component"]
-    )
+    children: list["Component" | ReadRef["Component"]] | ReadRef[
+        list["Component" | ReadRef["Component"]]
+    ] = field(default_factory=list["Component" | ReadRef["Component"]])
     gap: int | float | ReadRef[int | float] = field(default=0, kw_only=True)
     width: int | float | None | ReadRef[int | float | None] = field(default=None)
     height: int | float | None | ReadRef[int | float | None] = field(default=None)
-    _width: Ref[ReadRef[float] | None] = field(
-        init=False, default_factory=lambda: Ref(None)
-    )
-    _children_height: Ref[ReadRef[float] | None] = field(
-        init=False, default_factory=lambda: Ref(None)
-    )
 
-    @event_handler(ComponentMountedEvent)
-    def component_mounted_handler(self, _: ComponentMountedEvent):
-        def do_mount_children(children: Component, pad_y: float | ReadRef[float]):
-            before_mounted_component_data = self.before_mounted_component_data
-            acc_offset_x = before_mounted_component_data.acc_offset_x
-            acc_offset_y = before_mounted_component_data.acc_offset_y
-            pad_x_ref = Ref(0)
-            off_x = computed(
-                lambda: unref(unref(pad_x_ref))
-                * unref(before_mounted_component_data.scale_x)
-            )
-            off_y = computed(
-                lambda: unref(pad_y) * unref(before_mounted_component_data.scale_y)
-            )
-            children.before_mounted_component_data = BeforeMountedComponentData(
-                off_x,
-                off_y,
-                computed(lambda: unref(acc_offset_x) + unref(off_x)),
-                computed(lambda: unref(acc_offset_y) + unref(off_y)),
-                before_mounted_component_data.scale_x,
-                before_mounted_component_data.scale_y,
-            )
-            children.capture(ComponentMountedEvent())
-            pad_x_ref.value = computed(
-                lambda: (
-                    unref(width) - unref(children.after_mounted_component_data.width)
-                )
-                / 2
-                if ((width := unref(self._width)) is not None)
-                else 0
-            )
-
-            return computed(
-                lambda: unref(pad_y)
-                + unref(children.after_mounted_component_data.height)
-                + unref(self.gap)
-            )
-
-        def mount_children():
-            pad_y = computed(
-                lambda: 0
-                if unref(self.height) is None
-                or unref(unref(self._children_height)) is None
-                else (unref(self.height) - unref(unref(self._children_height))) / 2
-            )
-            for children in unref(self.children):
-                pad_y = do_mount_children(children, pad_y)
-
-        if isref(self.children):
-            self.bound_watchers.add(
-                Watcher([self.children], mount_children, trigger_init=True)
-            )
-        else:
-            mount_children()
-
-        _width = computed(
-            lambda: unref(self.width)
-            if unref(self.width) is not None
-            else max(
-                unref(children.after_mounted_component_data.width)
-                for children in unref(self.children)
-            )
-        )
-        self._width.value = _width
-        _children_height = computed(
-            lambda: sum(
-                unref(children.after_mounted_component_data.height)
-                for children in unref(self.children)
-            )
-            + unref(self.gap) * max(len(unref(self.children)) - 1, 0)
-        )
-        self._children_height.value = _children_height
-
-        self.after_mounted_component_data = AfterMountedComponentData(
-            _width,
-            unref(self.height) if unref(self.height) is not None else _children_height,
-        )
+    def get_instance(self):
+        return ColumnInstance(component=self)
 
 
 @dataclass
-class Rect(Component):
-    color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]]
-    width: int | float | ReadRef[int | float]
-    height: int | float | ReadRef[int | float]
+class RectInstance(ComponentInstance["Rect"]):
     _rect: Rectangle = field(init=False)
+
+    def __hash__(self) -> int:
+        return id(self)
 
     def _draw(self, _dt: float):
         self._rect.draw()
@@ -946,17 +1121,16 @@ class Rect(Component):
 
     @event_handler(ComponentMountedEvent)
     def component_mounted_handler(self, _: ComponentMountedEvent):
-        before_mounted_component_data = self.before_mounted_component_data
-        x = before_mounted_component_data.acc_offset_x
-        y = before_mounted_component_data.acc_offset_y
+        x = use_acc_offset_x(self)
+        y = use_acc_offset_y(self)
         width = computed(
-            lambda: unref(self.width) * unref(before_mounted_component_data.scale_x)
+            lambda: unref(self.component.width) * unref(use_acc_scale_x(self))
         )
         height = computed(
-            lambda: unref(self.height) * unref(before_mounted_component_data.scale_y)
+            lambda: unref(self.component.height) * unref(use_acc_scale_y(self))
         )
         self._rect = Rectangle(
-            unref(x), unref(y), unref(width), unref(height), unref(self.color)
+            unref(x), unref(y), unref(width), unref(height), unref(self.component.color)
         )
 
         self.bound_watchers.update(
@@ -967,23 +1141,33 @@ class Rect(Component):
                     Watcher.ifref(y, self._update_y),
                     Watcher.ifref(width, self._update_width),
                     Watcher.ifref(height, self._update_height),
-                    Watcher.ifref(self.color, self._update_color),
+                    Watcher.ifref(self.component.color, self._update_color),
                 ]
                 if w is not None
             ]
         )
 
-        self.after_mounted_component_data = AfterMountedComponentData(
-            self.width, self.height
+        self.after_mounted_data.value = AfterMountedComponentInstanceData(
+            self.component.width, self.component.height
         )
 
 
 @dataclass
-class Image(Component):
-    name: str | ReadRef[str]
-    width: int | float | ReadRef[int | float] | None = field(default=None)
-    height: int | float | ReadRef[int | float] | None = field(default=None)
+class Rect(Component):
+    color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]]
+    width: int | float | ReadRef[int | float]
+    height: int | float | ReadRef[int | float]
+
+    def get_instance(self):
+        return RectInstance(component=self)
+
+
+@dataclass
+class ImageInstance(ComponentInstance["Image"]):
     _sprite: Sprite = field(init=False)
+
+    def __hash__(self) -> int:
+        return id(self)
 
     def _draw(self, _dt: float):
         self._sprite.draw()
@@ -1005,22 +1189,23 @@ class Image(Component):
 
     @event_handler(ComponentMountedEvent)
     def component_mounted_handler(self, _: ComponentMountedEvent):
-        before_mounted_component_data = self.before_mounted_component_data
-        x = before_mounted_component_data.acc_offset_x
-        y = before_mounted_component_data.acc_offset_y
-        image = computed(lambda: loader.image(unref(self.name)))
+        x = use_acc_offset_x(self)
+        y = use_acc_offset_y(self)
+        image = computed(lambda: loader.image(unref(self.component.name)))
         width = computed(
-            lambda: unref(self.width) * unref(before_mounted_component_data.scale_x)
-            if self.width is not None
-            else unref(image).width * unref(before_mounted_component_data.scale_x)
+            lambda: unref(self.component.width)
+            if unref(self.component.width) is not None
+            else unref(image).width
         )
         height = computed(
-            lambda: unref(self.height) * unref(before_mounted_component_data.scale_y)
-            if self.height is not None
-            else unref(image).height * unref(before_mounted_component_data.scale_y)
+            lambda: unref(self.component.height)
+            if unref(self.component.height) is not None
+            else unref(image).height
         )
+        draw_width = computed(lambda: unref(width) * unref(use_acc_scale_x(self)))
+        draw_height = computed(lambda: unref(height) * unref(use_acc_scale_y(self)))
         self._sprite = Sprite(
-            unref(x), unref(y), unref(width), unref(height), unref(image)
+            unref(x), unref(y), unref(draw_width), unref(draw_height), unref(image)
         )
 
         self.bound_watchers.update(
@@ -1029,15 +1214,17 @@ class Image(Component):
                 for w in [
                     Watcher.ifref(x, self._update_x),
                     Watcher.ifref(y, self._update_y),
-                    Watcher.ifref(width, self._update_width),
-                    Watcher.ifref(height, self._update_height),
+                    Watcher.ifref(draw_width, self._update_width),
+                    Watcher.ifref(draw_height, self._update_height),
                     Watcher.ifref(image, self._update_image),
                 ]
                 if w is not None
             ]
         )
 
-        self.after_mounted_component_data = AfterMountedComponentData(width, height)
+        self.after_mounted_data.value = AfterMountedComponentInstanceData(
+            width, height, []
+        )
 
     @event_handler(ComponentUnmountedEvent)
     def component_unmounted_handler(self, event: ComponentUnmountedEvent):
@@ -1047,18 +1234,21 @@ class Image(Component):
 
 
 @dataclass
-class Label(Component):
-    text: str | ReadRef[str]
-    color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]] = field(
-        default=(255, 255, 255, 255)
-    )
-    font_name: str | None | ReadRef[str | None] = field(default=None)
-    font_size: int | float | None | ReadRef[int | float | None] = field(default=None)
-    bold: bool | ReadRef[bool] = field(default=False)
-    italic: bool | ReadRef[bool] = field(default=False)
-    width: int | float | ReadRef[int | float] | None = field(default=None)
-    height: int | float | ReadRef[int | float] | None = field(default=None)
+class Image(Component):
+    name: str | ReadRef[str]
+    width: int | float | None | ReadRef[int | float | None] = field(default=None)
+    height: int | float | None | ReadRef[int | float | None] = field(default=None)
+
+    def get_instance(self):
+        return ImageInstance(component=self)
+
+
+@dataclass
+class LabelInstance(ComponentInstance["Label"]):
     _label: Ref[_Label] = field(init=False)
+
+    def __hash__(self) -> int:
+        return id(self)
 
     def _draw(self, _dt: float):
         self._label.value.draw()
@@ -1102,31 +1292,28 @@ class Label(Component):
 
     @event_handler(ComponentMountedEvent)
     def component_mounted_handler(self, _: ComponentMountedEvent):
-        before_mounted_component_data = self.before_mounted_component_data
-        x = before_mounted_component_data.acc_offset_x
-        y = before_mounted_component_data.acc_offset_y
-        scale_x = before_mounted_component_data.scale_x
-        scale_y = before_mounted_component_data.scale_y
-        _width = computed(
-            lambda: unref(self.width) * unref(scale_x)
-            if self.width is not None
+        x = use_acc_offset_x(self)
+        y = use_acc_offset_y(self)
+        draw_width = computed(
+            lambda: width * unref(use_acc_scale_x(self))
+            if (width := unref(self.component.width)) is not None
             else None
         )
-        _height = computed(
-            lambda: unref(self.height) * unref(scale_y)
-            if self.height is not None
+        draw_height = computed(
+            lambda: height * unref(use_acc_scale_y(self))
+            if (height := unref(self.component.height)) is not None
             else None
         )
         self._label = Ref(
             _Label(
-                unref(self.text),
-                font_name=unref(self.font_name),
-                font_size=unref(self.font_size),
-                bold=unref(self.bold),
-                italic=unref(self.italic),
-                color=unref(self.color),
-                width=unref(_width),
-                height=unref(_height),
+                unref(self.component.text),
+                font_name=unref(self.component.font_name),
+                font_size=unref(self.component.font_size),
+                bold=unref(self.component.bold),
+                italic=unref(self.component.italic),
+                color=unref(self.component.color),
+                width=unref(draw_width),
+                height=unref(draw_height),
             )
         )
         self._label.value.x = unref(x)
@@ -1138,57 +1325,75 @@ class Label(Component):
                 for w in [
                     Watcher.ifref(x, self._update_x),
                     Watcher.ifref(y, self._update_y),
-                    Watcher.ifref(self.text, self._update_text),
-                    Watcher.ifref(self.font_name, self._update_font_name),
-                    Watcher.ifref(self.font_size, self._update_font_size),
-                    Watcher.ifref(self.bold, self._update_bold),
-                    Watcher.ifref(self.italic, self._update_italic),
-                    Watcher.ifref(_width, self._update_width),
-                    Watcher.ifref(_height, self._update_height),
+                    Watcher.ifref(self.component.text, self._update_text),
+                    Watcher.ifref(self.component.font_name, self._update_font_name),
+                    Watcher.ifref(self.component.font_size, self._update_font_size),
+                    Watcher.ifref(self.component.bold, self._update_bold),
+                    Watcher.ifref(self.component.italic, self._update_italic),
+                    Watcher.ifref(draw_width, self._update_width),
+                    Watcher.ifref(draw_height, self._update_height),
                 ]
                 if w is not None
             ]
         )
 
-        width = (
-            self.width
-            if self.width is not None
-            else computed(lambda: unref(self._label).content_width / unref(scale_x))
+        width = computed(
+            lambda: unref(self.component.width)
+            if unref(self.component.width) is not None
+            else unref(self._label).content_width / unref(use_acc_scale_x(self))
         )
-        height = (
-            self.height
-            if self.height is not None
-            else computed(lambda: unref(self._label).content_height / unref(scale_y))
+        height = computed(
+            lambda: unref(self.component.height)
+            if unref(self.component.height) is not None
+            else unref(self._label).content_height / unref(use_acc_scale_y(self))
         )
 
-        self.after_mounted_component_data = AfterMountedComponentData(width, height)
+        self.after_mounted_data.value = AfterMountedComponentInstanceData(
+            width, height, []
+        )
 
 
 @dataclass
-class Input(Component):
-    text: Ref[str]
+class Label(Component):
+    text: str | ReadRef[str]
     color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]] = field(
         default=(255, 255, 255, 255)
     )
-    caret_color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]] = field(
-        default=(255, 255, 255, 255)
-    )
-    selection_background_color: tuple[int, int, int, int] | ReadRef[
-        tuple[int, int, int, int]
-    ] = field(default=(127, 127, 127, 255))
-    selection_color: tuple[int, int, int, int] | ReadRef[
-        tuple[int, int, int, int]
-    ] = field(default=(255, 255, 255, 255))
     font_name: str | None | ReadRef[str | None] = field(default=None)
     font_size: int | float | None | ReadRef[int | float | None] = field(default=None)
     bold: bool | ReadRef[bool] = field(default=False)
     italic: bool | ReadRef[bool] = field(default=False)
     width: int | float | ReadRef[int | float] | None = field(default=None)
     height: int | float | ReadRef[int | float] | None = field(default=None)
+
+    def get_instance(self):
+        return LabelInstance(component=self)
+
+
+@dataclass
+class InputInstance(ComponentInstance["Input"]):
+    _next_word_re: ClassVar[re.Pattern[str]] = re.compile(r"(?<=\W)\w")
+    _previous_word_re: ClassVar[re.Pattern[str]] = re.compile(r"(?<=\W)\w+\W*$")
     _batch: Batch = field(init=False)
     _document: UnformattedDocument = field(init=False)
     _layout: Ref[IncrementalTextLayout] = field(init=False)
-    _caret: Caret = field(init=False)
+    _caret: VertexList = field(init=False)
+    _position: Ref[int] = field(init=False, default_factory=lambda: Ref(0))
+    _mark: Ref[int | None] = field(init=False, default_factory=lambda: Ref(None))
+    _position_clamped: ReadRef[int] = field(init=False)
+    _mark_clamped: ReadRef[int | None] = field(init=False)
+    _visible: Ref[bool] = field(init=False, default_factory=lambda: Ref(False))
+    _caret_visible: Ref[bool] = field(init=False, default_factory=lambda: Ref(False))
+    _click_time: float = field(init=False, default=0)
+    _click_count: int = field(init=False, default=0)
+
+    def __hash__(self) -> int:
+        return id(self)
+
+    def _blink(self, _dt):
+        self._caret_visible.value = (
+            not unref(self._caret_visible) if unref(self._visible) else False
+        )
 
     def _draw(self, _dt: float):
         self._batch.draw()
@@ -1205,9 +1410,6 @@ class Input(Component):
 
     def _update_color(self, color: tuple[int, int, int, int]):
         self._document.set_style(0, 0, {"color": color})
-
-    def _update_caret_color(self, caret_color: tuple[int, int, int, int]):
-        self._caret.color = caret_color
 
     def _update_selection_background_color(
         self, selection_background_color: tuple[int, int, int, int]
@@ -1243,56 +1445,100 @@ class Input(Component):
 
     @event_handler(ComponentMountedEvent)
     def component_mounted_handler(self, _: ComponentMountedEvent):
-        before_mounted_component_data = self.before_mounted_component_data
-        x = before_mounted_component_data.acc_offset_x
-        y = before_mounted_component_data.acc_offset_y
-        scale_x = before_mounted_component_data.scale_x
-        scale_y = before_mounted_component_data.scale_y
-        _width = computed(
-            lambda: unref(self.width) * unref(scale_x)
-            if self.width is not None
+        x = use_acc_offset_x(self)
+        y = use_acc_offset_y(self)
+        draw_width = computed(
+            lambda: width * unref(use_acc_scale_x(self))
+            if (width := unref(self.component.width)) is not None
             else None
         )
-        _height = computed(
-            lambda: unref(self.height) * unref(scale_y)
-            if self.height is not None
+        draw_height = computed(
+            lambda: height * unref(use_acc_scale_y(self))
+            if (height := unref(self.component.height)) is not None
             else None
         )
 
         self._batch = Batch()
 
-        self._document = UnformattedDocument(unref(self.text))
+        self._document = UnformattedDocument(unref(self.component.text))
         self._document.set_style(
             0,
             0,
             {
-                "color": unref(self.color),
-                "font_name": unref(self.font_name),
-                "font_size": unref(self.font_size),
-                "bold": unref(self.bold),
-                "italic": unref(self.italic),
+                "color": unref(self.component.color),
+                "font_name": unref(self.component.font_name),
+                "font_size": unref(self.component.font_size),
+                "bold": unref(self.component.bold),
+                "italic": unref(self.component.italic),
             },
         )
 
         self._layout = Ref(
             IncrementalTextLayout(
                 self._document,
-                width=unref(_width),
-                height=unref(_height),
+                width=unref(draw_width),
+                height=unref(draw_height),
+                multiline=True,
                 batch=self._batch,
             )
         )
         self._layout.value.selection_background_color = unref(
-            self.selection_background_color
+            self.component.selection_background_color
         )
-        self._layout.value.selection_color = unref(self.selection_color)
+        self._layout.value.selection_color = unref(self.component.selection_color)
         self._layout.value.x = unref(x)
         self._layout.value.y = unref(y)
 
-        self._caret = Caret(
-            unref(self._layout), color=unref(self.caret_color), batch=self._batch
+        def _caret_color():
+            r, g, b, a = unref(self.component.caret_color)
+            visible = unref(self._caret_visible)
+            return (r, g, b, a if visible else 0, r, g, b, a if visible else 0)
+
+        self._position_clamped = computed(
+            lambda: min(len(unref(self.component.text)), unref(self._position))
         )
-        self._caret.visible = False
+        self._mark_clamped = computed(
+            lambda: None
+            if unref(self._mark) is None
+            else min(len(unref(self.component.text)), unref(self._mark))
+        )
+
+        def _caret_position():
+            layout = unref(self._layout)
+            position = unref(self._position_clamped)
+            mark = unref(self._mark_clamped)
+            line = layout.get_line_from_position(position)
+            _x, _y = layout.get_point_from_position(position, line)
+            _z = layout.z
+            _x += unref(x)
+            _y += unref(y) + layout.height
+
+            if mark is not None:
+                layout.set_selection(min(position, mark), max(position, mark))
+
+            layout.ensure_line_visible(line)
+            layout.ensure_x_visible(_x)
+
+            font = self._document.get_font(max(0, position - 1))
+            return (_x, _y + font.descent, _z, _x, _y + font.ascent, _z)
+
+        caret_color = computed(_caret_color)
+        caret_position = computed(_caret_position)
+        caret_group = self._layout.value.foreground_decoration_group
+        self._caret = caret_group.program.vertex_list(
+            2, gl.GL_LINES, self._batch, caret_group, colors=("Bn", unref(caret_color))
+        )
+        self._caret.position[:] = unref(caret_position)
+
+        def _update_caret_color(
+            new_caret_color: tuple[int, int, int, int, int, int, int, int]
+        ):
+            self._caret.colors[:] = new_caret_color
+
+        def _update_caret_position(
+            new_caret_position: tuple[int, int, int, int, int, int]
+        ):
+            self._caret.position[:] = new_caret_position
 
         self.bound_watchers.update(
             [
@@ -1300,81 +1546,273 @@ class Input(Component):
                 for w in [
                     Watcher.ifref(x, self._update_x),
                     Watcher.ifref(y, self._update_y),
-                    Watcher.ifref(self.text, self._update_text),
-                    Watcher.ifref(self.color, self._update_color),
-                    Watcher.ifref(self.caret_color, self._update_caret_color),
+                    Watcher.ifref(self.component.text, self._update_text),
+                    Watcher.ifref(self.component.color, self._update_color),
                     Watcher.ifref(
-                        self.selection_background_color,
+                        self.component.selection_background_color,
                         self._update_selection_background_color,
                     ),
-                    Watcher.ifref(self.selection_color, self._update_selection_color),
-                    Watcher.ifref(self.font_name, self._update_font_name),
-                    Watcher.ifref(self.font_size, self._update_font_size),
-                    Watcher.ifref(self.bold, self._update_bold),
-                    Watcher.ifref(self.italic, self._update_italic),
-                    Watcher.ifref(_width, self._update_width),
-                    Watcher.ifref(_height, self._update_height),
+                    Watcher.ifref(
+                        self.component.selection_color, self._update_selection_color
+                    ),
+                    Watcher.ifref(self.component.font_name, self._update_font_name),
+                    Watcher.ifref(self.component.font_size, self._update_font_size),
+                    Watcher.ifref(self.component.bold, self._update_bold),
+                    Watcher.ifref(self.component.italic, self._update_italic),
+                    Watcher.ifref(draw_width, self._update_width),
+                    Watcher.ifref(draw_height, self._update_height),
+                    Watcher.ifref(caret_color, _update_caret_color),
+                    Watcher.ifref(caret_position, _update_caret_position),
                 ]
                 if w is not None
             ]
         )
 
-        width = (
-            self.width
-            if self.width is not None
-            else computed(lambda: unref(self._layout).content_width / unref(scale_x))
+        width = computed(
+            lambda: unref(self.component.width)
+            if unref(self.component.width) is not None
+            else unref(self._layout).content_width / unref(use_acc_scale_x(self))
         )
-        height = (
-            self.height
-            if self.height is not None
-            else computed(lambda: unref(self._layout).content_height / unref(scale_y))
+        height = computed(
+            lambda: unref(self.component.height)
+            if unref(self.component.height) is not None
+            else unref(self._layout).content_height / unref(use_acc_scale_y(self))
         )
 
-        self.after_mounted_component_data = AfterMountedComponentData(width, height)
+        self.after_mounted_data.value = AfterMountedComponentInstanceData(
+            width, height, []
+        )
+
+    def delete_selection(self):
+        position = unref(self._position_clamped)
+        mark = unref(self._mark_clamped)
+        start = min(mark, position)
+        end = max(mark, position)
+        self._position.value = start
+        self._mark.value = None
+        text = unref(self.component.text)
+        return text[:start] + text[end:]
+
+    def move_to_point(self, p: Positional):
+        self.select_to_point(p)
+        self._mark.value = None
+
+    def select_to_point(self, p: Positional):
+        self._position.value = unref(self._layout).get_position_from_point(
+            unref(use_acc_offset_x(self)) + p.x, unref(use_acc_offset_y(self)) + p.y
+        )
+
+    def select_word(self, p: Positional):
+        text = unref(self.component.text)
+        point_position = unref(self._layout).get_position_from_point(
+            unref(use_acc_offset_x(self)) + p.x, unref(use_acc_offset_y(self)) + p.y
+        )
+        self._position.value = (
+            m1.start()
+            if (m1 := InputInstance._next_word_re.search(text, 0, point_position))
+            else len(text)
+        )
+        self._mark.value = (
+            m2.start()
+            if (
+                m2 := InputInstance._previous_word_re.search(
+                    text, endpos=point_position + 1
+                )
+            )
+            else 0
+        )
+
+    def select_paragraph(self, p: Positional):
+        point_position = unref(self._layout).get_position_from_point(
+            unref(use_acc_offset_x(self)) + p.x, unref(use_acc_offset_y(self)) + p.y
+        )
+        self._position.value = self._document.get_paragraph_end(point_position)
+        self._mark.value = self._document.get_paragraph_start(point_position)
+
+    @event_handler(ComponentFocusEvent)
+    def component_focus_handler(self, _: ComponentFocusEvent):
+        self._visible.value = True
+        self._caret_visible.value = True
+        pyglet.clock.schedule_interval(self._blink, 0.5)
 
     @event_handler(ComponentBlurEvent)
     def component_blur_handler(self, _: ComponentBlurEvent):
-        self._layout.value.set_selection(0, 0)
-        self._caret.visible = False
+        self._position.value = 0
+        self._mark.value = None
+        pyglet.clock.unschedule(self._blink)
+        self._visible.value = False
+        self._caret_visible.value = False
 
     @event_handler(TextEvent)
     def text_handler(self, event: TextEvent):
-        self._caret.on_text(event.text)
-        self.text.value = self._document.text
+        position = unref(self._position_clamped)
+        new_text = event.text.replace("\r", "\n")
+        text = unref(self.component.text)
+        self._position.value = position + len(new_text)
+        self.capture(InputEvent("".join((text[:position], new_text, text[position:]))))
+
+    def _text_motion_handler(self, event: TextMotionEvent | TextMotionSelectEvent):
+        select = isinstance(event, TextMotionSelectEvent)
+        position = unref(self._position_clamped)
+        mark = unref(self._mark_clamped)
+        text = unref(self.component.text)
+        layout = unref(self._layout)
+
+        if select and mark is None:
+            self._mark.value = position
+
+        match event.motion:
+            case key.MOTION_BACKSPACE:
+                if mark is not None:
+                    self.capture(InputEvent(self.delete_selection()))
+                    return
+                elif position > 0:
+                    self._position.value = position - 1
+                    self.capture(InputEvent(text[: position - 1] + text[position:]))
+                    return
+            case key.MOTION_DELETE:
+                if mark is not None:
+                    self.capture(InputEvent(self.delete_selection()))
+                    return
+                elif position < len(text):
+                    self.capture(InputEvent(text[:position] + text[position + 1 :]))
+                    return
+
+        if mark is not None and not select:
+            self._mark.value = None
+
+        match event.motion:
+            case key.MOTION_LEFT:
+                self._position.value = max(0, position - 1)
+            case key.MOTION_RIGHT:
+                self._position.value = min(len(text), position + 1)
+            case key.MOTION_UP:
+                line = layout.get_line_from_position(position)
+                if line > 0:
+                    line_position = layout.get_position_on_line(
+                        line, unref(use_acc_offset_x(self))
+                    )
+                    line_diff = position - line_position
+                    last_line_position = layout.get_position_on_line(
+                        line - 1, unref(use_acc_offset_x(self))
+                    )
+                    self._position.value = min(
+                        line_position - 1, last_line_position + line_diff
+                    )
+                else:
+                    self._position.value = 0
+            case key.MOTION_DOWN:
+                line = layout.get_line_from_position(position)
+                if line + 1 < layout.get_line_count():
+                    line_position = layout.get_position_on_line(
+                        line, unref(use_acc_offset_x(self))
+                    )
+                    line_diff = position - line_position
+                    next_line_position = layout.get_position_on_line(
+                        line + 1, unref(use_acc_offset_x(self))
+                    )
+                    end_next_line_position = (
+                        layout.get_position_on_line(
+                            line + 2, unref(use_acc_offset_x(self))
+                        )
+                        - 1
+                        if line + 2 < layout.get_line_count()
+                        else len(text)
+                    )
+                    self._position.value = min(
+                        end_next_line_position, next_line_position + line_diff
+                    )
+                else:
+                    self._position.value = len(text)
+            case key.MOTION_BEGINNING_OF_LINE:
+                self._position.value = layout.get_position_on_line(
+                    layout.get_line_from_position(position),
+                    unref(use_acc_offset_x(self)),
+                )
+            case key.MOTION_END_OF_LINE:
+                line = layout.get_line_from_position(position)
+                if line < layout.get_line_count() - 1:
+                    self._position.value = (
+                        layout.get_position_on_line(
+                            line + 1, unref(use_acc_offset_x(self))
+                        )
+                        - 1
+                    )
+                else:
+                    self._position.value = len(text)
+            case key.MOTION_BEGINNING_OF_FILE:
+                self._position.value = 0
+            case key.MOTION_END_OF_FILE:
+                self._position.value = len(text)
+            case key.MOTION_NEXT_WORD:
+                if m := InputInstance._next_word_re.search(text, position + 1):
+                    self._position.value = m.start()
+                else:
+                    self._position.value = len(text)
+            case key.MOTION_PREVIOUS_WORD:
+                if m := InputInstance._previous_word_re.search(text, endpos=position):
+                    self._position.value = m.start()
+                else:
+                    self._position.value = 0
 
     @event_handler(TextMotionEvent)
     def text_motion_handler(self, event: TextMotionEvent):
-        self._caret.on_text_motion(event.motion)
-        self.text.value = self._document.text
+        self._text_motion_handler(event)
 
     @event_handler(TextMotionSelectEvent)
     def text_motion_select_handler(self, event: TextMotionSelectEvent):
-        self._caret.on_text_motion_select(event.motion)
-        self.text.value = self._document.text
+        self._text_motion_handler(event)
 
     @event_handler(MousePressEvent)
     def mouse_press_handler(self, event: MousePressEvent):
-        self.focus()
-        self._caret.visible = True
-        self._caret.on_mouse_press(
-            self._layout.value.x + event.x,
-            self._layout.value.y + event.y,
-            event.button,
-            event.modifiers,
-        )
+        ComponentInstance.focus = self
+        t = time.time()
+        if t - self._click_time > 0.25:
+            self._click_count = 0
+        self._click_count += 1
+        self._click_time = t
+
+        match self._click_count % 3:
+            case 1:
+                self.move_to_point(event)
+            case 2:
+                self.select_word(event)
+            case 0:
+                self.select_paragraph(event)
         return StopPropagate
 
     @event_handler(MouseDragEvent)
     def mouse_drag_handler(self, event: MouseDragEvent):
-        self._caret.on_mouse_drag(
-            self._layout.value.x + event.x,
-            self._layout.value.y + event.y,
-            event.dx,
-            event.dy,
-            event.buttons,
-            event.modifiers,
-        )
+        if unref(self._mark_clamped) is None:
+            self._mark.value = unref(self._position_clamped)
+        self.select_to_point(event)
         return StopPropagate
+
+
+@dataclass
+class Input(Component):
+    text: ReadRef[str]
+    color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]] = field(
+        default=(255, 255, 255, 255)
+    )
+    caret_color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]] = field(
+        default=(255, 255, 255, 255)
+    )
+    selection_background_color: tuple[int, int, int, int] | ReadRef[
+        tuple[int, int, int, int]
+    ] = field(default=(127, 127, 127, 255))
+    selection_color: tuple[int, int, int, int] | ReadRef[
+        tuple[int, int, int, int]
+    ] = field(default=(255, 255, 255, 255))
+    font_name: str | None | ReadRef[str | None] = field(default=None)
+    font_size: int | float | None | ReadRef[int | float | None] = field(default=None)
+    bold: bool | ReadRef[bool] = field(default=False)
+    italic: bool | ReadRef[bool] = field(default=False)
+    width: int | float | ReadRef[int | float] | None = field(default=None)
+    height: int | float | ReadRef[int | float] | None = field(default=None)
+
+    def get_instance(self):
+        return InputInstance(component=self)
 
 
 @dataclass
@@ -1382,6 +1820,7 @@ class Window:
     _width: InitVar[int | ReadRef[int] | None] = field(default=None)
     _height: InitVar[int | ReadRef[int] | None] = field(default=None)
     _scene: Component | None = field(default=None)
+    _scene_instance: ComponentInstance | None = field(default=None)
     resizable: InitVar[bool] = field(default=False, kw_only=True)
     width: ReadRef[int] = field(init=False)
     height: ReadRef[int] = field(init=False)
@@ -1396,53 +1835,53 @@ class Window:
         @self._window.event
         def on_refresh(dt: float):
             self._window.clear()
-            if (scene := self.scene) is not None:
-                scene.draw(dt)
+            if (scene_instance := self.scene_instance) is not None:
+                scene_instance.draw(dt)
 
         @self._window.event
         def on_key_press(symbol, modifiers):
-            if (scene := self.scene) is not None:
-                scene.capture(KeyPressEvent(symbol, modifiers))
+            if (scene_instance := self.scene_instance) is not None:
+                scene_instance.capture(KeyPressEvent(symbol, modifiers))
 
         @self._window.event
         def on_key_release(symbol, modifiers):
-            if (scene := self.scene) is not None:
-                scene.capture(KeyReleaseEvent(symbol, modifiers))
+            if (scene_instance := self.scene_instance) is not None:
+                scene_instance.capture(KeyReleaseEvent(symbol, modifiers))
 
         @self._window.event
         def on_mouse_drag(x, y, dx, dy, buttons, modifiers):
-            if (scene := self.scene) is not None:
-                scene.capture(MouseDragEvent(x, y, dx, dy, buttons, modifiers))
+            if (scene_instance := self.scene_instance) is not None:
+                scene_instance.capture(MouseDragEvent(x, y, dx, dy, buttons, modifiers))
 
         @self._window.event
         def on_mouse_enter(x, y):
-            if (scene := self.scene) is not None:
-                scene.capture(MouseEnterEvent(x, y))
+            if (scene_instance := self.scene_instance) is not None:
+                scene_instance.capture(MouseEnterEvent(x, y))
 
         @self._window.event
         def on_mouse_leave(x, y):
-            if (scene := self.scene) is not None:
-                scene.capture(MouseLeaveEvent(x, y))
+            if (scene_instance := self.scene_instance) is not None:
+                scene_instance.capture(MouseLeaveEvent(x, y))
 
         @self._window.event
         def on_mouse_motion(x, y, dx, dy):
-            if (scene := self.scene) is not None:
-                scene.capture(MouseMotionEvent(x, y, dx, dy))
+            if (scene_instance := self.scene_instance) is not None:
+                scene_instance.capture(MouseMotionEvent(x, y, dx, dy))
 
         @self._window.event
         def on_mouse_press(x, y, button, modifiers):
-            if (scene := self.scene) is not None:
-                scene.capture(MousePressEvent(x, y, button, modifiers))
+            if (scene_instance := self.scene_instance) is not None:
+                scene_instance.capture(MousePressEvent(x, y, button, modifiers))
 
         @self._window.event
         def on_mouse_release(x, y, button, modifiers):
-            if (scene := self.scene) is not None:
-                scene.capture(MouseReleaseEvent(x, y, button, modifiers))
+            if (scene_instance := self.scene_instance) is not None:
+                scene_instance.capture(MouseReleaseEvent(x, y, button, modifiers))
 
         @self._window.event
         def on_mouse_scroll(x, y, scroll_x, scroll_y):
-            if (scene := self.scene) is not None:
-                scene.capture(MouseScrollEvent(x, y, scroll_x, scroll_y))
+            if (scene_instance := self.scene_instance) is not None:
+                scene_instance.capture(MouseScrollEvent(x, y, scroll_x, scroll_y))
 
         @self._window.event
         def on_resize(width, height):
@@ -1451,31 +1890,38 @@ class Window:
 
         @self._window.event
         def on_text(text):
-            if (scene := self.scene) is not None:
-                scene.capture(TextEvent(text))
+            if (scene_instance := self.scene_instance) is not None:
+                scene_instance.capture(TextEvent(text))
 
         @self._window.event
         def on_text_motion(motion):
-            if (scene := self.scene) is not None:
-                scene.capture(TextMotionEvent(motion))
+            if (scene_instance := self.scene_instance) is not None:
+                scene_instance.capture(TextMotionEvent(motion))
 
         @self._window.event
         def on_text_motion_select(motion):
-            if (scene := self.scene) is not None:
-                scene.capture(TextMotionSelectEvent(motion))
+            if (scene_instance := self.scene_instance) is not None:
+                scene_instance.capture(TextMotionSelectEvent(motion))
 
     @property
     def scene(self):
         return self._scene
 
+    @property
+    def scene_instance(self):
+        return self._scene_instance
+
     @scene.setter
     def scene(self, new_scene: Component):
-        if (scene := self.scene) is not None:
+        new_scene_instance = new_scene.get_instance()
+        if (scene_instance := self._scene_instance) is not None:
             self._scene = new_scene
-            scene.capture(ComponentUnmountedEvent())
+            self._scene_instance = new_scene_instance
+            scene_instance.capture(ComponentUnmountedEvent())
         else:
             self._scene = new_scene
-        new_scene.before_mounted_component_data = BeforeMountedComponentData(
-            0, 0, 0, 0, 1, 1
+            self._scene_instance = new_scene_instance
+        new_scene_instance.before_mounted_data.value = (
+            BeforeMountedComponentInstanceData(0, 0, 0, 0, 1, 1, 1, 1)
         )
-        new_scene.capture(ComponentMountedEvent())
+        new_scene_instance.capture(ComponentMountedEvent())

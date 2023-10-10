@@ -1,5 +1,6 @@
 from random import randrange
 
+from tgraphics.event import InputEvent
 from tgraphics.component import Column, Input, Label, Layer, Rect, Row, Window
 from tgraphics.reactivity import Ref, computed, unref
 
@@ -25,6 +26,13 @@ text = computed(lambda: f"{unref(grid_size)} {unref(gap_size)} {unref(color)}")
 
 def rand_grid(_):
     color.value = (randrange(127, 256), randrange(127, 255), randrange(127, 255), 255)
+
+
+def set_input_ref(ref: Ref[str]):
+    def _handler(event: InputEvent):
+        ref.value = event.text
+
+    return _handler
 
 
 window.scene = Column(
@@ -59,6 +67,9 @@ window.scene = Column(
                                 (0, 0, 0, 255),
                                 width=50,
                                 height=20,
+                                event_handlers={
+                                    InputEvent: set_input_ref(grid_size_input)
+                                },
                             ),
                         ]
                     ),
@@ -73,6 +84,9 @@ window.scene = Column(
                                 (0, 0, 0, 255),
                                 width=50,
                                 height=20,
+                                event_handlers={
+                                    InputEvent: set_input_ref(gap_size_input)
+                                },
                             ),
                         ]
                     ),

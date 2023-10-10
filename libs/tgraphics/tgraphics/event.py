@@ -71,6 +71,11 @@ class ComponentBlurEvent(Event):
 
 
 @dataclass
+class InputEvent(Event):
+    text: str
+
+
+@dataclass
 class KeyPressEvent(FocusEvent):
     symbol: int
     modifiers: int
@@ -131,4 +136,9 @@ class MouseScrollEvent(BubblingEvent):
     scroll_y: int
 
 
-StopPropagate = object()
+@dataclass
+class _StopPropagate:
+    pass
+
+
+StopPropagate = _StopPropagate()
