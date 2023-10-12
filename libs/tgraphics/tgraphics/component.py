@@ -769,7 +769,7 @@ class ComponentMeta(type):
         return data.cls(**data.get_init_vars(frame, {}, kwargs))
 
     @classmethod
-    def render_xml(mcs, xml: str, **kwargs) -> "Component | ReadRef['Component']":
+    def render_xml(mcs, xml: str, **kwargs) -> "Component":
         """MAKE SURE THAT THE INPUTTED XML IS SAFE"""
         return mcs.render_root_element(
             ElementTree.fromstring(xml), inspect.stack()[1], **kwargs

@@ -113,7 +113,7 @@ class BattleshipServer(Server):
         player = await self.player_get(session, args)
         if room_tup := self.public_rooms.popitem():
             room_id, room = room_tup
-            room.players.append(player)
+            room.players.append(models.PlayerId.from_player(player))
             self.public_rooms[room_id] = room
             return room_id
         else:
@@ -132,7 +132,7 @@ class BattleshipServer(Server):
             uuid4(),
             join_code="".join(random.choice(string.ascii_lowercase) for _ in range(6)),
         )
-        room.players.append(player)
+        room.players.append(models.PlayerId.from_player(player))
         room_id = models.PrivateRoomId.from_room(room)
         self.private_rooms[room_id] = room
         self.private_room_codes[room.join_code] = room
@@ -148,11 +148,11 @@ class BattleshipServer(Server):
 
     @Route.simple
     async def private_room_join(
-        self, session: Session, args: str
+        self, session: Session, args: models.PrivateRoomJoinArgs
     ) -> models.PrivateRoom:
         player = await self.player_get(session, args)
-        if room := self.private_room_codes.get(args, None):
-            room.players.append(player)
+        if room := self.private_room_codes.get(args.join_code, None):
+            room.players.append(models.PlayerId.from_player(player))
             return room
         raise ResponseError("not_found", b"")
 

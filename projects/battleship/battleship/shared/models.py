@@ -91,7 +91,7 @@ class PrivateRoomId:
         return cls(private_room.id)
 
 
-@dataclass(eq=True, frozen=True)
+@dataclass(eq=True)
 class BearingPlayerAuth:
     auth_token: UUID
 
@@ -102,3 +102,8 @@ class BearingPlayerAuth:
 @dataclass
 class PlayerCreateArgs:
     name: str
+
+
+@dataclass
+class PrivateRoomJoinArgs(BearingPlayerAuth):
+    join_code: str

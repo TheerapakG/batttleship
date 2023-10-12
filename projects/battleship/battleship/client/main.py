@@ -40,3 +40,4 @@ if __name__ == "__main__":
 
         window.scene = create_player(window=window, client=client)
     pyglet.app.run()
+    client.disconnect()
