@@ -4,7 +4,7 @@ import ssl
 from dotenv import load_dotenv
 import pyglet
 
-from tgraphics.component import Component, Window
+from tgraphics.component import Window
 from tgraphics.reactivity import ComputedFuture, computed, unref
 from tsocket.shared import Empty
 

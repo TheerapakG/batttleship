@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import Awaitable, AsyncIterator, Callable
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import wraps
 import inspect
@@ -262,6 +263,7 @@ class Client(metaclass=ClientMeta):
         ]
     ]
     session: ClientSession | None = field(init=False, default=None)
+    cbs: dict[str, set[asyncio.Queue[bytes]]] = field(init=False, default_factory=dict)
 
     async def connect(
         self,
@@ -284,6 +286,34 @@ class Client(metaclass=ClientMeta):
             await channel.read()
         await session.read_task
 
-    async def emit(self, msg_method: str, data: bytes):
-        log.info("EMIT: %s %s", msg_method, data)
-        # TODO
+    async def emit(self, name: str, data: bytes):
+        log.info("EMIT: %s %s", name, data)
+        for cb in self.cbs[name].copy():
+            cb(data)
+
+    @contextmanager
+    def wait(self, name: str):
+        # TODO: type safe emit / wait
+        queue = asyncio.Queue[bytes]()
+        self.cbs[name] = self.cbs.get(name, set()).add(queue)
+        try:
+
+            async def getter():
+                while True:
+                    yield await queue.get()
+
+            yield getter
+        finally:
+            self.cbs[name].remove(queue)
+            if not self.cbs[name]:
+                del self.cbs[name]
+
+    async def wait_once(self, name: str):
+        # TODO: type safe emit / wait
+        queue = asyncio.Queue[bytes]()
+        self.cbs[name] = self.cbs.get(name, set()).add(queue)
+        value = await queue.get()
+        self.cbs[name].remove(queue)
+        if not self.cbs[name]:
+            del self.cbs[name]
+        return value

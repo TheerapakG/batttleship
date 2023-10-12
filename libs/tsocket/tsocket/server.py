@@ -2,6 +2,7 @@ import asyncio
 from collections.abc import Awaitable, AsyncIterator, Callable, Sequence
 import contextlib
 from dataclasses import dataclass, field
+from functools import wraps
 import inspect
 import logging
 import ssl
@@ -195,6 +196,35 @@ class Route:
         return _StreamInOutRoute[ServerT, T, U](func)
 
 
+@dataclass
+class _Emit(Generic[ServerT, T]):
+    func: Callable[[ServerT, Session, T], None]
+
+    def get_fake_emit(self, name: str):
+        func = self.func
+
+        @wraps(func)
+        async def fake_emit(_self: ServerT, session: Session, args: T) -> None:
+            with session.create_channel() as channel:
+                await channel.write(
+                    Message(
+                        name,
+                        converter.dumps(args),
+                        MessageFlag.END,
+                    )
+                )
+
+        return fake_emit
+
+    async def __call__(self, session: Session, args: T) -> None:
+        # For tricking LSP / type checker
+        raise NotImplementedError()
+
+
+def emit(func: Callable[[ServerT, Session, T], None]):
+    return _Emit(func)
+
+
 class ServerMeta(type):
     def __new__(
         mcs: type["ServerMeta"],
@@ -205,6 +235,9 @@ class ServerMeta(type):
         routes = {name: rte for name, rte in attrs.items() if isinstance(rte, _Route)}
         attrs["_default_routes"] = routes
         attrs.update({name: rte.func for name, rte in routes.items()})
+        emits = {name: emt for name, emt in attrs.items() if isinstance(emt, _Emit)}
+        attrs["_default_emits"] = emits
+        attrs.update({name: emt.get_fake_emit(name) for name, emt in emits.items()})
         cls = super().__new__(mcs, name, bases, attrs)
         return cls
 
@@ -212,14 +245,20 @@ class ServerMeta(type):
 @dataclass
 class Server(metaclass=ServerMeta):
     _default_routes: ClassVar[dict[str, _Route]] = dict()
+    _default_emits: ClassVar[dict[str, _Emit]] = dict()
     routes: dict[str, _Route] = field(init=False)
+    emits: dict[str, _Emit] = field(init=False)
     sessions: dict[UUID, Session] = field(init=False, default_factory=dict)
 
     def __post_init__(self):
         self.routes = self._default_routes.copy()
+        self.emits = self._default_emits.copy()
 
     def add_route(self, name: str, rte: _Route):
         self.routes[name] = rte
+
+    def add_emit(self, name: str, emt: _Emit):
+        self.emits[name] = emt
 
     async def handle_client(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter

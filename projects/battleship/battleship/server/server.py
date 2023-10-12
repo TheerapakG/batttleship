@@ -7,7 +7,7 @@ import string
 from uuid import UUID, uuid4
 
 from dotenv import load_dotenv
-from tsocket.server import Server, Route
+from tsocket.server import Server, Route, emit
 from tsocket.shared import Empty, ResponseError, Session
 from sqlalchemy import delete, insert, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
@@ -97,6 +97,10 @@ class BattleshipServer(Server):
                 return db_player.to_shared()
             else:
                 raise ResponseError("not_found", b"")
+
+    @emit
+    async def room_join(self, _session: Session, args: models.PlayerId):
+        raise NotImplementedError()
 
     @Route.simple
     async def public_room_get(

@@ -310,6 +310,31 @@ class Route:
         return _StreamInOutRoute[T, U](func)
 
 
+# TODO: type safe emit / wait
+@dataclass
+class WaitWorkItem:
+    name: str
+    future: Future[queue.SimpleQueue[Future[bytes]]] = field(default_factory=Future)
+
+    async def run(self, client: Client):
+        if self.future.set_running_or_notify_cancel():
+            out_queue = queue.SimpleQueue()
+            self.future.set_result(out_queue)
+            with client.wait(self.name) as waiter:
+                await asynciterator_to_queue(waiter, out_queue)
+
+
+# TODO: type safe emit / wait
+@dataclass
+class WaitOnceWorkItem:
+    name: str
+    future: Future[bytes] = field(default_factory=Future)
+
+    async def run(self, client: Client):
+        if self.future.set_running_or_notify_cancel():
+            self.future.set_result(await client.wait_once(self.name))
+
+
 class ClientThreadMeta(type):
     def __new__(mcs, name: str, bases: tuple[type, ...], attrs: dict[str, Any]):
         routes = {
@@ -368,3 +393,15 @@ class ClientThread(metaclass=ClientThreadMeta):
         self.thread = None
         self.work_queue.put(DisconnectItem())
         thread.join()
+
+    def wait(self, name: str):
+        # TODO: type safe emit / wait
+        work = WaitWorkItem(name)
+        self.work_queue.put(work)
+        return work.future
+
+    def wait_once(self, name: str):
+        # TODO: type safe emit / wait
+        work = WaitOnceWorkItem(name)
+        self.work_queue.put(work)
+        return work.future
