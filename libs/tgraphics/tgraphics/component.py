@@ -8,11 +8,12 @@ from xml.etree import ElementTree
 
 import pyglet
 from pyglet import gl
-from pyglet.graphics import Batch
+from pyglet.graphics import Batch, ShaderGroup
+from pyglet.graphics.shader import Shader, ShaderProgram
 from pyglet.graphics.vertexdomain import VertexList
 from pyglet.image import TextureRegion
 from pyglet.resource import Loader
-from pyglet.shapes import Rectangle
+from pyglet.shapes import Rectangle, get_default_shader as get_shape_default_shader
 from pyglet.sprite import Sprite
 from pyglet.text import Label as _Label
 from pyglet.text.document import UnformattedDocument
@@ -41,6 +42,7 @@ from .event import (
     ComponentUnmountedEvent,
     ComponentFocusEvent,
     ComponentBlurEvent,
+    ModelEvent,
     InputEvent,
 )
 from .reactivity import ReadRef, Ref, Watcher, computed, unref
@@ -292,9 +294,10 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
     before_mounted_data: Ref[BeforeMountedComponentInstanceData | None] = field(
         init=False, default_factory=lambda: Ref(None)
     )
-    after_mounted_data: Ref["AfterMountedComponentInstanceData | None"] = field(
+    after_mounted_data: Ref[AfterMountedComponentInstanceData | None] = field(
         init=False, default_factory=lambda: Ref(None)
     )
+    hover: Ref[bool] = field(init=False, default_factory=lambda: Ref(False))
     child_hover: Ref["ComponentInstance | None"] = field(
         init=False, default_factory=lambda: Ref(None)
     )
@@ -306,13 +309,13 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
         handlers = self._flat_event_handlers.copy()
         capturers.update(
             {
-                event: lambda _, e: capturer(e)
+                event: lambda _, e, capturer=capturer: capturer(e)
                 for event, capturer in self.component.event_capturers.items()
             }
         )
         handlers.update(
             {
-                event: lambda _, e: handler(e)
+                event: lambda _, e, handler=handler: handler(e)
                 for event, handler in self.component.event_handlers.items()
             }
         )
@@ -427,6 +430,7 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
 
     @event_capturer(MouseEnterEvent)
     def mouse_enter_capturer(self, event: MouseEnterEvent):
+        self.hover.value = True
         self.child_hover.value = None
         self._process_child_position(event)
         return self.dispatch(event)
@@ -451,6 +455,7 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
 
     @event_capturer(MouseLeaveEvent)
     def mouse_leave_capturer(self, event: MouseLeaveEvent):
+        self.hover.value = False
         self._process_child_leave(event, None)
         return self.dispatch(event)
 
@@ -468,6 +473,12 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
         self.bound_watchers.clear()
         self.before_mounted_data.value = None
         self.after_mounted_data.value = None
+
+    @event_handler(ModelEvent)
+    def component_model_handler(self, event: ModelEvent):
+        if event.field in self.component.models:
+            model_ref = getattr(self.component, event.field)
+            model_ref.value = event.value
 
 
 def use_offset_x(
@@ -631,13 +642,11 @@ class ComponentMeta(type):
 
         data = ElementComponentData(element)
 
-        def render_fn(
-            **additional_scope_values,
-        ) -> list["Component"]:
+        def render_fn(additional_scope_values, override_values) -> list["Component"]:
             return [
                 data.cls(
                     **data.get_init_vars(
-                        frame, (scope_values | additional_scope_values), {}
+                        frame, (scope_values | additional_scope_values), override_values
                     )
                 )
             ]
@@ -659,13 +668,14 @@ class ComponentMeta(type):
                             )
                         )
 
-                        def render_fn(**additional_scope_values):
+                        def render_fn(additional_scope_values, override_values):
                             return [
                                 component
                                 for components in [
                                     unref(
                                         old_render_fn(
-                                            **({for_var: v} | additional_scope_values),
+                                            {for_var: v} | additional_scope_values,
+                                            override_values,
                                         )
                                     )
                                     for v in unref(eval_for_values)
@@ -690,9 +700,13 @@ class ComponentMeta(type):
                             )
                         )
 
-                        def render_fn(**additional_scope_values):
+                        def render_fn(additional_scope_values, override_values):
                             return (
-                                unref(old_render_fn(**additional_scope_values))
+                                unref(
+                                    old_render_fn(
+                                        additional_scope_values, override_values
+                                    )
+                                )
                                 if unref(eval_val)
                                 else []
                             )
@@ -700,8 +714,36 @@ class ComponentMeta(type):
                         return render_fn
 
                     render_fn = if_render_fn_wrapper(render_fn, directive_value)
+                case _ if directive_key.startswith("model-"):
 
-        return computed(render_fn)
+                    def model_render_fn_wrapper(
+                        old_render_fn: Callable[..., list["Component"]],
+                        directive_key: str,
+                        directive_value: str,
+                    ):
+                        def render_fn(additional_scope_values, override_values):
+                            model = directive_key.removeprefix("model-")
+
+                            models = override_values.get("models", [])
+                            models.append(model)
+                            override_values["models"] = models
+
+                            model_ref = eval(
+                                directive_value, frame.frame.f_globals, frame_locals
+                            )
+                            override_values[model] = model_ref
+
+                            return old_render_fn(
+                                additional_scope_values, override_values
+                            )
+
+                        return render_fn
+
+                    render_fn = model_render_fn_wrapper(
+                        render_fn, directive_key, directive_value
+                    )
+
+        return computed(lambda: render_fn({}, {}))
 
     @classmethod
     def render_root_element(
@@ -710,6 +752,19 @@ class ComponentMeta(type):
         """MAKE SURE THAT INPUTTED XML IS SAFE"""
 
         data = ElementComponentData(element)
+
+        for directive_key, directive_value in data.directives.items():
+            match directive_key:
+                case _ if directive_key.startswith("model-"):
+                    model = directive_key.removeprefix("model-")
+                    models = kwargs.get("models", [])
+                    models.append(model)
+                    kwargs["models"] = models
+
+                    model_ref = eval(
+                        directive_value, frame.frame.f_globals, frame.frame.f_locals
+                    )
+                    kwargs[model] = model_ref
 
         return data.cls(**data.get_init_vars(frame, {}, kwargs))
 
@@ -730,6 +785,7 @@ class Component(metaclass=ComponentMeta):
     event_handlers: dict[type[Event], Callable[[Event], Any]] = field(
         default_factory=dict, repr=False
     )
+    models: list[str] = field(default_factory=list, repr=False)
     children: list["Component" | ReadRef["Component"]] | ReadRef[
         list["Component" | ReadRef["Component"]]
     ] = field(default_factory=list["Component" | ReadRef["Component"]])
@@ -1162,6 +1218,162 @@ class Rect(Component):
         return RectInstance(component=self)
 
 
+class _BlendShaderGroup(ShaderGroup):
+    def set_state(self):
+        super().set_state()
+        gl.glEnable(gl.GL_BLEND)
+        gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
+
+    def unset_state(self):
+        gl.glDisable(gl.GL_BLEND)
+        super().unset_state()
+
+
+@dataclass
+class RoundedRectInstance(ComponentInstance["RoundedRect"]):
+    vert: ClassVar[Shader] = Shader(
+        """
+        #version 330 core
+        in vec2 translation;
+        in vec2 size;
+        in float radius;
+        in vec2 tex_coord;
+        in vec4 color;
+
+        out vec2 vertex_size;
+        out float vertex_radius;
+        out vec2 vertex_tex_coord;
+        out vec4 vertex_color;
+
+        uniform WindowBlock
+        {
+            mat4 projection;
+            mat4 view;
+        } window;
+
+        void main()
+        {
+            vec2 pos = size * tex_coord;
+            gl_Position = window.projection * window.view * vec4(translation + pos, 0.0, 1.0);
+            vertex_size = size;
+            vertex_radius = radius;
+            vertex_tex_coord = tex_coord;
+            vertex_color = color;
+        }
+        """,
+        "vertex",
+    )
+    frag: ClassVar[Shader] = Shader(
+        """
+        #version 330 core
+        in vec2 vertex_size;
+        in float vertex_radius;
+        in vec2 vertex_tex_coord;
+        in vec4 vertex_color;
+
+        float RectSDF(vec2 p, vec2 b, float r)
+        {
+            vec2 d = abs(p) - b + vec2(r);
+            return min(max(d.x, d.y), 0.0) + length(max(d, 0.0)) - r;   
+        }
+
+        void main() 
+        {
+            vec2 pos = vertex_size * vertex_tex_coord;
+                
+            float fDist = RectSDF(pos-vertex_size/2.0, vertex_size/2.0 - 1.0, vertex_radius);
+            float fBlendAmount = smoothstep(-1.0, 1.0, abs(fDist));
+
+            gl_FragColor = mix(vertex_color, fDist < 0.0 ? vertex_color: vec4(0.0), fBlendAmount);
+        }
+        """,
+        "fragment",
+    )
+    program: ClassVar[ShaderProgram] = ShaderProgram(vert, frag)
+    _batch: Batch = field(init=False)
+    _group: ShaderGroup = field(init=False)
+    _vertex_list: VertexList = field(init=False)
+
+    def __hash__(self) -> int:
+        return id(self)
+
+    def _draw(self, _dt: float):
+        self._batch.draw()
+
+    def _update_x(self, x: float):
+        self._vertex_list.translation[::2] = (x,) * 4
+
+    def _update_y(self, y: float):
+        self._vertex_list.translation[1::2] = (y,) * 4
+
+    def _update_width(self, width: float):
+        self._vertex_list.size[::2] = (width,) * 4
+
+    def _update_height(self, height: float):
+        self._vertex_list.size[1::2] = (height,) * 4
+
+    def _update_radius(self, radius: float):
+        self._vertex_list.radius[:] = (radius,) * 4
+
+    def _update_color(self, color: tuple[int, int, int, int]):
+        self._vertex_list.color[:] = color * 4
+
+    @event_handler(ComponentMountedEvent)
+    def component_mounted_handler(self, _: ComponentMountedEvent):
+        x = use_acc_offset_x(self)
+        y = use_acc_offset_y(self)
+        width = computed(
+            lambda: unref(self.component.width) * unref(use_acc_scale_x(self))
+        )
+        height = computed(
+            lambda: unref(self.component.height) * unref(use_acc_scale_y(self))
+        )
+        self._batch = Batch()
+        self._group = ShaderGroup(self.program)
+        self._vertex_list = self.program.vertex_list_indexed(
+            4,
+            gl.GL_TRIANGLES,
+            [0, 1, 2, 0, 2, 3],
+            self._batch,
+            self._group,
+            translation=("f", (unref(x), unref(y)) * 4),
+            size=("f", (unref(width), unref(height)) * 4),
+            radius=("f", (unref(self.component.radius),) * 4),
+            tex_coord=("f", (0, 0, 1, 0, 1, 1, 0, 1)),
+            color=("Bn", unref(self.component.color) * 4),
+        )
+
+        self.bound_watchers.update(
+            [
+                w
+                for w in [
+                    Watcher.ifref(x, self._update_x),
+                    Watcher.ifref(y, self._update_y),
+                    Watcher.ifref(width, self._update_width),
+                    Watcher.ifref(height, self._update_height),
+                    Watcher.ifref(self.component.radius, self._update_radius),
+                    Watcher.ifref(self.component.color, self._update_color),
+                ]
+                if w is not None
+            ]
+        )
+
+        self.after_mounted_data.value = AfterMountedComponentInstanceData(
+            self.component.width, self.component.height
+        )
+
+
+@dataclass
+class RoundedRect(Component):
+    color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]]
+    width: int | float | ReadRef[int | float]
+    height: int | float | ReadRef[int | float]
+    radius: int | float | ReadRef[int | float]
+
+    def get_instance(self):
+        return RoundedRectInstance(component=self)
+
+
 @dataclass
 class ImageInstance(ComponentInstance["Image"]):
     _sprite: Sprite = field(init=False)
@@ -1499,8 +1711,8 @@ class InputInstance(ComponentInstance["Input"]):
         )
         self._mark_clamped = computed(
             lambda: None
-            if unref(self._mark) is None
-            else min(len(unref(self.component.text)), unref(self._mark))
+            if (mark := unref(self._mark)) is None
+            else min(len(unref(self.component.text)), mark)
         )
 
         def _caret_position():
@@ -1827,7 +2039,12 @@ class Window:
     _window: _Window = field(init=False)
 
     def __post_init__(self, _width, _height, resizable):
-        self._window = _Window(unref(_width), unref(_height), resizable=resizable)
+        self._window = _Window(
+            unref(_width),
+            unref(_height),
+            resizable=resizable,
+            config=gl.Config(sample_buffers=1, samples=4),
+        )
 
         self.width = Ref(self._window.width)
         self.height = Ref(self._window.height)

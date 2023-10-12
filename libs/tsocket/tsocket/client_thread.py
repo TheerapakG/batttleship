@@ -47,20 +47,8 @@ class DisconnectItem:
 
 async def queue_to_asynciterator(content_queue: queue.SimpleQueue[Future[T]]):
     while True:
-        while True:
-            try:
-                content = content_queue.get_nowait()
-                break
-            except queue.Empty:
-                await asyncio.sleep(0)
-                continue
-
-        while True:
-            try:
-                yield content.result(0)
-            except TimeoutError:
-                await asyncio.sleep(0)
-                continue
+        content = await asyncio.to_thread(content_queue.get)
+        yield await asyncio.to_thread(content.result)
 
 
 async def awaitable_to_future(content_aw: Awaitable[T], future: Future[T]):
@@ -336,8 +324,10 @@ class ClientThreadMeta(type):
 
 @dataclass
 class ClientThread(metaclass=ClientThreadMeta):
-    work_queue: queue.SimpleQueue[WorkItem] = field(default_factory=queue.SimpleQueue)
-    thread: Thread | None = field(default=None)
+    work_queue: queue.SimpleQueue[WorkItem] = field(
+        init=False, default_factory=queue.SimpleQueue
+    )
+    thread: Thread | None = field(init=False, default=None)
 
     async def _runner(
         self,
@@ -347,21 +337,14 @@ class ClientThread(metaclass=ClientThreadMeta):
     ):
         client = Client()
         await client.connect(host, port, ssl=ssl)
-        is_exit = False
         running_tasks = set[asyncio.Task]()
         while True:
             running_tasks = {task for task in running_tasks if not task.done()}
-            try:
-                work = self.work_queue.get_nowait()
-            except queue.Empty:
-                if is_exit:
-                    await asyncio.gather(*running_tasks, return_exceptions=True)
-                    break
-                await asyncio.sleep(0)
-                continue
+            work = await asyncio.to_thread(self.work_queue.get)
 
             if isinstance(work, DisconnectItem):
-                is_exit = True
+                await asyncio.gather(*running_tasks, return_exceptions=True)
+                break
 
             running_tasks.add(asyncio.create_task(work.run(client)))
 

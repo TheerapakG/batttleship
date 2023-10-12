@@ -6,56 +6,99 @@ from uuid import UUID
 class Player:
     id: UUID  # pylint: disable=C0103
     name: str
+    rating: int
+    admin: bool
+    auth_token: UUID
+    transfer_code: UUID | None
 
-    def serialize_id(self):
-        return {"id": str(self.id)}
+    def expected_win(self, other: "Player"):
+        self_q = 10 ** (self.rating / 400)
+        other_q = 10 ** (other.rating / 400)
+        return self_q / (self_q + other_q)
 
-    def serialize_all(self):
-        return {"id": str(self.id), "name": self.name}
+
+@dataclass
+class PlayerInfo:
+    id: UUID  # pylint: disable=C0103
+    name: str
+    rating: int
+
+    @classmethod
+    def from_player(cls, player: Player):
+        return cls(player.id, player.name, player.rating)
+
+
+@dataclass(eq=True, frozen=True)
+class PlayerId:
+    id: UUID  # pylint: disable=C0103
+
+    @classmethod
+    def from_player(cls, player: Player):
+        return cls(player.id)
+
+    @classmethod
+    def from_player_info(cls, player_info: PlayerInfo):
+        return cls(player_info.id)
 
 
 @dataclass
 class Board:
     id: UUID  # pylint: disable=C0103
-    player: UUID  # Player.id
+    player: PlayerId
 
-    def serialize_id(self):
-        return {"id": str(self.id)}
 
-    def serialize_all(self):
-        return {"id": str(self.id), "player": str(self.player)}
+@dataclass(eq=True, frozen=True)
+class BoardId:
+    id: UUID  # pylint: disable=C0103
+
+    @classmethod
+    def from_board(cls, board: Board):
+        return cls(board.id)
 
 
 @dataclass
 class Room:
     id: UUID  # pylint: disable=C0103
-    name: str
-    players: list[UUID] = field(default_factory=list)  # list[Player.id]
-    boards: dict[UUID, UUID] = field(default_factory=dict)  # dict[Player.id, Board.id]
+    players: list[PlayerId] = field(init=False, default_factory=list)
+    boards: dict[PlayerId, BoardId] = field(init=False, default_factory=dict)
 
 
 @dataclass
-class RoomId:
+class PublicRoom(Room):
+    pass
+
+
+@dataclass(eq=True, frozen=True)
+class PublicRoomId:
     id: UUID  # pylint: disable=C0103
 
     @classmethod
-    def from_room(cls, room: Room):
-        return cls(room.id)
+    def from_room(cls, public_room: PublicRoom):
+        return cls(public_room.id)
+
+
+@dataclass
+class PrivateRoom(Room):
+    join_code: str
+
+
+@dataclass(eq=True, frozen=True)
+class PrivateRoomId:
+    id: UUID  # pylint: disable=C0103
+
+    @classmethod
+    def from_room(cls, private_room: PrivateRoom):
+        return cls(private_room.id)
+
+
+@dataclass(eq=True, frozen=True)
+class BearingPlayerAuth:
+    auth_token: UUID
 
 
 # API args below
 
 
 @dataclass
-class RoomCreateArgs:
-    name: str = field(default="<unnamed>")
-
-
-@dataclass
-class RoomGetArgs:
-    id: str  # pylint: disable=C0103
-
-
-@dataclass
-class RoomDeleteArgs:
-    id: str  # pylint: disable=C0103
+class PlayerCreateArgs:
+    name: str

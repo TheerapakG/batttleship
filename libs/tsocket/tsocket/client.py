@@ -261,7 +261,7 @@ class Client(metaclass=ClientMeta):
             _Route,
         ]
     ]
-    session: ClientSession | None = field(default=None)
+    session: ClientSession | None = field(init=False, default=None)
 
     async def connect(
         self,

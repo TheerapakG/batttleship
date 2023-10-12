@@ -28,3 +28,4 @@ tsocket = { path="../../libs/tsocket", develop=true }
 tgraphics = { path="../../libs/tgraphics", develop=true }
 python-dotenv = "^1.0.0"
 sqlalchemy = {extras = ["asyncio"], version = "^2.0.21"}
+aiosqlite = "^0.19.0"

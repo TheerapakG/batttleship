@@ -1,5 +1,7 @@
 from dataclasses import dataclass
-from typing import Any, ClassVar, Protocol
+from typing import Any, ClassVar, Generic, Protocol, TypeVar
+
+T = TypeVar("T")
 
 
 class EventMeta(type):
@@ -71,8 +73,14 @@ class ComponentBlurEvent(Event):
 
 
 @dataclass
-class InputEvent(Event):
-    text: str
+class ModelEvent(Event, Generic[T]):
+    field: str
+    value: T
+
+
+class InputEvent(ModelEvent[str]):
+    def __init__(self, value: str):
+        super().__init__("text", value)
 
 
 @dataclass

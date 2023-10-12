@@ -152,11 +152,13 @@ pyglet.clock.schedule(update_computed_future)
 
 
 class ComputedFuture(ReadRef[T_contra]):
+    _done: bool
     _fut: Future[T_contra]
     _cbs: list[Callable[[T_contra], Any]]
 
     def __init__(self, fut: Future[T_contra]):
         super().__init__(None)
+        self._done = False
         self._cbs = []
         self.set_future(fut)
 
@@ -167,13 +169,19 @@ class ComputedFuture(ReadRef[T_contra]):
         )
 
     def add_done_callback(self, fun: Callable[[T_contra], Any]):
+        if self._done:
+            fun(self._value)
         self._cbs.append(fun)
 
     def _set_value(self, new_value: T_contra):
+        new = False
+        if self._value != new_value:
+            new = True
+            self._value = new_value
+        self._done = True
         for cb in self._cbs:
             cb(new_value)
-        if self._value != new_value:
-            self._value = new_value
+        if new:
             self.update()
 
 

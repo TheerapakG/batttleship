@@ -5,7 +5,15 @@ from dataclasses import dataclass, field
 import inspect
 import logging
 import ssl
-from typing import Generic, Protocol, TypeVar, get_args, runtime_checkable
+from typing import (
+    Any,
+    ClassVar,
+    Generic,
+    Protocol,
+    TypeVar,
+    get_args,
+    runtime_checkable,
+)
 from uuid import UUID, uuid4
 
 from cattrs.preconf.cbor2 import Cbor2Converter
@@ -19,13 +27,16 @@ converter = Cbor2Converter()
 converter.register_structure_hook(UUID, lambda d, t: UUID(bytes=d))
 converter.register_unstructure_hook(UUID, lambda u: u.bytes)
 
+ServerT = TypeVar("ServerT", bound="Server")
 T = TypeVar("T")
 U = TypeVar("U")
 
 
 @runtime_checkable  # yikes?
-class _Route(Protocol):
-    async def run(self, server: "Server", channel: Channel):
+class _Route(Protocol[ServerT]):
+    func: Callable[[ServerT, Session, Any], Any]
+
+    async def run(self, server: ServerT, channel: Channel):
         ...
 
 
@@ -53,10 +64,14 @@ async def handle_channel_exc(channel: Channel):
 
 
 @dataclass
-class _SimpleRoute(Generic[T, U]):
-    func: Callable[["Server", Session, T], Awaitable[U]]
+class _SimpleRoute(Generic[ServerT, T, U]):
+    func: Callable[[ServerT, Session, T], Awaitable[U]]
 
-    async def run(self, server: "Server", channel: Channel):
+    async def __call__(self, session: Session, args: T) -> U:
+        # For tricking LSP / type checker
+        raise NotImplementedError()
+
+    async def run(self, server: ServerT, channel: Channel):
         async with handle_channel_exc(channel):
             params = [*inspect.signature(self.func).parameters.values()]
             msg = await channel.read()
@@ -81,10 +96,14 @@ async def gen_content_from_channel(channel: Channel, cls: type[T]) -> AsyncItera
 
 
 @dataclass
-class _StreamInRoute(Generic[T, U]):
-    func: Callable[["Server", Session, AsyncIterator[T]], Awaitable[U]]
+class _StreamInRoute(Generic[ServerT, T, U]):
+    func: Callable[[ServerT, Session, AsyncIterator[T]], Awaitable[U]]
 
-    async def run(self, server: "Server", channel: Channel):
+    async def __call__(self, session: Session, args: AsyncIterator[T]) -> U:
+        # For tricking LSP / type checker
+        raise NotImplementedError()
+
+    async def run(self, server: ServerT, channel: Channel):
         async with handle_channel_exc(channel):
             params = [*inspect.signature(self.func).parameters.values()]
             content = await self.func(
@@ -100,10 +119,14 @@ class _StreamInRoute(Generic[T, U]):
 
 
 @dataclass
-class _StreamOutRoute(Generic[T, U]):
-    func: Callable[["Server", Session, T], AsyncIterator[U]]
+class _StreamOutRoute(Generic[ServerT, T, U]):
+    func: Callable[[ServerT, Session, T], AsyncIterator[U]]
 
-    async def run(self, server: "Server", channel: Channel):
+    async def __call__(self, session: Session, args: T) -> AsyncIterator[U]:
+        # For tricking LSP / type checker
+        raise NotImplementedError()
+
+    async def run(self, server: ServerT, channel: Channel):
         async with handle_channel_exc(channel):
             params = [*inspect.signature(self.func).parameters.values()]
             msg = await channel.read()
@@ -121,10 +144,16 @@ class _StreamOutRoute(Generic[T, U]):
 
 
 @dataclass
-class _StreamInOutRoute(Generic[T, U]):
-    func: Callable[["Server", Session, AsyncIterator[T]], AsyncIterator[U]]
+class _StreamInOutRoute(Generic[ServerT, T, U]):
+    func: Callable[[ServerT, Session, AsyncIterator[T]], AsyncIterator[U]]
 
-    async def run(self, server: "Server", channel: Channel):
+    async def __call__(
+        self, session: Session, args: AsyncIterator[T]
+    ) -> AsyncIterator[U]:
+        # For tricking LSP / type checker
+        raise NotImplementedError()
+
+    async def run(self, server: ServerT, channel: Channel):
         async with handle_channel_exc(channel):
             params = [*inspect.signature(self.func).parameters.values()]
             async for content in self.func(
@@ -143,39 +172,53 @@ class _StreamInOutRoute(Generic[T, U]):
 class Route:
     @classmethod
     def simple(
-        cls, func: Callable[["Server", Session, T], Awaitable[U]]
-    ) -> _SimpleRoute[T, U]:
-        return _SimpleRoute[T, U](func)
+        cls, func: Callable[[ServerT, Session, T], Awaitable[U]]
+    ) -> _SimpleRoute[ServerT, T, U]:
+        return _SimpleRoute[ServerT, T, U](func)
 
     @classmethod
     def stream_in(
-        cls, func: Callable[["Server", Session, AsyncIterator[T]], Awaitable[U]]
-    ) -> _StreamInRoute[T, U]:
-        return _StreamInRoute[T, U](func)
+        cls, func: Callable[[ServerT, Session, AsyncIterator[T]], Awaitable[U]]
+    ) -> _StreamInRoute[ServerT, T, U]:
+        return _StreamInRoute[ServerT, T, U](func)
 
     @classmethod
     def stream_out(
-        cls, func: Callable[["Server", Session, T], AsyncIterator[U]]
-    ) -> _StreamOutRoute[T, U]:
-        return _StreamOutRoute[T, U](func)
+        cls, func: Callable[[ServerT, Session, T], AsyncIterator[U]]
+    ) -> _StreamOutRoute[ServerT, T, U]:
+        return _StreamOutRoute[ServerT, T, U](func)
 
     @classmethod
     def stream_in_out(
-        cls, func: Callable[["Server", Session, AsyncIterator[T]], AsyncIterator[U]]
-    ) -> _StreamInOutRoute[T, U]:
-        return _StreamInOutRoute[T, U](func)
+        cls, func: Callable[[ServerT, Session, AsyncIterator[T]], AsyncIterator[U]]
+    ) -> _StreamInOutRoute[ServerT, T, U]:
+        return _StreamInOutRoute[ServerT, T, U](func)
+
+
+class ServerMeta(type):
+    def __new__(
+        mcs: type["ServerMeta"],
+        name: str,
+        bases: tuple[type, ...],
+        attrs: dict[str, Any],
+    ):
+        routes = {name: rte for name, rte in attrs.items() if isinstance(rte, _Route)}
+        attrs["_default_routes"] = routes
+        attrs.update({name: rte.func for name, rte in routes.items()})
+        cls = super().__new__(mcs, name, bases, attrs)
+        return cls
 
 
 @dataclass
-class Server:
-    routes: dict[str, _Route] = field(default_factory=dict)
-    sessions: dict[UUID, Session] = field(default_factory=dict)
+class Server(metaclass=ServerMeta):
+    _default_routes: ClassVar[dict[str, _Route]] = dict()
+    routes: dict[str, _Route] = field(init=False)
+    sessions: dict[UUID, Session] = field(init=False, default_factory=dict)
 
     def __post_init__(self):
-        for name, rte in inspect.getmembers(self, lambda x: isinstance(x, _Route)):
-            self.add_route(name, rte)
+        self.routes = self._default_routes.copy()
 
-    def add_route(self, name: str, rte: Route):
+    def add_route(self, name: str, rte: _Route):
         self.routes[name] = rte
 
     async def handle_client(

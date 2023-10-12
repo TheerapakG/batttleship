@@ -4,14 +4,14 @@ import ssl
 from dotenv import load_dotenv
 import pyglet
 
-from tgraphics.color import colors
 from tgraphics.component import Component, Window
 from tgraphics.reactivity import ComputedFuture, computed, unref
 from tsocket.shared import Empty
 
 
 from .client_thread import BattleshipClientThread
-from .shared.logging import setup_logging
+from . import store
+from ..shared.logging import setup_logging
 
 
 if __name__ == "__main__":
@@ -29,17 +29,14 @@ if __name__ == "__main__":
     online_count = ComputedFuture(client.online(Empty()))
     text = computed(lambda: f"online: {unref(online_count)}")
 
-    window.scene = Component.render_xml(
-        """
-        <Column gap="16" width="window.width" height="window.height">
-            <Label text="text" color="colors['white']" />
-        </Column>
-        """
-    )
+    try:
+        store.user.load()
 
-    online_count.add_done_callback(
-        lambda _: pyglet.clock.schedule_once(
-            lambda _: online_count.set_future(client.online(Empty())), 1.0
-        )
-    )
+        from .view.main_menu import main_menu
+
+        window.scene = main_menu(window=window, client=client)
+    except Exception:
+        from .view.create_player import create_player
+
+        window.scene = create_player(window=window, client=client)
     pyglet.app.run()
