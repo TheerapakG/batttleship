@@ -340,6 +340,7 @@ class ClientThread(metaclass=ClientThreadMeta):
         running_tasks = set[asyncio.Task]()
         while True:
             running_tasks = {task for task in running_tasks if not task.done()}
+            # TODO: stop this on exit
             work = await asyncio.to_thread(self.work_queue.get)
 
             if isinstance(work, DisconnectItem):
