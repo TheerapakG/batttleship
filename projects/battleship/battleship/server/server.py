@@ -183,7 +183,7 @@ class BattleshipServer(Server):
         if (room := self.private_rooms.get(args.room, None)) and (
             player_id in room.players.values()
         ):
-            del self.private_rooms.get[args.room, None]
+            del self.private_rooms[args.room]
             room_id = models.RoomId.from_room(room)
             self.public_rooms[room_id] = room
             return Empty()
