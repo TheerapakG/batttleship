@@ -238,7 +238,6 @@ class ServerMeta(type):
         attrs.update({name: rte.func for name, rte in routes.items()})
         emits = {name: emt for name, emt in attrs.items() if isinstance(emt, _Emit)}
         attrs["_default_emits"] = emits
-        print({name: emt.get_fake_emit(name) for name, emt in emits.items()})
         attrs.update({name: emt.get_fake_emit(name) for name, emt in emits.items()})
         cls = super().__new__(mcs, name, bases, attrs)
         return cls
