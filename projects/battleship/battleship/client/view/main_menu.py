@@ -40,7 +40,7 @@ def main_menu(window: Window, client: BattleshipClientThread, **kwargs):
         player_watcher = Watcher.ifref(
             store.user.store,
             lambda player: pyglet.clock.schedule_once(
-                lambda: set_room_id_future(player)
+                lambda _dt: set_room_id_future(player), 0.0
             ),
             trigger_init=True,
         )
@@ -57,7 +57,7 @@ def main_menu(window: Window, client: BattleshipClientThread, **kwargs):
         room_id_watcher = Watcher.ifref(
             room_id_ref,
             lambda room_id: pyglet.clock.schedule_once(
-                lambda: set_room_future(room_id)
+                lambda _dt: set_room_future(room_id), 0.0
             ),
             trigger_init=True,
         )
@@ -73,13 +73,18 @@ def main_menu(window: Window, client: BattleshipClientThread, **kwargs):
 
         room_watcher = Watcher.ifref(
             room_ref,
-            lambda room: pyglet.clock.schedule_once(lambda: to_lobby(room)),
+            lambda room: pyglet.clock.schedule_once(lambda _dt: to_lobby(room), 0.0),
             trigger_init=True,
         )
 
     return Component.render_xml(
         """
         <Column gap="16" width="window.width" height="window.height">
+            <Label 
+                text="'Public Match'" 
+                color="colors['white']" 
+                handle-MousePressEvent="on_public_room_match_button"
+            />
             <Label text="user_text" color="colors['white']" />
             <Label text="online_text" color="colors['white']" />
         </Column>

@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace, InitVar
+from functools import partial
 import inspect
 import re
 import time
@@ -13,7 +14,7 @@ from pyglet.graphics.shader import Shader, ShaderProgram
 from pyglet.graphics.vertexdomain import VertexList
 from pyglet.image import TextureRegion
 from pyglet.resource import Loader
-from pyglet.shapes import Rectangle, get_default_shader as get_shape_default_shader
+from pyglet.shapes import Rectangle
 from pyglet.sprite import Sprite
 from pyglet.text import Label as _Label
 from pyglet.text.document import UnformattedDocument
@@ -662,13 +663,19 @@ class ComponentMeta(type):
                         for_var, for_values = [
                             s.strip() for s in directive_value.split("in")
                         ]
-                        eval_for_values = computed(
-                            lambda: unref(
-                                eval(for_values, frame.frame.f_globals, frame_locals)
-                            )
+                        eval_for_values = eval(
+                            for_values, frame.frame.f_globals, frame_locals
                         )
 
-                        def render_fn(additional_scope_values, override_values):
+                        def render_fn(
+                            eval_for_values,
+                            additional_scope_values,
+                            override_values,
+                        ):
+                            _ref_list = override_values.get("_ref_list", [])
+                            _ref_list.append(eval_for_values)
+                            override_values["_ref_list"] = _ref_list
+
                             return [
                                 component
                                 for components in [
@@ -683,7 +690,7 @@ class ComponentMeta(type):
                                 for component in components
                             ]
 
-                        return render_fn
+                        return partial(render_fn, eval_for_values)
 
                     render_fn = for_render_fn_wrapper(render_fn, directive_value)
                 case "if":
@@ -692,15 +699,17 @@ class ComponentMeta(type):
                         old_render_fn: Callable[..., list["Component"]],
                         directive_value: str,
                     ):
-                        eval_val = computed(
-                            lambda: unref(
-                                eval(
-                                    directive_value, frame.frame.f_globals, frame_locals
-                                )
-                            )
+                        eval_val = eval(
+                            directive_value, frame.frame.f_globals, frame_locals
                         )
 
-                        def render_fn(additional_scope_values, override_values):
+                        def render_fn(
+                            eval_val, additional_scope_values, override_values
+                        ):
+                            _ref_list = override_values.get("_ref_list", [])
+                            _ref_list.append(eval_val)
+                            override_values["_ref_list"] = _ref_list
+
                             return (
                                 unref(
                                     old_render_fn(
@@ -711,7 +720,7 @@ class ComponentMeta(type):
                                 else []
                             )
 
-                        return render_fn
+                        return partial(render_fn, eval_val)
 
                     render_fn = if_render_fn_wrapper(render_fn, directive_value)
                 case _ if directive_key.startswith("model-"):
@@ -732,6 +741,10 @@ class ComponentMeta(type):
                                 directive_value, frame.frame.f_globals, frame_locals
                             )
                             override_values[model] = model_ref
+
+                            _ref_list = override_values.get("_ref_list", [])
+                            _ref_list.append(model_ref)
+                            override_values["_ref_list"] = _ref_list
 
                             return old_render_fn(
                                 additional_scope_values, override_values
@@ -789,6 +802,7 @@ class Component(metaclass=ComponentMeta):
     children: list["Component" | ReadRef["Component"]] | ReadRef[
         list["Component" | ReadRef["Component"]]
     ] = field(default_factory=list["Component" | ReadRef["Component"]])
+    _ref_list: list[ReadRef] = field(default_factory=list)
 
     def get_instance(self):
         return ComponentInstance(component=self)

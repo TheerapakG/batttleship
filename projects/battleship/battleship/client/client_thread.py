@@ -47,13 +47,17 @@ class BattleshipClientThread(ClientThread):
         raise NotImplementedError()
 
     @Route.simple
-    def public_room_get(self, args: models.RoomId) -> Future[models.Room]:
+    def public_room_get(self, args: models.RoomId) -> Future[models.RoomInfo]:
         raise NotImplementedError()
 
     @Route.simple
     def public_room_match(
         self, args: models.BearingPlayerAuth
     ) -> Future[models.RoomId]:
+        raise NotImplementedError()
+
+    @Route.simple
+    def public_room_leave(self, args: models.PublicRoomLeaveArgs) -> Future[Empty]:
         raise NotImplementedError()
 
     @Route.simple
@@ -76,4 +80,8 @@ class BattleshipClientThread(ClientThread):
 
     @Route.simple
     def private_room_unlock(self, args: models.PrivateRoomUnlockArgs) -> Future[Empty]:
+        raise NotImplementedError()
+
+    @Route.simple
+    def private_room_leave(self, args: models.PrivateRoomLeaveArgs) -> Future[Empty]:
         raise NotImplementedError()

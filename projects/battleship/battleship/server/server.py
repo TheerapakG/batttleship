@@ -107,9 +107,9 @@ class BattleshipServer(Server):
     @Route.simple
     async def public_room_get(
         self, _session: Session, args: models.RoomId
-    ) -> models.Room:
+    ) -> models.RoomInfo:
         if room := self.public_rooms.get(args, None):
-            return room
+            return models.RoomInfo.from_room(room)
         raise ResponseError("not_found", b"")
 
     @Route.simple
