@@ -32,7 +32,7 @@ def main_menu(window: Window, client: BattleshipClientThread, **kwargs):
             if player is not None:
                 room_id_future_ref.value = ComputedFuture(
                     client.public_room_match(
-                        models.BearingPlayerAuth.from_player(player.auth_token)
+                        models.BearingPlayerAuth.from_player(player)
                     )
                 )
                 player_watcher.unwatch()
