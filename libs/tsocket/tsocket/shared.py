@@ -64,7 +64,7 @@ class Channel:
         self.session.destroy_channel(self)
 
     async def write(self, msg: Message):
-        log.info("SEND %s: %s %s %s", self.id, msg.flag, msg.method, msg.content)
+        log.debug("SEND %s: %s %s %s", self.id, msg.flag, msg.method, msg.content)
         if MessageFlag.RESPONSE in msg.flag:
             if MessageFlag.END in msg.flag or MessageFlag.ERROR in msg.flag:
                 self.session.destroy_channel(self)
@@ -81,7 +81,7 @@ class Channel:
 
     async def read(self):
         msg = await self.queue.get()
-        log.info("RECV %s: %s %s %s", self.id, msg.flag, msg.method, msg.content)
+        log.debug("RECV %s: %s %s %s", self.id, msg.flag, msg.method, msg.content)
         return msg
 
 
@@ -130,7 +130,7 @@ class Session:
                     self.channels[channel.id] = channel
                     return channel, msg_method
                 else:
-                    log.info(
+                    log.warning(
                         "DROP %s: %s %s %s",
                         channel_id,
                         msg_flag,

@@ -306,6 +306,7 @@ class Server(metaclass=ServerMeta):
         ssl: ssl.SSLContext | None,  # pylint: disable=W0621
     ):
         server = await asyncio.start_server(self.handle_client, host, port, ssl=ssl)
+        log.info("server started on %s:%s", host, port)
         with contextlib.suppress(asyncio.CancelledError):
             async with server:
                 await server.serve_forever()

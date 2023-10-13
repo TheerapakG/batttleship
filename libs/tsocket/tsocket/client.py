@@ -333,6 +333,7 @@ class Client(metaclass=ClientMeta):
             raise ConnectedError()
         reader, writer = await asyncio.open_connection(host, port, ssl=ssl)
         self.session = ClientSession(Session(uuid4(), reader, writer), self)
+        log.info("client started on %s:%s", host, port)
 
     async def disconnect(self):
         if self.session is None:
@@ -345,5 +346,5 @@ class Client(metaclass=ClientMeta):
         await session.read_task
 
     async def emit(self, name: str, data: bytes):
-        log.info("EMIT: %s %s", name, data)
+        log.debug("EMIT: %s %s", name, data)
         await asyncio.gather(*[queue.put(data) for queue in self.cbs[name].copy()])
