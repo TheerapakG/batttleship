@@ -28,16 +28,16 @@ converter = Cbor2Converter()
 converter.register_structure_hook(UUID, lambda d, t: UUID(bytes=d))
 converter.register_unstructure_hook(UUID, lambda u: u.bytes)
 
-ServerT = TypeVar("ServerT", bound="Server")
+ServerT_contra = TypeVar("ServerT_contra", bound="Server", contravariant=True)
 T = TypeVar("T")
 U = TypeVar("U")
 
 
 @runtime_checkable  # yikes?
-class _Route(Protocol[ServerT]):
-    func: Callable[[ServerT, Session, Any], Any]
+class _Route(Protocol[ServerT_contra]):
+    func: Callable[[ServerT_contra, Session, Any], Any]
 
-    async def run(self, server: ServerT, channel: Channel):
+    async def run(self, server: ServerT_contra, channel: Channel):
         ...
 
 
@@ -65,14 +65,14 @@ async def handle_channel_exc(channel: Channel):
 
 
 @dataclass
-class _SimpleRoute(Generic[ServerT, T, U]):
-    func: Callable[[ServerT, Session, T], Awaitable[U]]
+class _SimpleRoute(Generic[ServerT_contra, T, U]):
+    func: Callable[[ServerT_contra, Session, T], Awaitable[U]]
 
     async def __call__(self, session: Session, args: T) -> U:
         # For tricking LSP / type checker
         raise NotImplementedError()
 
-    async def run(self, server: ServerT, channel: Channel):
+    async def run(self, server: ServerT_contra, channel: Channel):
         async with handle_channel_exc(channel):
             params = [*inspect.signature(self.func).parameters.values()]
             msg = await channel.read()
@@ -97,14 +97,14 @@ async def gen_content_from_channel(channel: Channel, cls: type[T]) -> AsyncItera
 
 
 @dataclass
-class _StreamInRoute(Generic[ServerT, T, U]):
-    func: Callable[[ServerT, Session, AsyncIterator[T]], Awaitable[U]]
+class _StreamInRoute(Generic[ServerT_contra, T, U]):
+    func: Callable[[ServerT_contra, Session, AsyncIterator[T]], Awaitable[U]]
 
     async def __call__(self, session: Session, args: AsyncIterator[T]) -> U:
         # For tricking LSP / type checker
         raise NotImplementedError()
 
-    async def run(self, server: ServerT, channel: Channel):
+    async def run(self, server: ServerT_contra, channel: Channel):
         async with handle_channel_exc(channel):
             params = [*inspect.signature(self.func).parameters.values()]
             content = await self.func(
@@ -120,14 +120,14 @@ class _StreamInRoute(Generic[ServerT, T, U]):
 
 
 @dataclass
-class _StreamOutRoute(Generic[ServerT, T, U]):
-    func: Callable[[ServerT, Session, T], AsyncIterator[U]]
+class _StreamOutRoute(Generic[ServerT_contra, T, U]):
+    func: Callable[[ServerT_contra, Session, T], AsyncIterator[U]]
 
     async def __call__(self, session: Session, args: T) -> AsyncIterator[U]:
         # For tricking LSP / type checker
         raise NotImplementedError()
 
-    async def run(self, server: ServerT, channel: Channel):
+    async def run(self, server: ServerT_contra, channel: Channel):
         async with handle_channel_exc(channel):
             params = [*inspect.signature(self.func).parameters.values()]
             msg = await channel.read()
@@ -145,8 +145,8 @@ class _StreamOutRoute(Generic[ServerT, T, U]):
 
 
 @dataclass
-class _StreamInOutRoute(Generic[ServerT, T, U]):
-    func: Callable[[ServerT, Session, AsyncIterator[T]], AsyncIterator[U]]
+class _StreamInOutRoute(Generic[ServerT_contra, T, U]):
+    func: Callable[[ServerT_contra, Session, AsyncIterator[T]], AsyncIterator[U]]
 
     async def __call__(
         self, session: Session, args: AsyncIterator[T]
@@ -154,7 +154,7 @@ class _StreamInOutRoute(Generic[ServerT, T, U]):
         # For tricking LSP / type checker
         raise NotImplementedError()
 
-    async def run(self, server: ServerT, channel: Channel):
+    async def run(self, server: ServerT_contra, channel: Channel):
         async with handle_channel_exc(channel):
             params = [*inspect.signature(self.func).parameters.values()]
             async for content in self.func(
@@ -173,38 +173,39 @@ class _StreamInOutRoute(Generic[ServerT, T, U]):
 class Route:
     @classmethod
     def simple(
-        cls, func: Callable[[ServerT, Session, T], Awaitable[U]]
-    ) -> _SimpleRoute[ServerT, T, U]:
-        return _SimpleRoute[ServerT, T, U](func)
+        cls, func: Callable[[ServerT_contra, Session, T], Awaitable[U]]
+    ) -> _SimpleRoute[ServerT_contra, T, U]:
+        return _SimpleRoute[ServerT_contra, T, U](func)
 
     @classmethod
     def stream_in(
-        cls, func: Callable[[ServerT, Session, AsyncIterator[T]], Awaitable[U]]
-    ) -> _StreamInRoute[ServerT, T, U]:
-        return _StreamInRoute[ServerT, T, U](func)
+        cls, func: Callable[[ServerT_contra, Session, AsyncIterator[T]], Awaitable[U]]
+    ) -> _StreamInRoute[ServerT_contra, T, U]:
+        return _StreamInRoute[ServerT_contra, T, U](func)
 
     @classmethod
     def stream_out(
-        cls, func: Callable[[ServerT, Session, T], AsyncIterator[U]]
-    ) -> _StreamOutRoute[ServerT, T, U]:
-        return _StreamOutRoute[ServerT, T, U](func)
+        cls, func: Callable[[ServerT_contra, Session, T], AsyncIterator[U]]
+    ) -> _StreamOutRoute[ServerT_contra, T, U]:
+        return _StreamOutRoute[ServerT_contra, T, U](func)
 
     @classmethod
     def stream_in_out(
-        cls, func: Callable[[ServerT, Session, AsyncIterator[T]], AsyncIterator[U]]
-    ) -> _StreamInOutRoute[ServerT, T, U]:
-        return _StreamInOutRoute[ServerT, T, U](func)
+        cls,
+        func: Callable[[ServerT_contra, Session, AsyncIterator[T]], AsyncIterator[U]],
+    ) -> _StreamInOutRoute[ServerT_contra, T, U]:
+        return _StreamInOutRoute[ServerT_contra, T, U](func)
 
 
 @dataclass
-class _Emit(Generic[ServerT, T]):
-    func: Callable[[ServerT, Session, T], None]
+class _Emit(Generic[ServerT_contra, T]):
+    func: Callable[[ServerT_contra, Session, T], Awaitable[None]]
 
     def get_fake_emit(self, name: str):
         func = self.func
 
         @wraps(func)
-        async def fake_emit(_self: ServerT, session: Session, args: T) -> None:
+        async def fake_emit(_self: ServerT_contra, session: Session, args: T) -> None:
             with session.create_channel() as channel:
                 await channel.write(
                     Message(
@@ -221,7 +222,7 @@ class _Emit(Generic[ServerT, T]):
         raise NotImplementedError()
 
 
-def emit(func: Callable[[ServerT, Session, T], None]):
+def emit(func: Callable[[ServerT_contra, Session, T], Awaitable[None]]):
     return _Emit(func)
 
 
@@ -237,6 +238,7 @@ class ServerMeta(type):
         attrs.update({name: rte.func for name, rte in routes.items()})
         emits = {name: emt for name, emt in attrs.items() if isinstance(emt, _Emit)}
         attrs["_default_emits"] = emits
+        print({name: emt.get_fake_emit(name) for name, emt in emits.items()})
         attrs.update({name: emt.get_fake_emit(name) for name, emt in emits.items()})
         cls = super().__new__(mcs, name, bases, attrs)
         return cls

@@ -45,6 +45,7 @@ class PlayerId:
 class Board:
     id: UUID  # pylint: disable=C0103
     player: PlayerId
+    room: "PublicRoomId | PrivateRoomId"
 
 
 @dataclass(eq=True, frozen=True)
@@ -59,8 +60,40 @@ class BoardId:
 @dataclass
 class Room:
     id: UUID  # pylint: disable=C0103
+    players: dict[UUID, PlayerId] = field(init=False, default_factory=dict)
+    boards: dict[PlayerId, BoardId] = field(init=False, default_factory=dict)
+
+
+@dataclass
+class RoomInfo:
+    id: UUID  # pylint: disable=C0103
     players: list[PlayerId] = field(init=False, default_factory=list)
     boards: dict[PlayerId, BoardId] = field(init=False, default_factory=dict)
+
+    @classmethod
+    def from_room(cls, room: Room):
+        return cls(room.id, list(room.players.values()), room.boards)
+
+
+@dataclass(eq=True, frozen=True)
+class RoomId:
+    id: UUID  # pylint: disable=C0103
+
+    @classmethod
+    def from_room(cls, room: Room):
+        return cls(room.id)
+
+    @classmethod
+    def from_room_info(cls, room_info: RoomInfo):
+        return cls(room_info.id)
+
+    @classmethod
+    def from_public_room_id(cls, room_id: "PublicRoomId"):
+        return cls(room_id.id)
+
+    @classmethod
+    def from_private_room_id(cls, room_id: "PrivateRoomId"):
+        return cls(room_id.id)
 
 
 @dataclass
@@ -73,8 +106,8 @@ class PublicRoomId:
     id: UUID  # pylint: disable=C0103
 
     @classmethod
-    def from_room(cls, public_room: PublicRoom):
-        return cls(public_room.id)
+    def from_room(cls, room: PublicRoom):
+        return cls(room.id)
 
 
 @dataclass
@@ -87,8 +120,8 @@ class PrivateRoomId:
     id: UUID  # pylint: disable=C0103
 
     @classmethod
-    def from_room(cls, private_room: PrivateRoom):
-        return cls(private_room.id)
+    def from_room(cls, room: PrivateRoom):
+        return cls(room.id)
 
 
 @dataclass(eq=True)
@@ -107,3 +140,8 @@ class PlayerCreateArgs:
 @dataclass
 class PrivateRoomJoinArgs(BearingPlayerAuth):
     join_code: str
+
+
+@dataclass
+class PrivateRoomUnlockArgs(BearingPlayerAuth):
+    room: PrivateRoomId

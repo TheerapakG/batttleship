@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import Awaitable, AsyncIterator, Callable
-from contextlib import contextmanager
+from contextlib import contextmanager, AbstractContextManager
 from dataclasses import dataclass, field
 from functools import wraps
 import inspect
@@ -36,13 +36,14 @@ converter = Cbor2Converter()
 converter.register_structure_hook(UUID, lambda d, t: UUID(bytes=d))
 converter.register_unstructure_hook(UUID, lambda u: u.bytes)
 
+ClientT_contra = TypeVar("ClientT_contra", bound="Client", contravariant=True)
 T = TypeVar("T")
 U = TypeVar("U")
 
 
 @runtime_checkable  # yikes?
-class _Route(Protocol):
-    def get_fake_route(self, name: str) -> Callable[["Client", Any], Any]:
+class _Route(Protocol[ClientT_contra]):
+    def get_fake_route(self, name: str) -> Callable[[ClientT_contra, Any], Any]:
         ...
 
 
@@ -79,14 +80,14 @@ async def stream_reader(channel: Channel, cls: type[T]):
 
 
 @dataclass
-class _SimpleRoute(Generic[T, U]):
-    func: Callable[["Client", T], Awaitable[U]]
+class _SimpleRoute(Generic[ClientT_contra, T, U]):
+    func: Callable[[ClientT_contra, T], Awaitable[U]]
 
     def get_fake_route(self, name: str):
         func = self.func
 
         @wraps(func)
-        async def fake_route(self: "Client", data: T) -> U:
+        async def fake_route(self: ClientT_contra, data: T) -> U:
             with self.session.create_channel() as channel:
                 write_task = asyncio.create_task(simple_writer(channel, name, data))
                 try:
@@ -107,14 +108,14 @@ class _SimpleRoute(Generic[T, U]):
 
 
 @dataclass
-class _StreamInRoute(Generic[T, U]):
-    func: Callable[["Client", AsyncIterator[T]], U]
+class _StreamInRoute(Generic[ClientT_contra, T, U]):
+    func: Callable[[ClientT_contra, AsyncIterator[T]], Awaitable[U]]
 
     def get_fake_route(self, name: str):
         func = self.func
 
         @wraps(func)
-        async def fake_route(self: "Client", data: AsyncIterator[T]) -> U:
+        async def fake_route(self: ClientT_contra, data: AsyncIterator[T]) -> U:
             with self.session.create_channel() as channel:
                 write_task = asyncio.create_task(stream_writer(channel, name, data))
                 try:
@@ -135,14 +136,14 @@ class _StreamInRoute(Generic[T, U]):
 
 
 @dataclass
-class _StreamOutRoute(Generic[T, U]):
-    func: Callable[["Client", T], AsyncIterator[U]]
+class _StreamOutRoute(Generic[ClientT_contra, T, U]):
+    func: Callable[[ClientT_contra, T], AsyncIterator[U]]
 
     def get_fake_route(self, name: str):
         func = self.func
 
         @wraps(func)
-        async def fake_route(self: "Client", data: T) -> AsyncIterator[U]:
+        async def fake_route(self: ClientT_contra, data: T) -> AsyncIterator[U]:
             with self.session.create_channel() as channel:
                 write_task = asyncio.create_task(simple_writer(channel, name, data))
                 try:
@@ -163,15 +164,15 @@ class _StreamOutRoute(Generic[T, U]):
 
 
 @dataclass
-class _StreamInOutRoute(Generic[T, U]):
-    func: Callable[["Client", T], AsyncIterator[U]]
+class _StreamInOutRoute(Generic[ClientT_contra, T, U]):
+    func: Callable[[ClientT_contra, T], AsyncIterator[U]]
 
     def get_fake_route(self, name: str):
         func = self.func
 
         @wraps(func)
         async def fake_route(
-            self: "Client", data: AsyncIterator[T]
+            self: ClientT_contra, data: AsyncIterator[T]
         ) -> AsyncIterator[U]:
             with self.session.create_channel() as channel:
                 write_task = asyncio.create_task(stream_writer(channel, name, data))
@@ -194,26 +195,68 @@ class _StreamInOutRoute(Generic[T, U]):
 
 class Route:
     @classmethod
-    def simple(cls, func: Callable[["Client", T], Awaitable[U]]) -> _SimpleRoute[T, U]:
-        return _SimpleRoute[T, U](func)
+    def simple(cls, func: Callable[[ClientT_contra, T], Awaitable[U]]):
+        return _SimpleRoute(func)
 
     @classmethod
     def stream_in(
-        cls, func: Callable[["Client", AsyncIterator[T]], Awaitable[U]]
-    ) -> _StreamInRoute[T, U]:
-        return _StreamInRoute[T, U](func)
+        cls, func: Callable[[ClientT_contra, AsyncIterator[T]], Awaitable[U]]
+    ):
+        return _StreamInRoute(func)
 
     @classmethod
-    def stream_out(
-        cls, func: Callable[["Client", T], AsyncIterator[U]]
-    ) -> _StreamOutRoute[T, U]:
-        return _StreamOutRoute[T, U](func)
+    def stream_out(cls, func: Callable[[ClientT_contra, T], AsyncIterator[U]]):
+        return _StreamOutRoute(func)
 
     @classmethod
     def stream_in_out(
-        cls, func: Callable[["Client", AsyncIterator[T]], AsyncIterator[U]]
-    ) -> _StreamInOutRoute[T, U]:
-        return _StreamInOutRoute[T, U](func)
+        cls, func: Callable[[ClientT_contra, AsyncIterator[T]], AsyncIterator[U]]
+    ):
+        return _StreamInOutRoute(func)
+
+
+@dataclass
+class _Subscribe(Generic[ClientT_contra, T]):
+    func: Callable[[ClientT_contra], AbstractContextManager[AsyncIterator[T]]]
+
+    def get_fake_subscribe(self, name: str):
+        func = self.func
+
+        @wraps(func)
+        @contextmanager
+        def fake_subscribe(self: ClientT_contra):
+            queue = asyncio.Queue[bytes]()
+            queue_set = self.cbs.get(name, set())
+            queue_set.add(queue)
+            self.cbs[name] = queue_set
+            try:
+
+                async def getter():
+                    while True:
+                        yield converter.loads(
+                            await queue.get(),
+                            get_args(
+                                get_args(inspect.signature(func).return_annotation)[0]
+                            )[0],
+                        )
+
+                yield getter
+            finally:
+                self.cbs[name].remove(queue)
+                if not self.cbs[name]:
+                    del self.cbs[name]
+
+        return fake_subscribe
+
+    async def __call__(self) -> AbstractContextManager[AsyncIterator[T]]:
+        # For tricking LSP / type checker
+        raise NotImplementedError()
+
+
+def subscribe(
+    func: Callable[[ClientT_contra], AbstractContextManager[AsyncIterator[T]]]
+):
+    return _Subscribe(func)
 
 
 @dataclass
@@ -251,6 +294,15 @@ class ClientMeta(type):
         attrs.update(
             {name: route.get_fake_route(name) for name, route in routes.items()}
         )
+        subscribes = {
+            name: subscribe
+            for name, subscribe in attrs.items()
+            if isinstance(subscribe, _Subscribe)
+        }
+        attrs["subscribes"] = subscribes
+        attrs.update(
+            {name: route.get_fake_subscribe(name) for name, route in subscribes.items()}
+        )
         return super().__new__(mcs, name, bases, attrs)
 
 
@@ -260,6 +312,12 @@ class Client(metaclass=ClientMeta):
         dict[
             str,
             _Route,
+        ]
+    ]
+    subscribes: ClassVar[
+        dict[
+            str,
+            _Subscribe,
         ]
     ]
     session: ClientSession | None = field(init=False, default=None)
@@ -288,32 +346,4 @@ class Client(metaclass=ClientMeta):
 
     async def emit(self, name: str, data: bytes):
         log.info("EMIT: %s %s", name, data)
-        for cb in self.cbs[name].copy():
-            cb(data)
-
-    @contextmanager
-    def wait(self, name: str):
-        # TODO: type safe emit / wait
-        queue = asyncio.Queue[bytes]()
-        self.cbs[name] = self.cbs.get(name, set()).add(queue)
-        try:
-
-            async def getter():
-                while True:
-                    yield await queue.get()
-
-            yield getter
-        finally:
-            self.cbs[name].remove(queue)
-            if not self.cbs[name]:
-                del self.cbs[name]
-
-    async def wait_once(self, name: str):
-        # TODO: type safe emit / wait
-        queue = asyncio.Queue[bytes]()
-        self.cbs[name] = self.cbs.get(name, set()).add(queue)
-        value = await queue.get()
-        self.cbs[name].remove(queue)
-        if not self.cbs[name]:
-            del self.cbs[name]
-        return value
+        await asyncio.gather(*[queue.put(data) for queue in self.cbs[name].copy()])

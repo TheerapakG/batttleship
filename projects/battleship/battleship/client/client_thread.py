@@ -1,19 +1,11 @@
 from concurrent.futures import Future
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
-import logging
-from uuid import UUID
-
-from cattrs.preconf.json import JsonConverter
-from tsocket.client_thread import ClientThread, Route
+import queue
+from tsocket.client_thread import ClientThread, Route, subscribe
 from tsocket.shared import Empty
 
 from ..shared import models
-
-log = logging.getLogger(__name__)
-
-converter = JsonConverter()
-
-converter.register_structure_hook(UUID, lambda d, t: UUID(hex=d))
 
 
 @dataclass
@@ -42,12 +34,46 @@ class BattleshipClientThread(ClientThread):
     def player_delete(self, args: models.BearingPlayerAuth) -> Future[models.Player]:
         raise NotImplementedError()
 
+    @subscribe
+    def room_join(
+        self,
+    ) -> Future[AbstractContextManager[queue.SimpleQueue[Future[models.PlayerId]]]]:
+        raise NotImplementedError()
+
+    @subscribe
+    def room_leave(
+        self,
+    ) -> Future[AbstractContextManager[queue.SimpleQueue[Future[models.PlayerId]]]]:
+        raise NotImplementedError()
+
     @Route.simple
-    def public_room_get(self, args: models.PublicRoomId) -> Future[models.PublicRoom]:
+    def public_room_get(self, args: models.RoomId) -> Future[models.Room]:
         raise NotImplementedError()
 
     @Route.simple
     def public_room_match(
         self, args: models.BearingPlayerAuth
-    ) -> Future[models.PublicRoomId]:
+    ) -> Future[models.RoomId]:
+        raise NotImplementedError()
+
+    @Route.simple
+    def private_room_create(
+        self, args: models.BearingPlayerAuth
+    ) -> Future[models.PrivateRoom]:
+        raise NotImplementedError()
+
+    @Route.simple
+    def private_room_get(
+        self, args: models.PrivateRoomId
+    ) -> Future[models.PrivateRoom]:
+        raise NotImplementedError()
+
+    @Route.simple
+    def private_room_join(
+        self, args: models.PrivateRoomJoinArgs
+    ) -> Future[models.PrivateRoom]:
+        raise NotImplementedError()
+
+    @Route.simple
+    def private_room_unlock(self, args: models.PrivateRoomUnlockArgs) -> Future[Empty]:
         raise NotImplementedError()

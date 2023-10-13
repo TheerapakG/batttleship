@@ -4,7 +4,7 @@ import os
 import random
 import ssl
 import string
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from dotenv import load_dotenv
 from tsocket.server import Server, Route, emit
@@ -20,9 +20,7 @@ from ..shared.logging import setup_logging
 @dataclass
 class BattleshipServer(Server):
     db_session_maker: async_sessionmaker[AsyncSession]
-    public_rooms: dict[models.PublicRoomId, models.PublicRoom] = field(
-        default_factory=dict
-    )
+    public_rooms: dict[models.RoomId, models.Room] = field(default_factory=dict)
     private_rooms: dict[models.PrivateRoomId, models.PrivateRoom] = field(
         default_factory=dict
     )
@@ -102,10 +100,14 @@ class BattleshipServer(Server):
     async def room_join(self, _session: Session, args: models.PlayerId):
         raise NotImplementedError()
 
+    @emit
+    async def room_leave(self, _session: Session, args: models.PlayerId):
+        raise NotImplementedError()
+
     @Route.simple
     async def public_room_get(
-        self, _session: Session, args: models.PublicRoomId
-    ) -> models.PublicRoom:
+        self, _session: Session, args: models.RoomId
+    ) -> models.Room:
         if room := self.public_rooms.get(args, None):
             return room
         raise ResponseError("not_found", b"")
@@ -113,17 +115,23 @@ class BattleshipServer(Server):
     @Route.simple
     async def public_room_match(
         self, session: Session, args: models.BearingPlayerAuth
-    ) -> models.PublicRoomId:
+    ) -> models.RoomId:
         player = await self.player_get(session, args)
-        if room_tup := self.public_rooms.popitem():
-            room_id, room = room_tup
-            room.players.append(models.PlayerId.from_player(player))
+        player_id = models.PlayerId.from_player(player)
+        try:
+            room_id, room = self.public_rooms.popitem()
+            async with asyncio.TaskGroup() as tg:
+                for other_session_id in room.players.keys():
+                    tg.create_task(
+                        self.room_join(self.sessions[other_session_id], player_id)
+                    )
+            room.players[session.id] = player_id
             self.public_rooms[room_id] = room
             return room_id
-        else:
+        except KeyError:
             room = models.PublicRoom(uuid4())
-            room.players.append(player)
-            room_id = models.PublicRoomId.from_room(room)
+            room.players[session.id] = player_id
+            room_id = models.RoomId.from_room(room)
             self.public_rooms[room_id] = room
             return room_id
 
@@ -136,7 +144,7 @@ class BattleshipServer(Server):
             uuid4(),
             join_code="".join(random.choice(string.ascii_lowercase) for _ in range(6)),
         )
-        room.players.append(models.PlayerId.from_player(player))
+        room.players[session.id] = models.PlayerId.from_player(player)
         room_id = models.PrivateRoomId.from_room(room)
         self.private_rooms[room_id] = room
         self.private_room_codes[room.join_code] = room
@@ -155,9 +163,30 @@ class BattleshipServer(Server):
         self, session: Session, args: models.PrivateRoomJoinArgs
     ) -> models.PrivateRoom:
         player = await self.player_get(session, args)
+        player_id = models.PlayerId.from_player(player)
         if room := self.private_room_codes.get(args.join_code, None):
-            room.players.append(models.PlayerId.from_player(player))
+            async with asyncio.TaskGroup() as tg:
+                for other_session_id in room.players.keys():
+                    tg.create_task(
+                        self.room_join(self.sessions[other_session_id], player_id)
+                    )
+            room.players[session.id] = player_id
             return room
+        raise ResponseError("not_found", b"")
+
+    @Route.simple
+    async def private_room_unlock(
+        self, session: Session, args: models.PrivateRoomUnlockArgs
+    ) -> Empty:
+        player = await self.player_get(session, args)
+        player_id = models.PlayerId.from_player(player)
+        if (room := self.private_rooms.get(args.room, None)) and (
+            player_id in room.players.values()
+        ):
+            del self.private_rooms.get[args.room, None]
+            room_id = models.RoomId.from_room(room)
+            self.public_rooms[room_id] = room
+            return Empty()
         raise ResponseError("not_found", b"")
 
 
