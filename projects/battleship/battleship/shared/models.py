@@ -67,8 +67,8 @@ class Room:
 @dataclass
 class RoomInfo:
     id: UUID  # pylint: disable=C0103
-    players: list[PlayerId] = field(init=False, default_factory=list)
-    boards: dict[PlayerId, BoardId] = field(init=False, default_factory=dict)
+    players: list[PlayerId] = field(default_factory=list)
+    boards: dict[PlayerId, BoardId] = field(default_factory=dict)
 
     @classmethod
     def from_room(cls, room: Room):
