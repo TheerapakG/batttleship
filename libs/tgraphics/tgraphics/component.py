@@ -1271,6 +1271,8 @@ class RoundedRectInstance(ComponentInstance["RoundedRect"]):
         in vec2 vertex_tex_coord;
         in vec4 vertex_color;
 
+        out vec4 fragColor;
+
         float RectSDF(vec2 p, vec2 b, float r)
         {
             vec2 d = abs(p) - b + vec2(r);
@@ -1284,7 +1286,7 @@ class RoundedRectInstance(ComponentInstance["RoundedRect"]):
             float fDist = RectSDF(pos-vertex_size/2.0, vertex_size/2.0 - 1.0, vertex_radius);
             float fBlendAmount = smoothstep(-1.0, 1.0, abs(fDist));
 
-            gl_FragColor = mix(vertex_color, fDist < 0.0 ? vertex_color: vec4(0.0), fBlendAmount);
+            fragColor = mix(vertex_color, fDist < 0.0 ? vertex_color: vec4(0.0), fBlendAmount);
         }
         """,
         "fragment",
