@@ -35,7 +35,7 @@ if __name__ == "__main__":
         from .view.main_menu import main_menu
 
         window.scene = main_menu(window=window, client=client)
-    except Exception:
+    except Exception:  # pylint: disable=W0718
         from .view.create_player import create_player
 
         window.scene = create_player(window=window, client=client)

@@ -2124,10 +2124,6 @@ class Window:
     def scene(self):
         return self._scene
 
-    @property
-    def scene_instance(self):
-        return self._scene_instance
-
     @scene.setter
     def scene(self, new_scene: Component):
         new_scene_instance = new_scene.get_instance()
@@ -2142,3 +2138,7 @@ class Window:
             BeforeMountedComponentInstanceData(0, 0, 0, 0, 1, 1, 1, 1)
         )
         new_scene_instance.capture(ComponentMountedEvent())
+
+    @property
+    def scene_instance(self):
+        return self._scene_instance
