@@ -2,7 +2,7 @@ import pyglet
 
 from tgraphics.color import colors
 from tgraphics.component import Component, Window
-from tgraphics.reactivity import ComputedFuture, Watcher, computed, unref
+from tgraphics.reactivity import Ref, ComputedFuture, Watcher, computed, unref
 from tsocket.shared import Empty
 
 from .. import store
@@ -26,31 +26,40 @@ def main_menu(window: Window, client: BattleshipClientThread, **kwargs):
     )
 
     def on_public_room_match_button(_e):
-        room_id_ref = computed(
-            lambda: unref(
-                ComputedFuture(
+        room_id_future_ref = Ref[ComputedFuture[models.RoomId | None] | None](None)
+
+        def set_room_id_future(player: models.Player | None):
+            if player is not None:
+                room_id_future_ref.value = ComputedFuture(
                     client.public_room_match(
                         models.BearingPlayerAuth.from_player(player.auth_token)
                     )
                 )
-            )
-            if (player := unref(store.user.store)) is not None
-            else None
-        )
-        room_ref = computed(
-            lambda: unref(ComputedFuture(client.public_room_get(unref(room_id))))
-            if (room_id := unref(room_id_ref)) is not None
-            else None
-        )
+                player_watcher.unwatch()
 
-        def to_lobby():
-            if (room := unref(room_ref)) is not None:
+        player_watcher = Watcher.ifref(store.user.store, set_room_id_future)
+
+        room_id_ref = computed(lambda: unref(unref(room_id_future_ref)))
+
+        room_future_ref = Ref[ComputedFuture[models.Room | None] | None](None)
+
+        def set_room_future(room_id: models.RoomId | None):
+            if room_id is not None:
+                room_future_ref.value = ComputedFuture(client.public_room_get(room_id))
+                room_id_watcher.unwatch()
+
+        room_id_watcher = Watcher.ifref(room_id_ref, set_room_future)
+
+        room_ref = computed(lambda: unref(unref(room_future_ref)))
+
+        def to_lobby(room: models.Room | None):
+            if room is not None:
                 from .lobby import lobby
 
                 window.scene = lobby(window, client, room)
-                watcher.unwatch()
+                room_watcher.unwatch()
 
-        watcher = Watcher([room_ref], to_lobby)
+        room_watcher = Watcher.ifref(room_ref, to_lobby)
 
     return Component.render_xml(
         """
