@@ -136,6 +136,26 @@ class BattleshipServer(Server):
             return room_id
 
     @Route.simple
+    async def public_room_leave(
+        self, session: Session, args: models.PublicRoomLeaveArgs
+    ) -> Empty:
+        player = await self.player_get(session, args)
+        player_id = models.PlayerId.from_player(player)
+        if (room := self.public_rooms.get(args.room, None)) and (
+            session.id in room.players.keys()
+        ):
+            del self.public_rooms[args.room].players[session.id]
+            async with asyncio.TaskGroup() as tg:
+                for other_session_id in room.players.keys():
+                    tg.create_task(
+                        self.room_leave(self.sessions[other_session_id], player_id)
+                    )
+            if not room.players:
+                self.public_rooms[args.room]
+            return Empty()
+        raise ResponseError("not_found", b"")
+
+    @Route.simple
     async def private_room_create(
         self, session: Session, args: models.BearingPlayerAuth
     ) -> models.PrivateRoom:
@@ -186,6 +206,26 @@ class BattleshipServer(Server):
             del self.private_rooms[args.room]
             room_id = models.RoomId.from_room(room)
             self.public_rooms[room_id] = room
+            return Empty()
+        raise ResponseError("not_found", b"")
+
+    @Route.simple
+    async def private_room_leave(
+        self, session: Session, args: models.PrivateRoomLeaveArgs
+    ) -> Empty:
+        player = await self.player_get(session, args)
+        player_id = models.PlayerId.from_player(player)
+        if (room := self.private_rooms.get(args.room, None)) and (
+            session.id in room.players.keys()
+        ):
+            del self.private_rooms[args.room].players[session.id]
+            async with asyncio.TaskGroup() as tg:
+                for other_session_id in room.players.keys():
+                    tg.create_task(
+                        self.room_leave(self.sessions[other_session_id], player_id)
+                    )
+            if not room.players:
+                self.private_rooms[args.room]
             return Empty()
         raise ResponseError("not_found", b"")
 

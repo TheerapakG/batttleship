@@ -151,7 +151,7 @@ def update_computed_future(_dt):
 pyglet.clock.schedule(update_computed_future)
 
 
-class ComputedFuture(ReadRef[T_contra]):
+class ComputedFuture(ReadRef[T_contra | None]):
     _done: bool
     _fut: Future[T_contra]
     _cbs: list[Callable[[T_contra], Any]]
@@ -160,6 +160,7 @@ class ComputedFuture(ReadRef[T_contra]):
         super().__init__(None)
         self._done = False
         self._cbs = []
+        self._value = None
         self.set_future(fut)
 
     def set_future(self, fut: Future[T_contra]):

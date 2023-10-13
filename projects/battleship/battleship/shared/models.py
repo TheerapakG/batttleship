@@ -128,6 +128,10 @@ class PrivateRoomId:
 class BearingPlayerAuth:
     auth_token: UUID
 
+    @classmethod
+    def from_player(cls, player: Player):
+        return cls(player.auth_token)
+
 
 # API args below
 
@@ -138,10 +142,20 @@ class PlayerCreateArgs:
 
 
 @dataclass
+class PublicRoomLeaveArgs(BearingPlayerAuth):
+    room: RoomId
+
+
+@dataclass
 class PrivateRoomJoinArgs(BearingPlayerAuth):
     join_code: str
 
 
 @dataclass
 class PrivateRoomUnlockArgs(BearingPlayerAuth):
+    room: PrivateRoomId
+
+
+@dataclass
+class PrivateRoomLeaveArgs(BearingPlayerAuth):
     room: PrivateRoomId

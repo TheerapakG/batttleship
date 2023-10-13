@@ -2,11 +2,12 @@ import pyglet
 
 from tgraphics.color import colors
 from tgraphics.component import Component, Window
-from tgraphics.reactivity import ComputedFuture, computed, unref
+from tgraphics.reactivity import ComputedFuture, Watcher, computed, unref
 from tsocket.shared import Empty
 
 from .. import store
 from ..client_thread import BattleshipClientThread
+from ...shared import models
 
 
 @Component.register("MainMenu")
@@ -23,13 +24,33 @@ def main_menu(window: Window, client: BattleshipClientThread, **kwargs):
             lambda _: online_count.set_future(client.online(Empty())), 1.0
         )
     )
-    def start(event):
-        nonlocal window
-        nonlocal client
-        from .lobby import lobby
-        window.scene = lobby(window,client)
-        ComputedFuture(client.public_room_match(models.BearingPlayerAuth(unref(store.user.value.auth_token))))
 
+    def on_public_room_match_button(_e):
+        room_id_ref = computed(
+            lambda: unref(
+                ComputedFuture(
+                    client.public_room_match(
+                        models.BearingPlayerAuth.from_player(player.auth_token)
+                    )
+                )
+            )
+            if (player := unref(store.user.store)) is not None
+            else None
+        )
+        room_ref = computed(
+            lambda: unref(ComputedFuture(client.public_room_get(unref(room_id))))
+            if (room_id := unref(room_id_ref)) is not None
+            else None
+        )
+
+        def to_lobby():
+            if (room := unref(room_ref)) is not None:
+                from .lobby import lobby
+
+                window.scene = lobby(window, client, room)
+                watcher.unwatch()
+
+        watcher = Watcher([room_ref], to_lobby)
 
     return Component.render_xml(
         """
