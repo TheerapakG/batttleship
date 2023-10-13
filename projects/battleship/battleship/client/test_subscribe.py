@@ -51,4 +51,4 @@ def run_client(host: str | None, port: int | str | None):
 if __name__ == "__main__":
     load_dotenv()
     setup_logging()
-    run_client("0.0.0.0", 60000)
+    run_client("localhost", 60000)

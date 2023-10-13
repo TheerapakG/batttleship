@@ -24,7 +24,7 @@ if __name__ == "__main__":
     ssl_context.load_verify_locations(os.environ["SSL_CERT"])
     ssl_context.check_hostname = False
     client = BattleshipClientThread()
-    client.connect("0.0.0.0", 60000, ssl=ssl_context)
+    client.connect("localhost", 60000, ssl=ssl_context)
 
     online_count = ComputedFuture(client.online(Empty()))
     text = computed(lambda: f"online: {unref(online_count)}")
