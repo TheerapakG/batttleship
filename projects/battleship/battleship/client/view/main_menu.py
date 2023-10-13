@@ -37,7 +37,11 @@ def main_menu(window: Window, client: BattleshipClientThread, **kwargs):
                 )
                 player_watcher.unwatch()
 
-        player_watcher = Watcher.ifref(store.user.store, set_room_id_future)
+        player_watcher = Watcher.ifref(
+            store.user.store,
+            lambda player: pyglet.clock.schedule_once(set_room_id_future(player)),
+            trigger_init=True,
+        )
 
         room_id_ref = computed(lambda: unref(unref(room_id_future_ref)))
 
@@ -48,7 +52,11 @@ def main_menu(window: Window, client: BattleshipClientThread, **kwargs):
                 room_future_ref.value = ComputedFuture(client.public_room_get(room_id))
                 room_id_watcher.unwatch()
 
-        room_id_watcher = Watcher.ifref(room_id_ref, set_room_future)
+        room_id_watcher = Watcher.ifref(
+            room_id_ref,
+            lambda room_id: pyglet.clock.schedule_once(set_room_future(room_id)),
+            trigger_init=True,
+        )
 
         room_ref = computed(lambda: unref(unref(room_future_ref)))
 
@@ -59,7 +67,11 @@ def main_menu(window: Window, client: BattleshipClientThread, **kwargs):
                 window.scene = lobby(window, client, room)
                 room_watcher.unwatch()
 
-        room_watcher = Watcher.ifref(room_ref, to_lobby)
+        room_watcher = Watcher.ifref(
+            room_ref,
+            lambda room: pyglet.clock.schedule_once(to_lobby(room)),
+            trigger_init=True,
+        )
 
     return Component.render_xml(
         """
