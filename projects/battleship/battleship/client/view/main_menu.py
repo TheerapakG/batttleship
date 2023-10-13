@@ -23,6 +23,13 @@ def main_menu(window: Window, client: BattleshipClientThread, **kwargs):
             lambda _: online_count.set_future(client.online(Empty())), 1.0
         )
     )
+    def start(event):
+        nonlocal window
+        nonlocal client
+        from .lobby import lobby
+        window.scene = lobby(window,client)
+        ComputedFuture(client.public_room_match(models.BearingPlayerAuth(unref(store.user.value.auth_token))))
+
 
     return Component.render_xml(
         """
