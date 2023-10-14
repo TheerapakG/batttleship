@@ -1,6 +1,4 @@
-import queue
-
-import pyglet
+import asyncio
 
 from tgraphics.color import colors
 from tgraphics.component import Component, Window
@@ -8,41 +6,34 @@ from tgraphics.reactivity import Ref, ComputedFuture, Watcher, computed, unref
 from tsocket.shared import Empty
 
 from .. import store
-from ..client_thread import BattleshipClientThread
+from ..client import BattleshipClient
 from ...shared import models
 
 
 @Component.register("Lobby")
-def lobby(
-    window: Window, client: BattleshipClientThread, room: models.RoomInfo, **kwargs
-):
+def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwargs):
     player_ids = Ref(room.players)
 
     # TODO: non hack this
-    room_join_queue_ctx = client.room_join().result()
-    room_join_queue = room_join_queue_ctx.__enter__()
+    room_join_it_ctx = client.room_join()
+    room_join_it = room_join_it_ctx.__enter__()
 
-    room_leave_queue_ctx = client.room_leave().result()
-    room_leave_queue = room_leave_queue_ctx.__enter__()
+    room_leave_it_ctx = client.room_leave()
+    room_leave_it = room_leave_it_ctx.__enter__()
 
-    def try_add_player_id():
-        try:
-            player_id = room_join_queue.get_nowait().result()
+    async def try_add_player_id():
+        async for player_id in room_join_it:
             player_ids.value.append(player_id)
             player_ids.trigger()
-        except queue.Empty:
-            pass
 
-    def try_remove_player_id():
-        try:
-            player_id = room_leave_queue.get_nowait().result()
+    asyncio.create_task(try_add_player_id())
+
+    async def try_remove_player_id():
+        async for player_id in room_leave_it:
             player_ids.value.remove(player_id)
             player_ids.trigger()
-        except queue.Empty:
-            pass
 
-    pyglet.clock.schedule(lambda _dt: try_add_player_id())
-    pyglet.clock.schedule(lambda _dt: try_remove_player_id())
+    asyncio.create_task(try_remove_player_id())
 
     return Component.render_xml(
         """

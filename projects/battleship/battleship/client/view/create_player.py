@@ -1,32 +1,25 @@
 from tgraphics.color import colors
 from tgraphics.template import color, width, height
 from tgraphics.component import Component, Window
-from tgraphics.reactivity import ComputedFuture, Ref, unref
+from tgraphics.reactivity import Ref, unref
 
 from .. import store
 from ..component.button import label_button
-from ..client_thread import BattleshipClientThread
+from ..client import BattleshipClient
 from ...shared import models
 
 
 @Component.register("CreatePlayer")
-def create_player(window: Window, client: BattleshipClientThread, **kwargs):
+def create_player(window: Window, client: BattleshipClient, **kwargs):
     name = Ref("")
 
     async def on_create_player_button(_e):
-        def on_player_created(player: models.Player):
-            nonlocal window
-            nonlocal client
+        player = await client.player_create(models.PlayerCreateArgs(unref(name)))
+        store.user.save(player)
 
-            store.user.save(player)
+        from .main_menu import main_menu
 
-            from .main_menu import main_menu
-
-            window.scene = main_menu(window=window, client=client)
-
-        ComputedFuture(
-            client.player_create(models.PlayerCreateArgs(unref(name)))
-        ).add_done_callback(on_player_created)
+        window.scene = main_menu(window=window, client=client)
 
     return Component.render_xml(
         """

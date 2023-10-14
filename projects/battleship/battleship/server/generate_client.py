@@ -48,17 +48,15 @@ for value in server_clss.values():
                 if abort:
                     continue
 
-                body_stmt.name = body_stmt.name.removesuffix("Server") + "ClientThread"
+                body_stmt.name = body_stmt.name.removesuffix("Server") + "Client"
 
                 for base in bases:
                     match base:
                         case ast.Name(id, ctx=ast.Load()):
                             if id in server_imports:
-                                base.id = "ClientThread"
+                                base.id = "Client"
                             elif id in server_clss.keys():
-                                base.id = (
-                                    base.id.removesuffix("Server") + "ClientThread"
-                                )
+                                base.id = base.id.removesuffix("Server") + "Client"
 
                 new_class_body_stmts: list[ast.stmt] = []
 
@@ -89,31 +87,19 @@ for value in server_clss.values():
                                             ).annotation
                                             add_import_name(typ)
                                             class_body_stmt.returns = ast.Subscript(
-                                                ast.Name("Future", ctx=ast.Load()),
+                                                ast.Name(
+                                                    "AbstractContextManager",
+                                                    ctx=ast.Load(),
+                                                ),
                                                 ast.Subscript(
                                                     ast.Name(
-                                                        "AbstractContextManager",
-                                                        ctx=ast.Load(),
+                                                        "AsyncIterator", ctx=ast.Load()
                                                     ),
-                                                    ast.Subscript(
-                                                        ast.Attribute(
-                                                            ast.Name(
-                                                                "queue", ctx=ast.Load()
-                                                            ),
-                                                            "SimpleQueue",
-                                                            ctx=ast.Load(),
-                                                        ),
-                                                        ast.Subscript(
-                                                            ast.Name(
-                                                                "Future", ctx=ast.Load()
-                                                            ),
-                                                            typ,
-                                                        )
-                                                        if typ is not None
-                                                        else ast.Name(
-                                                            "Future", ctx=ast.Load()
-                                                        ),
-                                                    ),
+                                                    typ,
+                                                )
+                                                if typ is not None
+                                                else ast.Name(
+                                                    "AsyncIterator", ctx=ast.Load()
                                                 ),
                                             )
                                             new_class_body_stmts.append(
@@ -150,32 +136,21 @@ for value in server_clss.values():
                                             )
                                             class_body_stmt.args.args.pop(1)
                                             add_import_name(class_body_stmt.returns)
-                                            class_body_stmt.returns = ast.Subscript(
-                                                ast.Name("Future", ctx=ast.Load()),
-                                                class_body_stmt.returns,
-                                            )
-                                            new_class_body_stmts.append(
-                                                ast.FunctionDef(
-                                                    class_body_stmt.name,
-                                                    class_body_stmt.args,
-                                                    class_body_stmt.body,
-                                                    class_body_stmt.decorator_list,
-                                                    class_body_stmt.returns,
-                                                )
-                                            )
+                                            new_class_body_stmts.append(class_body_stmt)
 
                 body_stmt.body = new_class_body_stmts
 
         new_clss.append(body_stmt)
 
 new_imports: list[ast.Import | ast.ImportFrom] = [
-    ast.ImportFrom("concurrent.futures", [ast.alias("Future")], 0),
+    ast.ImportFrom(
+        "collections.abc", [ast.alias("AsyncIterator"), ast.alias("Awaitable")], 0
+    ),
     ast.ImportFrom("contextlib", [ast.alias("AbstractContextManager")], 0),
     ast.ImportFrom("dataclasses", [ast.alias("dataclass")], 0),
-    ast.Import([ast.alias("queue")]),
     ast.ImportFrom(
-        "tsocket.client_thread",
-        [ast.alias("ClientThread"), ast.alias("Route"), ast.alias("subscribe")],
+        "tsocket.client",
+        [ast.alias("Client"), ast.alias("Route"), ast.alias("subscribe")],
         0,
     ),
 ]
@@ -194,7 +169,7 @@ for body_stmt in ast.parse(inspect.getsource(server)).body:
 
 if (server_file_str := inspect.getsourcefile(server)) is not None:
     with open(
-        Path(server_file_str).parent.parent / "client" / "client_thread.py",
+        Path(server_file_str).parent.parent / "client" / "client.py",
         "w",
         encoding="utf-8",
     ) as server_file:
@@ -204,7 +179,7 @@ if (server_file_str := inspect.getsourcefile(server)) is not None:
                     ast.Module(
                         body=[
                             ast.Constant(
-                                "AUTOGENERATED BY battleship.server.generate_client_thread DO NOT MANUALLY EDIT"
+                                "AUTOGENERATED BY battleship.server.generate_client DO NOT MANUALLY EDIT"
                             )
                         ]
                         + new_imports

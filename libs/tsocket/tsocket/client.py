@@ -248,7 +248,7 @@ class _Subscribe(Generic[ClientT_contra, T]):
 
         return fake_subscribe
 
-    async def __call__(self) -> AbstractContextManager[AsyncIterator[T]]:
+    def __call__(self) -> AbstractContextManager[AsyncIterator[T]]:
         # For tricking LSP / type checker
         raise NotImplementedError()
 

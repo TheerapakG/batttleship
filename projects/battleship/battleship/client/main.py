@@ -4,12 +4,12 @@ import ssl
 from dotenv import load_dotenv
 import pyglet
 
-from tgraphics.component import Window
+from tgraphics.component import Window, loop
 from tgraphics.reactivity import ComputedFuture, computed, unref
 from tsocket.shared import Empty
 
 
-from .client_thread import BattleshipClientThread
+from .client import BattleshipClient
 from . import store
 from ..shared.logging import setup_logging
 
@@ -23,11 +23,8 @@ if __name__ == "__main__":
     ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
     ssl_context.load_verify_locations(os.environ["SSL_CERT"])
     ssl_context.check_hostname = False
-    client = BattleshipClientThread()
-    client.connect("localhost", 60000, ssl=ssl_context)
-
-    online_count = ComputedFuture(client.online(Empty()))
-    text = computed(lambda: f"online: {unref(online_count)}")
+    client = BattleshipClient()
+    loop.run_until_complete(client.connect("localhost", 60000, ssl=ssl_context))
 
     try:
         store.user.load()
@@ -40,4 +37,5 @@ if __name__ == "__main__":
 
         window.scene = create_player(window=window, client=client)
     pyglet.app.run()
-    client.disconnect()
+    loop.run_until_complete(client.disconnect())
+    loop.close()

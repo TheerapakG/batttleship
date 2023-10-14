@@ -2133,11 +2133,6 @@ loop = asyncio.get_event_loop()
 pyglet.clock.schedule(lambda dt: loop.run_until_complete(asyncio.sleep(0)))
 
 
-@pyglet.app.event_loop.event
-def on_exit():
-    loop.close()
-
-
 @dataclass
 class Window:
     _width: InitVar[int | ReadRef[int] | None] = field(default=None)
@@ -2169,7 +2164,7 @@ class Window:
         @self._window.event
         def on_key_press(symbol, modifiers):
             if (scene_instance := self.scene_instance) is not None:
-                loop.run_until_complete(
+                loop.create_task(
                     scene_instance.capture(
                         KeyPressEvent(scene_instance, symbol, modifiers)
                     )
@@ -2178,7 +2173,7 @@ class Window:
         @self._window.event
         def on_key_release(symbol, modifiers):
             if (scene_instance := self.scene_instance) is not None:
-                loop.run_until_complete(
+                loop.create_task(
                     scene_instance.capture(
                         KeyReleaseEvent(scene_instance, symbol, modifiers)
                     )
@@ -2187,7 +2182,7 @@ class Window:
         @self._window.event
         def on_mouse_drag(x, y, dx, dy, buttons, modifiers):
             if (scene_instance := self.scene_instance) is not None:
-                loop.run_until_complete(
+                loop.create_task(
                     scene_instance.capture(
                         MouseDragEvent(scene_instance, x, y, dx, dy, buttons, modifiers)
                     )
@@ -2196,21 +2191,21 @@ class Window:
         @self._window.event
         def on_mouse_enter(x, y):
             if (scene_instance := self.scene_instance) is not None:
-                loop.run_until_complete(
+                loop.create_task(
                     scene_instance.capture(MouseEnterEvent(scene_instance, x, y))
                 )
 
         @self._window.event
         def on_mouse_leave(x, y):
             if (scene_instance := self.scene_instance) is not None:
-                loop.run_until_complete(
+                loop.create_task(
                     scene_instance.capture(MouseLeaveEvent(scene_instance, x, y))
                 )
 
         @self._window.event
         def on_mouse_motion(x, y, dx, dy):
             if (scene_instance := self.scene_instance) is not None:
-                loop.run_until_complete(
+                loop.create_task(
                     scene_instance.capture(
                         MouseMotionEvent(scene_instance, x, y, dx, dy)
                     )
@@ -2219,7 +2214,7 @@ class Window:
         @self._window.event
         def on_mouse_press(x, y, button, modifiers):
             if (scene_instance := self.scene_instance) is not None:
-                loop.run_until_complete(
+                loop.create_task(
                     scene_instance.capture(
                         MousePressEvent(scene_instance, x, y, button, modifiers)
                     )
@@ -2228,7 +2223,7 @@ class Window:
         @self._window.event
         def on_mouse_release(x, y, button, modifiers):
             if (scene_instance := self.scene_instance) is not None:
-                loop.run_until_complete(
+                loop.create_task(
                     scene_instance.capture(
                         MouseReleaseEvent(scene_instance, x, y, button, modifiers)
                     )
@@ -2237,7 +2232,7 @@ class Window:
         @self._window.event
         def on_mouse_scroll(x, y, scroll_x, scroll_y):
             if (scene_instance := self.scene_instance) is not None:
-                loop.run_until_complete(
+                loop.create_task(
                     scene_instance.capture(
                         MouseScrollEvent(scene_instance, x, y, scroll_x, scroll_y)
                     )
@@ -2251,21 +2246,21 @@ class Window:
         @self._window.event
         def on_text(text):
             if (scene_instance := self.scene_instance) is not None:
-                loop.run_until_complete(
+                loop.create_task(
                     scene_instance.capture(TextEvent(scene_instance, text))
                 )
 
         @self._window.event
         def on_text_motion(motion):
             if (scene_instance := self.scene_instance) is not None:
-                loop.run_until_complete(
+                loop.create_task(
                     scene_instance.capture(TextMotionEvent(scene_instance, motion))
                 )
 
         @self._window.event
         def on_text_motion_select(motion):
             if (scene_instance := self.scene_instance) is not None:
-                loop.run_until_complete(
+                loop.create_task(
                     scene_instance.capture(
                         TextMotionSelectEvent(scene_instance, motion)
                     )
@@ -2281,7 +2276,7 @@ class Window:
         if (scene_instance := self._scene_instance) is not None:
             self._scene = new_scene
             self._scene_instance = new_scene_instance
-            loop.run_until_complete(
+            loop.create_task(
                 scene_instance.capture(ComponentUnmountedEvent(scene_instance))
             )
         else:
@@ -2290,7 +2285,7 @@ class Window:
         new_scene_instance.before_mounted_data.value = (
             BeforeMountedComponentInstanceData(0, 0, 0, 0, 1, 1, 1, 1)
         )
-        loop.run_until_complete(
+        loop.create_task(
             new_scene_instance.capture(ComponentMountedEvent(new_scene_instance))
         )
 

@@ -1,81 +1,42 @@
-import pyglet
+import asyncio
 
 from tgraphics.color import colors
 from tgraphics.component import Component, Window
-from tgraphics.reactivity import Ref, ComputedFuture, Watcher, computed, unref
+from tgraphics.reactivity import Ref, computed, unref
 from tsocket.shared import Empty
 
 from .. import store
-from ..client_thread import BattleshipClientThread
+from ..client import BattleshipClient
 from ...shared import models
 
 
 @Component.register("MainMenu")
-def main_menu(window: Window, client: BattleshipClientThread, **kwargs):
+def main_menu(window: Window, client: BattleshipClient, **kwargs):
     user_text = computed(
         lambda: f"user: {unref(store.user.name)} rating: {unref(store.user.rating)}"
     )
 
-    online_count = ComputedFuture(client.online(Empty()))
+    online_count = Ref(None)
     online_text = computed(lambda: f"online: {unref(online_count)}")
 
-    online_count.add_done_callback(
-        lambda _: pyglet.clock.schedule_once(
-            lambda _: online_count.set_future(client.online(Empty())), 1.0
-        )
-    )
+    async def set_online_count():
+        while True:
+            online_count.value = await client.online(Empty())
+            await asyncio.sleep(1.0)
+
+    # TODO: destroy this
+    asyncio.create_task(set_online_count())
 
     async def on_public_room_match_button(_e):
-        room_id_future_ref = Ref[ComputedFuture[models.RoomId | None] | None](None)
-
-        def set_room_id_future(player: models.Player | None):
-            if player is not None:
-                room_id_future_ref.value = ComputedFuture(
-                    client.public_room_match(
-                        models.BearingPlayerAuth.from_player(player)
-                    )
-                )
-                player_watcher.unwatch()
-
-        player_watcher = Watcher.ifref(
-            store.user.store,
-            lambda player: pyglet.clock.schedule_once(
-                lambda _dt: set_room_id_future(player), 0.0
-            ),
-            trigger_init=True,
+        room_id = await client.public_room_match(
+            models.BearingPlayerAuth.from_player(store.user.store)
         )
 
-        room_id_ref = computed(lambda: unref(unref(room_id_future_ref)))
+        room = await client.public_room_get(room_id)
 
-        room_future_ref = Ref[ComputedFuture[models.Room | None] | None](None)
+        from .lobby import lobby
 
-        def set_room_future(room_id: models.RoomId | None):
-            if room_id is not None:
-                room_future_ref.value = ComputedFuture(client.public_room_get(room_id))
-                room_id_watcher.unwatch()
-
-        room_id_watcher = Watcher.ifref(
-            room_id_ref,
-            lambda room_id: pyglet.clock.schedule_once(
-                lambda _dt: set_room_future(room_id), 0.0
-            ),
-            trigger_init=True,
-        )
-
-        room_ref = computed(lambda: unref(unref(room_future_ref)))
-
-        def to_lobby(room: models.Room | None):
-            if room is not None:
-                from .lobby import lobby
-
-                window.scene = lobby(window, client, room)
-                room_watcher.unwatch()
-
-        room_watcher = Watcher.ifref(
-            room_ref,
-            lambda room: pyglet.clock.schedule_once(lambda _dt: to_lobby(room), 0.0),
-            trigger_init=True,
-        )
+        window.scene = lobby(window, client, room)
 
     return Component.render_xml(
         """
