@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import Callable
+import contextlib
 from dataclasses import dataclass, field, replace, InitVar
 from functools import partial
 import inspect
@@ -308,6 +309,7 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
     child_hover: Ref["ComponentInstance | None"] = field(
         init=False, default_factory=lambda: Ref(None)
     )
+    bound_tasks: set[asyncio.Task] = field(init=False, default_factory=set)
     bound_watchers: set[Watcher] = field(init=False, default_factory=set)
 
     def __post_init__(self):
@@ -504,6 +506,11 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
 
     @event_handler(ComponentUnmountedEvent)
     async def component_unmounted_handler(self, _: ComponentUnmountedEvent):
+        gather = asyncio.gather(*self.bound_tasks)
+        gather.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await gather
+        self.bound_tasks.clear()
         for watcher in self.bound_watchers:
             watcher.unwatch()
         for child in unref(use_children(self)):
@@ -2171,6 +2178,10 @@ class Window:
                 )
 
         @self._window.event
+        def on_close():
+            loop.create_task(self.set_scene(None))
+
+        @self._window.event
         def on_key_release(symbol, modifiers):
             if (scene_instance := self.scene_instance) is not None:
                 loop.create_task(
@@ -2270,8 +2281,8 @@ class Window:
     def scene(self):
         return self._scene
 
-    async def set_scene(self, new_scene: Component):
-        new_scene_instance = new_scene.get_instance()
+    async def set_scene(self, new_scene: Component | None):
+        new_scene_instance = new_scene.get_instance() if new_scene is not None else None
         if (scene_instance := self._scene_instance) is not None:
             self._scene = new_scene
             self._scene_instance = new_scene_instance
@@ -2279,10 +2290,11 @@ class Window:
         else:
             self._scene = new_scene
             self._scene_instance = new_scene_instance
-        new_scene_instance.before_mounted_data.value = (
-            BeforeMountedComponentInstanceData(0, 0, 0, 0, 1, 1, 1, 1)
-        )
-        await new_scene_instance.capture(ComponentMountedEvent(new_scene_instance))
+        if new_scene_instance is not None:
+            new_scene_instance.before_mounted_data.value = (
+                BeforeMountedComponentInstanceData(0, 0, 0, 0, 1, 1, 1, 1)
+            )
+            await new_scene_instance.capture(ComponentMountedEvent(new_scene_instance))
 
     @property
     def scene_instance(self):

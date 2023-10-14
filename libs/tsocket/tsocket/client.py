@@ -240,7 +240,7 @@ class _Subscribe(Generic[ClientT_contra, T]):
                             )[0],
                         )
 
-                yield getter
+                yield getter()
             finally:
                 self.cbs[name].remove(queue)
                 if not self.cbs[name]:

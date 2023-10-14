@@ -2,6 +2,7 @@ import asyncio
 
 from tgraphics.color import colors
 from tgraphics.component import Component, Window
+from tgraphics.event import ComponentMountedEvent
 from tgraphics.reactivity import Ref
 
 from .. import store
@@ -13,30 +14,34 @@ from ...shared import models
 def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwargs):
     player_ids = Ref(room.players)
 
-    # TODO: non hack this
-    room_join_it_ctx = client.room_join()
-    room_join_it = room_join_it_ctx.__enter__()
+    async def subscribe_player_join():
+        with client.room_join() as room_join_it:
+            async for player_id in room_join_it:
+                player_ids.value.append(player_id)
+                player_ids.trigger()
 
-    room_leave_it_ctx = client.room_leave()
-    room_leave_it = room_leave_it_ctx.__enter__()
+    async def subscribe_player_leave():
+        with client.room_leave() as room_leave_it:
+            async for player_id in room_leave_it:
+                player_ids.value.remove(player_id)
+                player_ids.trigger()
 
-    async def try_add_player_id():
-        async for player_id in room_join_it:
-            player_ids.value.append(player_id)
-            player_ids.trigger()
-
-    asyncio.create_task(try_add_player_id())
-
-    async def try_remove_player_id():
-        async for player_id in room_leave_it:
-            player_ids.value.remove(player_id)
-            player_ids.trigger()
-
-    asyncio.create_task(try_remove_player_id())
+    async def on_mounted(event: ComponentMountedEvent):
+        event.instance.bound_tasks.update(
+            [
+                asyncio.create_task(subscribe_player_join()),
+                asyncio.create_task(subscribe_player_leave()),
+            ]
+        )
 
     return Component.render_xml(
         """
-        <Column gap="16" width="window.width" height="window.height">
+        <Column 
+            gap="16"
+            width="window.width"
+            height="window.height"
+            handle-ComponentMountedEvent="on_mounted"
+        >
             <Label 
                 t-for="player_id in player_ids"
                 text="str(player_id)" 
