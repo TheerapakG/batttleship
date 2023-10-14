@@ -22,8 +22,6 @@ def label_button(
     italic: bool | ReadRef[bool] = False,
     **kwargs
 ):
-    radius = computed(lambda: unref(height) / 2)
-
     hover = Ref(False)
     bg_color = computed(lambda: unref(hover_color) if unref(hover) else unref(color))
 
@@ -42,7 +40,7 @@ def label_button(
     return Component.render_xml(
         """
         <Layer handle-ComponentMountedEvent="on_mounted" handle-MousePressEvent="on_click">
-            <RoundedRect width="width" height="height" radius="radius" color="bg_color" />
+            <RoundedRect width="width" height="height" color="bg_color" />
             <Label text="text" color="text_color" font_name="font_name" font_size="font_size" bold="bold" italic="italic" />
         </Layer>
         """,

@@ -46,7 +46,7 @@ from .event import (
     ModelEvent,
     InputEvent,
 )
-from .reactivity import ReadRef, Ref, Watcher, computed, unref
+from .reactivity import ReadRef, Ref, Watcher, computed, unref, isref
 
 loader = Loader(["resources"])
 
@@ -692,9 +692,10 @@ class ComponentMeta(type):
                             additional_scope_values,
                             override_values,
                         ):
-                            _ref_list = override_values.get("_ref_list", [])
-                            _ref_list.append(eval_for_values)
-                            override_values["_ref_list"] = _ref_list
+                            if isref(eval_for_values):
+                                _ref_list = override_values.get("_ref_list", [])
+                                _ref_list.append(eval_for_values)
+                                override_values["_ref_list"] = _ref_list
 
                             return [
                                 component
@@ -726,9 +727,10 @@ class ComponentMeta(type):
                         def render_fn(
                             eval_val, additional_scope_values, override_values
                         ):
-                            _ref_list = override_values.get("_ref_list", [])
-                            _ref_list.append(eval_val)
-                            override_values["_ref_list"] = _ref_list
+                            if isref(eval_val):
+                                _ref_list = override_values.get("_ref_list", [])
+                                _ref_list.append(eval_val)
+                                override_values["_ref_list"] = _ref_list
 
                             return (
                                 unref(
@@ -743,6 +745,39 @@ class ComponentMeta(type):
                         return partial(render_fn, eval_val)
 
                     render_fn = if_render_fn_wrapper(render_fn, directive_value)
+                case "template":
+
+                    def template_render_fn_wrapper(
+                        old_render_fn: Callable[..., list["Component"]],
+                        directive_value: str,
+                    ):
+                        eval_val = eval(
+                            directive_value, frame.frame.f_globals, frame_locals
+                        )
+
+                        def render_fn(
+                            eval_val, additional_scope_values, override_values
+                        ):
+                            if isref(eval_val):
+                                _ref_list = override_values.get("_ref_list", [])
+                                _ref_list.append(eval_val)
+                                override_values["_ref_list"] = _ref_list
+
+                            return (
+                                unref(
+                                    old_render_fn(
+                                        additional_scope_values,
+                                        override_values | eval_val,
+                                    )
+                                )
+                                if unref(eval_val)
+                                else []
+                            )
+
+                        return partial(render_fn, eval_val)
+
+                    render_fn = template_render_fn_wrapper(render_fn, directive_value)
+
                 case _ if directive_key.startswith("model-"):
 
                     def model_render_fn_wrapper(
@@ -1252,17 +1287,6 @@ class Rect(Component):
         return RectInstance(component=self)
 
 
-class _BlendShaderGroup(ShaderGroup):
-    def set_state(self):
-        super().set_state()
-        gl.glEnable(gl.GL_BLEND)
-        gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
-
-    def unset_state(self):
-        gl.glDisable(gl.GL_BLEND)
-        super().unset_state()
-
-
 @dataclass
 class RoundedRectInstance(ComponentInstance["RoundedRect"]):
     vert: ClassVar[Shader] = Shader(
@@ -1364,6 +1388,11 @@ class RoundedRectInstance(ComponentInstance["RoundedRect"]):
         height = computed(
             lambda: unref(self.component.height) * unref(use_acc_scale_y(self))
         )
+        radius = computed(
+            lambda: r
+            if (r := unref(self.component.radius)) is not None
+            else min(unref(width), unref(height)) / 2
+        )
         self._batch = Batch()
         self._group = ShaderGroup(self.program)
         self._vertex_list = self.program.vertex_list_indexed(
@@ -1374,7 +1403,7 @@ class RoundedRectInstance(ComponentInstance["RoundedRect"]):
             self._group,
             translation=("f", (unref(x), unref(y)) * 4),
             size=("f", (unref(width), unref(height)) * 4),
-            radius=("f", (unref(self.component.radius),) * 4),
+            radius=("f", (unref(radius),) * 4),
             tex_coord=("f", (0, 0, 1, 0, 1, 1, 0, 1)),
             color=("Bn", unref(self.component.color) * 4),
         )
@@ -1387,7 +1416,7 @@ class RoundedRectInstance(ComponentInstance["RoundedRect"]):
                     Watcher.ifref(y, self._update_y),
                     Watcher.ifref(width, self._update_width),
                     Watcher.ifref(height, self._update_height),
-                    Watcher.ifref(self.component.radius, self._update_radius),
+                    Watcher.ifref(radius, self._update_radius),
                     Watcher.ifref(self.component.color, self._update_color),
                 ]
                 if w is not None
@@ -1404,7 +1433,7 @@ class RoundedRect(Component):
     color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]]
     width: int | float | ReadRef[int | float]
     height: int | float | ReadRef[int | float]
-    radius: int | float | ReadRef[int | float]
+    radius: int | float | None | ReadRef[int | float | None] = field(default=None)
 
     def get_instance(self):
         return RoundedRectInstance(component=self)

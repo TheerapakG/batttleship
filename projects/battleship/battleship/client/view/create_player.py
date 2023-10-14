@@ -1,4 +1,5 @@
 from tgraphics.color import colors
+from tgraphics.template import color, width, height
 from tgraphics.component import Component, Window
 from tgraphics.reactivity import ComputedFuture, Ref, unref
 
@@ -35,20 +36,17 @@ def create_player(window: Window, client: BattleshipClientThread, **kwargs):
                 text_color="colors['white']"
                 color="colors['cyan'][500]"
                 hover_color="colors['cyan'][600]"
-                width="128 + 64"
-                height="32 + 4"
+                t-template="width[48] | height[9]"
                 handle-ClickEvent="on_create_player_button"
             />
             <Layer>
-                <RoundedRect color="colors['white']" width="260" height="36" radius="18" />
+                <RoundedRect t-template="color['white'] | width[64] | height[9]" />
                 <Input
                     t-model-text="name"
                     color="colors['black']"
                     caret_color="colors['black']"
                     selection_background_color="colors['cyan'][300]"
-                    selection_color="colors['black']"
-                    width="224"
-                    height="20"
+                    t-template="width[56] | height[5]"
                 />
             </Layer>
         </Column>
