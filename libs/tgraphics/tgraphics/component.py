@@ -1,10 +1,11 @@
+import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace, InitVar
 from functools import partial
 import inspect
 import re
 import time
-from typing import Any, ClassVar, Generic, ParamSpec, TypeVar
+from typing import Any, Awaitable, ClassVar, Generic, ParamSpec, TypeVar
 from xml.etree import ElementTree
 
 import pyglet
@@ -74,14 +75,14 @@ class _EventHandler:
 
 
 def event_capturer(cls: type[Event]):
-    def make_capturer(func: Callable[["ComponentInstance", Event], Any]):
+    def make_capturer(func: Callable[["ComponentInstance", Event], Awaitable[Any]]):
         return _EventCapturer(cls, func)
 
     return make_capturer
 
 
 def event_handler(cls: type[Event]):
-    def make_handler(func: Callable[["ComponentInstance", Event], Any]):
+    def make_handler(func: Callable[["ComponentInstance", Event], Awaitable[Any]]):
         return _EventHandler(cls, func)
 
     return make_handler
@@ -204,12 +205,18 @@ C = TypeVar("C", bound="Component")
 
 
 class ComponentInstanceMeta(type):
-    _cls_event_capturers: dict[type[Event], Callable[["ComponentInstance", Event], Any]]
-    _cls_event_handlers: dict[type[Event], Callable[["ComponentInstance", Event], Any]]
-    _flat_event_capturers: dict[
-        type[Event], Callable[["ComponentInstance", Event], Any]
+    _cls_event_capturers: dict[
+        type[Event], Callable[["ComponentInstance", Event], Awaitable[Any]]
     ]
-    _flat_event_handlers: dict[type[Event], Callable[["ComponentInstance", Event], Any]]
+    _cls_event_handlers: dict[
+        type[Event], Callable[["ComponentInstance", Event], Awaitable[Any]]
+    ]
+    _flat_event_capturers: dict[
+        type[Event], Callable[["ComponentInstance", Event], Awaitable[Any]]
+    ]
+    _flat_event_handlers: dict[
+        type[Event], Callable[["ComponentInstance", Event], Awaitable[Any]]
+    ]
     _focus: Ref["ComponentInstance | None"]
 
     def __new__(
@@ -248,24 +255,23 @@ class ComponentInstanceMeta(type):
     def focus(cls):
         return cls._focus
 
-    @focus.setter
-    def focus(cls, instance: "ComponentInstance"):
+    async def set_focus(cls, instance: "ComponentInstance"):
         focus = unref(ComponentInstance._focus)
         if focus is instance:
             return StopPropagate
 
-        if instance.capture(ComponentFocusEvent(instance)) is StopPropagate:
+        if await instance.capture(ComponentFocusEvent(instance)) is StopPropagate:
             return StopPropagate
 
-        if cls.blur() is StopPropagate:  # pylint: disable=E1120
+        if await cls.blur() is StopPropagate:  # pylint: disable=E1120
             return StopPropagate
 
         cls._focus.value = instance
 
-    def blur(cls):
+    async def blur(cls):
         if (focus := unref(cls._focus)) is not None:
             focus: ComponentInstance  # type: ignore[no-redef]
-            if focus.capture(ComponentBlurEvent(focus)) is StopPropagate:
+            if await focus.capture(ComponentBlurEvent(focus)) is StopPropagate:
                 return StopPropagate
             cls._focus.value = None
 
@@ -273,24 +279,24 @@ class ComponentInstanceMeta(type):
 @dataclass(kw_only=True)
 class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
     _cls_event_capturers: ClassVar[
-        dict[type[Event], Callable[["ComponentInstance", Event], Any]]
+        dict[type[Event], Callable[["ComponentInstance", Event], Awaitable[Any]]]
     ]
     _cls_event_handlers: ClassVar[
-        dict[type[Event], Callable[["ComponentInstance", Event], Any]]
+        dict[type[Event], Callable[["ComponentInstance", Event], Awaitable[Any]]]
     ]
     _flat_event_capturers: ClassVar[
-        dict[type[Event], Callable[["ComponentInstance", Event], Any]]
+        dict[type[Event], Callable[["ComponentInstance", Event], Awaitable[Any]]]
     ]
     _flat_event_handlers: ClassVar[
-        dict[type[Event], Callable[["ComponentInstance", Event], Any]]
+        dict[type[Event], Callable[["ComponentInstance", Event], Awaitable[Any]]]
     ]
     _focus: ClassVar[Ref["ComponentInstance | None"]] = Ref(None)
     component: C
     event_capturers: dict[
-        type[Event], Callable[["ComponentInstance", Event], Any]
+        type[Event], Callable[["ComponentInstance", Event], Awaitable[Any]]
     ] = field(init=False)
     event_handlers: dict[
-        type[Event], Callable[["ComponentInstance", Event], Any]
+        type[Event], Callable[["ComponentInstance", Event], Awaitable[Any]]
     ] = field(init=False)
     before_mounted_data: Ref[BeforeMountedComponentInstanceData | None] = field(
         init=False, default_factory=lambda: Ref(None)
@@ -310,32 +316,40 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
         for event, capturer in self.component.event_capturers.items():
             if (existed_capturer := capturers.get(event, None)) is not None:
 
-                def merged_capturer(
+                async def merged_capturer(
                     instance,
                     event,
                     existed_capturer=existed_capturer,
                     capturer=capturer,
                 ):
-                    if existed_capturer(instance, event) is StopPropagate:
+                    if await existed_capturer(instance, event) is StopPropagate:
                         return StopPropagate
-                    return capturer(event)
+                    return await capturer(event)
 
                 capturers[event] = merged_capturer
             else:
-                capturers[event] = lambda _, e, capturer=capturer: capturer(e)
+
+                async def transform_capturer(_, event, capturer=capturer):
+                    return await capturer(event)
+
+                capturers[event] = transform_capturer
         for event, handler in self.component.event_handlers.items():
             if (existed_handler := handlers.get(event, None)) is not None:
 
-                def merged_handler(
+                async def merged_handler(
                     instance, event, existed_handler=existed_handler, handler=handler
                 ):
-                    if existed_handler(instance, event) is StopPropagate:
+                    if await existed_handler(instance, event) is StopPropagate:
                         return StopPropagate
-                    return handler(event)
+                    return await handler(event)
 
                 handlers[event] = merged_handler
             else:
-                handlers[event] = lambda _, e, handler=handler: handler(e)
+
+                async def transform_handler(_, event, handler=handler):
+                    return await handler(event)
+
+                handlers[event] = transform_handler
         self.event_capturers = capturers
         self.event_handlers = handlers
 
@@ -346,21 +360,22 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
         pass
 
     def draw(self, dt: float):
-        self._draw(dt)
-        for children in unref(use_children(self)):
-            unref(children).draw(dt)
+        if unref(is_mounted(self)):
+            self._draw(dt)
+            for children in unref(use_children(self)):
+                unref(children).draw(dt)
 
-    def capture(self, event: Event):
+    async def capture(self, event: Event):
         if not unref(self.component.disabled):
             for event_type in type(event).mro():
                 if (capturer := self.event_capturers.get(event_type)) is not None:
-                    return capturer(self, event)
+                    return await capturer(self, event)
 
-    def dispatch(self, event: Event):
+    async def dispatch(self, event: Event):
         if not unref(self.component.disabled):
             for event_type in type(event).mro():
                 if (handler := self.event_handlers.get(event_type)) is not None:
-                    return handler(self, event)
+                    return await handler(self, event)
 
     def get_child_at(self, p: Positional) -> "ComponentInstance | None":
         for child in reversed(unref(use_children(self))):
@@ -384,16 +399,16 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
         return None
 
     @event_capturer(FocusEvent)
-    def focus_capturer(self, event: FocusEvent):
+    async def focus_capturer(self, event: FocusEvent):
         if (focus := unref(ComponentInstance.focus)) is not None:
             focus: ComponentInstance  # type: ignore[no-redef]
-            return focus.dispatch(event)
+            return await focus.dispatch(event)
 
     @event_capturer(BubblingEvent)
-    def bubbling_capturer(self, event: BubblingEvent):
+    async def bubbling_capturer(self, event: BubblingEvent):
         if (child := self.get_child_at(event)) is not None:
             if (
-                child.capture(
+                await child.capture(
                     replace(
                         event,
                         instance=child,
@@ -409,18 +424,18 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
         if 0 < event.x < unref(use_width(self)) and 0 < event.y < unref(
             use_height(self)
         ):
-            return self.dispatch(event)
+            return await self.dispatch(event)
 
     @event_capturer(Event)
-    def generic_capturer(self, event: Event):
-        return self.dispatch(event)
+    async def generic_capturer(self, event: Event):
+        return await self.dispatch(event)
 
-    def _process_child_leave(
+    async def _process_child_leave(
         self, p: Positional, new_child: "ComponentInstance | None" = None
     ):
         if child := unref(self.child_hover):
             child: "ComponentInstance"  # type: ignore[no-redef]
-            child.capture(
+            await child.capture(
                 MouseLeaveEvent(
                     child,
                     (p.x - unref(use_offset_x(child))) / unref(use_scale_x(self)),
@@ -429,11 +444,13 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
             )
         self.child_hover.value = new_child
 
-    def _process_child_position(self, p: Positional) -> "ComponentInstance | None":
+    async def _process_child_position(
+        self, p: Positional
+    ) -> "ComponentInstance | None":
         if (new_child := self.get_child_at(p)) is not None:
             if self.child_hover.value is not new_child:
-                self._process_child_leave(p, new_child)
-                new_child.capture(
+                await self._process_child_leave(p, new_child)
+                await new_child.capture(
                     MouseEnterEvent(
                         new_child,
                         (p.x - unref(use_offset_x(new_child)))
@@ -445,21 +462,21 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
                 self.child_hover.value = new_child
             return new_child
         else:
-            self._process_child_leave(p, None)
+            await self._process_child_leave(p, None)
             return None
 
     @event_capturer(MouseEnterEvent)
-    def mouse_enter_capturer(self, event: MouseEnterEvent):
+    async def mouse_enter_capturer(self, event: MouseEnterEvent):
         self.hover.value = True
         self.child_hover.value = None
-        self._process_child_position(event)
-        return self.dispatch(event)
+        await self._process_child_position(event)
+        return await self.dispatch(event)
 
     @event_capturer(MouseMotionEvent)
-    def mouse_motion_capturer(self, event: MouseMotionEvent):
-        if (child := self._process_child_position(event)) is not None:
+    async def mouse_motion_capturer(self, event: MouseMotionEvent):
+        if (child := await self._process_child_position(event)) is not None:
             if (
-                child.capture(
+                await child.capture(
                     replace(
                         event,
                         instance=child,
@@ -472,31 +489,31 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
                 is StopPropagate
             ):
                 return StopPropagate
-        return self.dispatch(event)
+        return await self.dispatch(event)
 
     @event_capturer(MouseLeaveEvent)
-    def mouse_leave_capturer(self, event: MouseLeaveEvent):
+    async def mouse_leave_capturer(self, event: MouseLeaveEvent):
         self.hover.value = False
-        self._process_child_leave(event, None)
-        return self.dispatch(event)
+        await self._process_child_leave(event, None)
+        return await self.dispatch(event)
 
     @event_handler(MousePressEvent)
-    def mouse_press_handler(self, _event: MousePressEvent):
+    async def mouse_press_handler(self, _event: MousePressEvent):
         if unref(ComponentInstance.focus) is not self:
-            ComponentInstance.blur()
+            await ComponentInstance.blur()
 
     @event_handler(ComponentUnmountedEvent)
-    def component_unmounted_handler(self, _: ComponentUnmountedEvent):
+    async def component_unmounted_handler(self, _: ComponentUnmountedEvent):
         for watcher in self.bound_watchers:
             watcher.unwatch()
         for child in unref(use_children(self)):
-            unref(child).capture(ComponentUnmountedEvent(unref(child)))
+            await unref(child).capture(ComponentUnmountedEvent(unref(child)))
         self.bound_watchers.clear()
         self.before_mounted_data.value = None
         self.after_mounted_data.value = None
 
     @event_handler(ModelEvent)
-    def component_model_handler(self, event: ModelEvent):
+    async def component_model_handler(self, event: ModelEvent):
         if event.field in self.component.models:
             model_ref = getattr(self.component, event.field)
             model_ref.value = event.value
@@ -847,10 +864,10 @@ class ComponentMeta(type):
 @dataclass(kw_only=True)
 class Component(metaclass=ComponentMeta):
     disabled: bool | ReadRef[bool] = field(default=False)
-    event_capturers: dict[type[Event], Callable[[Event], Any]] = field(
+    event_capturers: dict[type[Event], Callable[[Event], Awaitable[Any]]] = field(
         default_factory=dict, repr=False
     )
-    event_handlers: dict[type[Event], Callable[[Event], Any]] = field(
+    event_handlers: dict[type[Event], Callable[[Event], Awaitable[Any]]] = field(
         default_factory=dict, repr=False
     )
     models: list[str] = field(default_factory=list, repr=False)
@@ -869,12 +886,12 @@ class PadInstance(ComponentInstance["Pad"]):
         return id(self)
 
     @event_handler(ComponentMountedEvent)
-    def component_mounted_handler(self, _: ComponentMountedEvent):
+    async def component_mounted_handler(self, _: ComponentMountedEvent):
         child = computed(
             lambda: unref(unref(self.component.children)[0]).get_instance()
         )
 
-        def mount_child(child: ComponentInstance):
+        async def mount_child(child: ComponentInstance):
             off_x = computed(
                 lambda: unref(self.component.pad_left) * unref(use_acc_scale_x(self))
             )
@@ -891,13 +908,17 @@ class PadInstance(ComponentInstance["Pad"]):
                 use_acc_scale_x(self),
                 use_acc_scale_y(self),
             )
-            child.capture(ComponentMountedEvent(child))
+            await child.capture(ComponentMountedEvent(child))
 
         self.bound_watchers.update(
             [
                 w
                 for w in [
-                    Watcher.ifref(child, mount_child, trigger_init=True),
+                    Watcher.ifref(
+                        child,
+                        lambda c: asyncio.create_task(mount_child(c)),
+                        trigger_init=True,
+                    ),
                 ]
                 if w is not None
             ]
@@ -938,7 +959,7 @@ class LayerInstance(ComponentInstance["Layer"]):
         return id(self)
 
     @event_handler(ComponentMountedEvent)
-    def component_mounted_handler(self, _: ComponentMountedEvent):
+    async def component_mounted_handler(self, _: ComponentMountedEvent):
         children = computed(
             lambda: [
                 computed(lambda c=c: unref(c).get_instance())
@@ -948,7 +969,7 @@ class LayerInstance(ComponentInstance["Layer"]):
         collapsed_children = computed(lambda: [unref(c) for c in unref(children)])
         previous_collapsed_children: list[ComponentInstance] = []
 
-        def mount_child(index: int):
+        async def mount_child(index: int):
             child = unref(collapsed_children)[index]
 
             pad_x = computed(
@@ -970,9 +991,9 @@ class LayerInstance(ComponentInstance["Layer"]):
                 use_acc_scale_x(self),
                 use_acc_scale_y(self),
             )
-            child.capture(ComponentMountedEvent(child))
+            await child.capture(ComponentMountedEvent(child))
 
-        def mount_children(current_collapsed_children: list[ComponentInstance]):
+        async def mount_children(current_collapsed_children: list[ComponentInstance]):
             nonlocal previous_collapsed_children
             child_lookup = {
                 child: i for i, child in enumerate(unref(current_collapsed_children))
@@ -980,9 +1001,9 @@ class LayerInstance(ComponentInstance["Layer"]):
             current = set(current_collapsed_children)
             previous = set(previous_collapsed_children)
             for child in previous - current:
-                child.capture(ComponentUnmountedEvent(child))
+                await child.capture(ComponentUnmountedEvent(child))
             for child in current - previous:
-                mount_child(child_lookup[child])
+                await mount_child(child_lookup[child])
 
             previous_collapsed_children = current_collapsed_children
 
@@ -990,7 +1011,11 @@ class LayerInstance(ComponentInstance["Layer"]):
             [
                 w
                 for w in [
-                    Watcher.ifref(children, mount_children, trigger_init=True),
+                    Watcher.ifref(
+                        children,
+                        lambda cs: asyncio.create_task(mount_children(cs)),
+                        trigger_init=True,
+                    ),
                 ]
                 if w is not None
             ]
@@ -1021,7 +1046,7 @@ class RowInstance(ComponentInstance["Row"]):
         return id(self)
 
     @event_handler(ComponentMountedEvent)
-    def component_mounted_handler(self, _: ComponentMountedEvent):
+    async def component_mounted_handler(self, _: ComponentMountedEvent):
         children = computed(
             lambda: [
                 computed(lambda c=c: unref(c).get_instance())
@@ -1049,7 +1074,7 @@ class RowInstance(ComponentInstance["Row"]):
             else max(unref(use_height(child)) for child in unref(children))
         )
 
-        def mount_child(index: int):
+        async def mount_child(index: int):
             child = unref(collapsed_children)[index]
 
             pad_x = computed(
@@ -1071,9 +1096,9 @@ class RowInstance(ComponentInstance["Row"]):
                 use_acc_scale_x(self),
                 use_acc_scale_y(self),
             )
-            child.capture(ComponentMountedEvent(child))
+            await child.capture(ComponentMountedEvent(child))
 
-        def mount_children(current_collapsed_children: list[ComponentInstance]):
+        async def mount_children(current_collapsed_children: list[ComponentInstance]):
             nonlocal previous_collapsed_children
             child_lookup = {
                 child: i for i, child in enumerate(unref(current_collapsed_children))
@@ -1081,9 +1106,9 @@ class RowInstance(ComponentInstance["Row"]):
             current = set(current_collapsed_children)
             previous = set(previous_collapsed_children)
             for child in previous - current:
-                child.capture(ComponentUnmountedEvent(child))
+                await child.capture(ComponentUnmountedEvent(child))
             for child in current - previous:
-                mount_child(child_lookup[child])
+                await mount_child(child_lookup[child])
 
             previous_collapsed_children = current_collapsed_children
 
@@ -1092,7 +1117,9 @@ class RowInstance(ComponentInstance["Row"]):
                 w
                 for w in [
                     Watcher.ifref(
-                        collapsed_children, mount_children, trigger_init=True
+                        collapsed_children,
+                        lambda cs: asyncio.create_task(mount_children(cs)),
+                        trigger_init=True,
                     ),
                 ]
                 if w is not None
@@ -1123,7 +1150,7 @@ class ColumnInstance(ComponentInstance["Column"]):
         return id(self)
 
     @event_handler(ComponentMountedEvent)
-    def component_mounted_handler(self, _: ComponentMountedEvent):
+    async def component_mounted_handler(self, _: ComponentMountedEvent):
         children = computed(
             lambda: [
                 computed(lambda c=c: unref(c).get_instance())
@@ -1151,7 +1178,7 @@ class ColumnInstance(ComponentInstance["Column"]):
             else unref(sum_height)
         )
 
-        def mount_child(index: int):
+        async def mount_child(index: int):
             child = unref(collapsed_children)[index]
 
             pad_x = computed(lambda: (unref(width) - unref(use_width(child))) / 2)
@@ -1173,9 +1200,9 @@ class ColumnInstance(ComponentInstance["Column"]):
                 use_acc_scale_x(self),
                 use_acc_scale_y(self),
             )
-            child.capture(ComponentMountedEvent(child))
+            await child.capture(ComponentMountedEvent(child))
 
-        def mount_children(current_collapsed_children: list[ComponentInstance]):
+        async def mount_children(current_collapsed_children: list[ComponentInstance]):
             nonlocal previous_collapsed_children
             child_lookup = {
                 child: i for i, child in enumerate(unref(current_collapsed_children))
@@ -1183,9 +1210,9 @@ class ColumnInstance(ComponentInstance["Column"]):
             current = set(current_collapsed_children)
             previous = set(previous_collapsed_children)
             for child in previous - current:
-                child.capture(ComponentUnmountedEvent(child))
+                await child.capture(ComponentUnmountedEvent(child))
             for child in current - previous:
-                mount_child(child_lookup[child])
+                await mount_child(child_lookup[child])
 
             previous_collapsed_children = current_collapsed_children
 
@@ -1194,7 +1221,9 @@ class ColumnInstance(ComponentInstance["Column"]):
                 w
                 for w in [
                     Watcher.ifref(
-                        collapsed_children, mount_children, trigger_init=True
+                        collapsed_children,
+                        lambda cs: asyncio.create_task(mount_children(cs)),
+                        trigger_init=True,
                     ),
                 ]
                 if w is not None
@@ -1245,7 +1274,7 @@ class RectInstance(ComponentInstance["Rect"]):
         self._rect.color = color
 
     @event_handler(ComponentMountedEvent)
-    def component_mounted_handler(self, _: ComponentMountedEvent):
+    async def component_mounted_handler(self, _: ComponentMountedEvent):
         x = use_acc_offset_x(self)
         y = use_acc_offset_y(self)
         width = computed(
@@ -1379,7 +1408,7 @@ class RoundedRectInstance(ComponentInstance["RoundedRect"]):
         self._vertex_list.color[:] = color * 4
 
     @event_handler(ComponentMountedEvent)
-    def component_mounted_handler(self, _: ComponentMountedEvent):
+    async def component_mounted_handler(self, _: ComponentMountedEvent):
         x = use_acc_offset_x(self)
         y = use_acc_offset_y(self)
         width = computed(
@@ -1465,7 +1494,7 @@ class ImageInstance(ComponentInstance["Image"]):
         self._sprite.image = image
 
     @event_handler(ComponentMountedEvent)
-    def component_mounted_handler(self, _: ComponentMountedEvent):
+    async def component_mounted_handler(self, _: ComponentMountedEvent):
         x = use_acc_offset_x(self)
         y = use_acc_offset_y(self)
         image = computed(lambda: loader.image(unref(self.component.name)))
@@ -1504,7 +1533,7 @@ class ImageInstance(ComponentInstance["Image"]):
         )
 
     @event_handler(ComponentUnmountedEvent)
-    def component_unmounted_handler(self, event: ComponentUnmountedEvent):
+    async def component_unmounted_handler(self, event: ComponentUnmountedEvent):
         super().component_unmounted_handler(event)
         self._sprite.delete()
         del self._sprite
@@ -1568,7 +1597,7 @@ class LabelInstance(ComponentInstance["Label"]):
         self._label.trigger()
 
     @event_handler(ComponentMountedEvent)
-    def component_mounted_handler(self, _: ComponentMountedEvent):
+    async def component_mounted_handler(self, _: ComponentMountedEvent):
         x = use_acc_offset_x(self)
         y = use_acc_offset_y(self)
         draw_width = computed(
@@ -1721,7 +1750,7 @@ class InputInstance(ComponentInstance["Input"]):
         self._layout.trigger()
 
     @event_handler(ComponentMountedEvent)
-    def component_mounted_handler(self, _: ComponentMountedEvent):
+    async def component_mounted_handler(self, _: ComponentMountedEvent):
         x = use_acc_offset_x(self)
         y = use_acc_offset_y(self)
         draw_width = computed(
@@ -1907,13 +1936,13 @@ class InputInstance(ComponentInstance["Input"]):
         self._mark.value = self._document.get_paragraph_start(point_position)
 
     @event_handler(ComponentFocusEvent)
-    def component_focus_handler(self, _: ComponentFocusEvent):
+    async def component_focus_handler(self, _: ComponentFocusEvent):
         self._visible.value = True
         self._caret_visible.value = True
         pyglet.clock.schedule_interval(self._blink, 0.5)
 
     @event_handler(ComponentBlurEvent)
-    def component_blur_handler(self, _: ComponentBlurEvent):
+    async def component_blur_handler(self, _: ComponentBlurEvent):
         self._position.value = 0
         self._mark.value = None
         pyglet.clock.unschedule(self._blink)
@@ -1921,16 +1950,18 @@ class InputInstance(ComponentInstance["Input"]):
         self._caret_visible.value = False
 
     @event_handler(TextEvent)
-    def text_handler(self, event: TextEvent):
+    async def text_handler(self, event: TextEvent):
         position = unref(self._position_clamped)
         new_text = event.text.replace("\r", "\n")
         text = unref(self.component.text)
         self._position.value = position + len(new_text)
-        self.capture(
+        await self.capture(
             InputEvent(self, "".join((text[:position], new_text, text[position:])))
         )
 
-    def _text_motion_handler(self, event: TextMotionEvent | TextMotionSelectEvent):
+    async def _text_motion_handler(
+        self, event: TextMotionEvent | TextMotionSelectEvent
+    ):
         select = isinstance(event, TextMotionSelectEvent)
         position = unref(self._position_clamped)
         mark = unref(self._mark_clamped)
@@ -1943,20 +1974,20 @@ class InputInstance(ComponentInstance["Input"]):
         match event.motion:
             case key.MOTION_BACKSPACE:
                 if mark is not None:
-                    self.capture(InputEvent(self, self.delete_selection()))
+                    await self.capture(InputEvent(self, self.delete_selection()))
                     return
                 elif position > 0:
                     self._position.value = position - 1
-                    self.capture(
+                    await self.capture(
                         InputEvent(self, text[: position - 1] + text[position:])
                     )
                     return
             case key.MOTION_DELETE:
                 if mark is not None:
-                    self.capture(InputEvent(self, self.delete_selection()))
+                    await self.capture(InputEvent(self, self.delete_selection()))
                     return
                 elif position < len(text):
-                    self.capture(
+                    await self.capture(
                         InputEvent(self, text[:position] + text[position + 1 :])
                     )
                     return
@@ -2039,16 +2070,16 @@ class InputInstance(ComponentInstance["Input"]):
                     self._position.value = 0
 
     @event_handler(TextMotionEvent)
-    def text_motion_handler(self, event: TextMotionEvent):
-        self._text_motion_handler(event)
+    async def text_motion_handler(self, event: TextMotionEvent):
+        await self._text_motion_handler(event)
 
     @event_handler(TextMotionSelectEvent)
-    def text_motion_select_handler(self, event: TextMotionSelectEvent):
-        self._text_motion_handler(event)
+    async def text_motion_select_handler(self, event: TextMotionSelectEvent):
+        await self._text_motion_handler(event)
 
     @event_handler(MousePressEvent)
-    def mouse_press_handler(self, event: MousePressEvent):
-        ComponentInstance.focus = self
+    async def mouse_press_handler(self, event: MousePressEvent):
+        await ComponentInstance.set_focus(self)
         t = time.time()
         if t - self._click_time > 0.25:
             self._click_count = 0
@@ -2065,7 +2096,7 @@ class InputInstance(ComponentInstance["Input"]):
         return StopPropagate
 
     @event_handler(MouseDragEvent)
-    def mouse_drag_handler(self, event: MouseDragEvent):
+    async def mouse_drag_handler(self, event: MouseDragEvent):
         if unref(self._mark_clamped) is None:
             self._mark.value = unref(self._position_clamped)
         self.select_to_point(event)
@@ -2096,6 +2127,15 @@ class Input(Component):
 
     def get_instance(self):
         return InputInstance(component=self)
+
+
+loop = asyncio.get_event_loop()
+pyglet.clock.schedule(lambda dt: loop.run_until_complete(asyncio.sleep(0)))
+
+
+@pyglet.app.event_loop.event
+def on_exit():
+    loop.close()
 
 
 @dataclass
@@ -2129,56 +2169,78 @@ class Window:
         @self._window.event
         def on_key_press(symbol, modifiers):
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.capture(KeyPressEvent(scene_instance, symbol, modifiers))
+                loop.run_until_complete(
+                    scene_instance.capture(
+                        KeyPressEvent(scene_instance, symbol, modifiers)
+                    )
+                )
 
         @self._window.event
         def on_key_release(symbol, modifiers):
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.capture(
-                    KeyReleaseEvent(scene_instance, symbol, modifiers)
+                loop.run_until_complete(
+                    scene_instance.capture(
+                        KeyReleaseEvent(scene_instance, symbol, modifiers)
+                    )
                 )
 
         @self._window.event
         def on_mouse_drag(x, y, dx, dy, buttons, modifiers):
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.capture(
-                    MouseDragEvent(scene_instance, x, y, dx, dy, buttons, modifiers)
+                loop.run_until_complete(
+                    scene_instance.capture(
+                        MouseDragEvent(scene_instance, x, y, dx, dy, buttons, modifiers)
+                    )
                 )
 
         @self._window.event
         def on_mouse_enter(x, y):
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.capture(MouseEnterEvent(scene_instance, x, y))
+                loop.run_until_complete(
+                    scene_instance.capture(MouseEnterEvent(scene_instance, x, y))
+                )
 
         @self._window.event
         def on_mouse_leave(x, y):
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.capture(MouseLeaveEvent(scene_instance, x, y))
+                loop.run_until_complete(
+                    scene_instance.capture(MouseLeaveEvent(scene_instance, x, y))
+                )
 
         @self._window.event
         def on_mouse_motion(x, y, dx, dy):
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.capture(MouseMotionEvent(scene_instance, x, y, dx, dy))
+                loop.run_until_complete(
+                    scene_instance.capture(
+                        MouseMotionEvent(scene_instance, x, y, dx, dy)
+                    )
+                )
 
         @self._window.event
         def on_mouse_press(x, y, button, modifiers):
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.capture(
-                    MousePressEvent(scene_instance, x, y, button, modifiers)
+                loop.run_until_complete(
+                    scene_instance.capture(
+                        MousePressEvent(scene_instance, x, y, button, modifiers)
+                    )
                 )
 
         @self._window.event
         def on_mouse_release(x, y, button, modifiers):
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.capture(
-                    MouseReleaseEvent(scene_instance, x, y, button, modifiers)
+                loop.run_until_complete(
+                    scene_instance.capture(
+                        MouseReleaseEvent(scene_instance, x, y, button, modifiers)
+                    )
                 )
 
         @self._window.event
         def on_mouse_scroll(x, y, scroll_x, scroll_y):
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.capture(
-                    MouseScrollEvent(scene_instance, x, y, scroll_x, scroll_y)
+                loop.run_until_complete(
+                    scene_instance.capture(
+                        MouseScrollEvent(scene_instance, x, y, scroll_x, scroll_y)
+                    )
                 )
 
         @self._window.event
@@ -2189,17 +2251,25 @@ class Window:
         @self._window.event
         def on_text(text):
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.capture(TextEvent(scene_instance, text))
+                loop.run_until_complete(
+                    scene_instance.capture(TextEvent(scene_instance, text))
+                )
 
         @self._window.event
         def on_text_motion(motion):
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.capture(TextMotionEvent(scene_instance, motion))
+                loop.run_until_complete(
+                    scene_instance.capture(TextMotionEvent(scene_instance, motion))
+                )
 
         @self._window.event
         def on_text_motion_select(motion):
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.capture(TextMotionSelectEvent(scene_instance, motion))
+                loop.run_until_complete(
+                    scene_instance.capture(
+                        TextMotionSelectEvent(scene_instance, motion)
+                    )
+                )
 
     @property
     def scene(self):
@@ -2211,14 +2281,18 @@ class Window:
         if (scene_instance := self._scene_instance) is not None:
             self._scene = new_scene
             self._scene_instance = new_scene_instance
-            scene_instance.capture(ComponentUnmountedEvent(scene_instance))
+            loop.run_until_complete(
+                scene_instance.capture(ComponentUnmountedEvent(scene_instance))
+            )
         else:
             self._scene = new_scene
             self._scene_instance = new_scene_instance
         new_scene_instance.before_mounted_data.value = (
             BeforeMountedComponentInstanceData(0, 0, 0, 0, 1, 1, 1, 1)
         )
-        new_scene_instance.capture(ComponentMountedEvent(new_scene_instance))
+        loop.run_until_complete(
+            new_scene_instance.capture(ComponentMountedEvent(new_scene_instance))
+        )
 
     @property
     def scene_instance(self):

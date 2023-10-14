@@ -13,7 +13,7 @@ from ...shared import models
 def create_player(window: Window, client: BattleshipClientThread, **kwargs):
     name = Ref("")
 
-    def on_create_player_button(_e):
+    async def on_create_player_button(_e):
         def on_player_created(player: models.Player):
             nonlocal window
             nonlocal client

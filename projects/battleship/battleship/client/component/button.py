@@ -25,7 +25,7 @@ def label_button(
     hover = Ref(False)
     bg_color = computed(lambda: unref(hover_color) if unref(hover) else unref(color))
 
-    def on_mounted(event: ComponentMountedEvent):
+    async def on_mounted(event: ComponentMountedEvent):
         event.instance.bound_watchers.update(
             [
                 w
@@ -34,8 +34,8 @@ def label_button(
             ]
         )
 
-    def on_click(event: MousePressEvent):
-        event.instance.capture(ClickEvent(event.instance))
+    async def on_click(event: MousePressEvent):
+        await event.instance.capture(ClickEvent(event.instance))
 
     return Component.render_xml(
         """

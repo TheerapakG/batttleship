@@ -25,7 +25,7 @@ def main_menu(window: Window, client: BattleshipClientThread, **kwargs):
         )
     )
 
-    def on_public_room_match_button(_e):
+    async def on_public_room_match_button(_e):
         room_id_future_ref = Ref[ComputedFuture[models.RoomId | None] | None](None)
 
         def set_room_id_future(player: models.Player | None):
