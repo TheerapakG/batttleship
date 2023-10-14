@@ -143,9 +143,7 @@ for value in server_clss.values():
         new_clss.append(body_stmt)
 
 new_imports: list[ast.Import | ast.ImportFrom] = [
-    ast.ImportFrom(
-        "collections.abc", [ast.alias("AsyncIterator"), ast.alias("Awaitable")], 0
-    ),
+    ast.ImportFrom("collections.abc", [ast.alias("AsyncIterator")], 0),
     ast.ImportFrom("contextlib", [ast.alias("AbstractContextManager")], 0),
     ast.ImportFrom("dataclasses", [ast.alias("dataclass")], 0),
     ast.ImportFrom(

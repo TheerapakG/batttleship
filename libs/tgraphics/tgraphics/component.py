@@ -2270,24 +2270,19 @@ class Window:
     def scene(self):
         return self._scene
 
-    @scene.setter
-    def scene(self, new_scene: Component):
+    async def set_scene(self, new_scene: Component):
         new_scene_instance = new_scene.get_instance()
         if (scene_instance := self._scene_instance) is not None:
             self._scene = new_scene
             self._scene_instance = new_scene_instance
-            loop.create_task(
-                scene_instance.capture(ComponentUnmountedEvent(scene_instance))
-            )
+            await scene_instance.capture(ComponentUnmountedEvent(scene_instance))
         else:
             self._scene = new_scene
             self._scene_instance = new_scene_instance
         new_scene_instance.before_mounted_data.value = (
             BeforeMountedComponentInstanceData(0, 0, 0, 0, 1, 1, 1, 1)
         )
-        loop.create_task(
-            new_scene_instance.capture(ComponentMountedEvent(new_scene_instance))
-        )
+        await new_scene_instance.capture(ComponentMountedEvent(new_scene_instance))
 
     @property
     def scene_instance(self):

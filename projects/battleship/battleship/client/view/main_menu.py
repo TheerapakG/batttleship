@@ -36,7 +36,7 @@ def main_menu(window: Window, client: BattleshipClient, **kwargs):
 
         from .lobby import lobby
 
-        window.scene = lobby(window, client, room)
+        await window.set_scene(lobby(window, client, room))
 
     return Component.render_xml(
         """

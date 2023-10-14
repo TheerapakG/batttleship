@@ -1,6 +1,6 @@
+import asyncio
 from collections import deque
-from collections.abc import Callable
-from concurrent.futures import Future
+from collections.abc import Awaitable, Callable
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from queue import Empty, SimpleQueue
@@ -138,54 +138,23 @@ def computed(func: Callable[[], T]):
     return computed_instance
 
 
-_future_update_queue = SimpleQueue[tuple[weakref.ref["ComputedFuture"], Any]]()
+class ComputedAsync(Generic[T_contra], ReadRef[T_contra | None]):
+    _coro: Awaitable[T_contra]
 
-
-def update_computed_future(_dt):
-    try:
-        while True:
-            computed_fut_weak, value = _future_update_queue.get_nowait()
-            if (computed_fut := computed_fut_weak()) is not None:
-                computed_fut._set_value(value)  # pylint: disable=W0212
-    except Empty:
-        return
-
-
-pyglet.clock.schedule(update_computed_future)
-
-
-class ComputedFuture(ReadRef[T_contra | None]):
-    _done: bool
-    _fut: Future[T_contra]
-    _cbs: list[Callable[[T_contra], Any]]
-
-    def __init__(self, fut: Future[T_contra]):
+    def __init__(self, coro: Awaitable[T_contra]):
         super().__init__(None)
-        self._done = False
-        self._cbs = []
         self._value = None
-        self.set_future(fut)
+        self.set_awaitable(coro)
 
-    def set_future(self, fut: Future[T_contra]):
-        self._fut = fut
-        self._fut.add_done_callback(
-            lambda fut: _future_update_queue.put((weakref.ref(self), fut.result()))
+    def set_awaitable(self, coro: Awaitable[T_contra]):
+        self._coro = coro
+        asyncio.create_task(coro).add_done_callback(
+            lambda task: self._set_value(task.result())
         )
 
-    def add_done_callback(self, fun: Callable[[T_contra], Any]):
-        if self._done:
-            fun(self._value)
-        self._cbs.append(fun)
-
     def _set_value(self, new_value: T_contra):
-        new = False
         if self._value != new_value:
-            new = True
             self._value = new_value
-        self._done = True
-        for cb in self._cbs:
-            cb(new_value)
-        if new:
             self.update()
 
 

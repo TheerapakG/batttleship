@@ -5,8 +5,6 @@ from dotenv import load_dotenv
 import pyglet
 
 from tgraphics.component import Window, loop
-from tgraphics.reactivity import ComputedFuture, computed, unref
-from tsocket.shared import Empty
 
 
 from .client import BattleshipClient
@@ -31,11 +29,15 @@ if __name__ == "__main__":
 
         from .view.main_menu import main_menu
 
-        window.scene = main_menu(window=window, client=client)
+        loop.run_until_complete(
+            window.set_scene(main_menu(window=window, client=client))
+        )
     except Exception:  # pylint: disable=W0718
         from .view.create_player import create_player
 
-        window.scene = create_player(window=window, client=client)
+        loop.run_until_complete(
+            window.set_scene(create_player(window=window, client=client))
+        )
     pyglet.app.run()
     loop.run_until_complete(client.disconnect())
     loop.close()

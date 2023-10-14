@@ -19,7 +19,7 @@ def create_player(window: Window, client: BattleshipClient, **kwargs):
 
         from .main_menu import main_menu
 
-        window.scene = main_menu(window=window, client=client)
+        await window.set_scene(main_menu(window=window, client=client))
 
     return Component.render_xml(
         """
