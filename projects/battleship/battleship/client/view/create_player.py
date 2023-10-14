@@ -33,9 +33,9 @@ def create_player(window: Window, client: BattleshipClientThread, **kwargs):
             <LabelButton 
                 text="'Create User'" 
                 text_color="colors['white']"
-                color="colors['cyan'][400]"
-                hover_color="colors['cyan'][500]"
-                width="128"
+                color="colors['cyan'][500]"
+                hover_color="colors['cyan'][600]"
+                width="128 + 64"
                 height="32 + 4"
                 handle-ClickEvent="on_create_player_button"
             />

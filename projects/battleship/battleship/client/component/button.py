@@ -16,6 +16,10 @@ def label_button(
     hover_color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]],
     width: float | ReadRef[float],
     height: float | ReadRef[float],
+    font_name: str | None | ReadRef[str | None] = None,
+    font_size: int | float | None | ReadRef[int | float | None] = None,
+    bold: bool | ReadRef[bool] = False,
+    italic: bool | ReadRef[bool] = False,
     **kwargs
 ):
     radius = computed(lambda: unref(height) / 2)
@@ -39,7 +43,7 @@ def label_button(
         """
         <Layer handle-ComponentMountedEvent="on_mounted" handle-MousePressEvent="on_click">
             <RoundedRect width="width" height="height" radius="radius" color="bg_color" />
-            <Label text="text" color="text_color" />
+            <Label text="text" color="text_color" font_name="font_name" font_size="font_size" bold="bold" italic="italic" />
         </Layer>
         """,
         **kwargs,
