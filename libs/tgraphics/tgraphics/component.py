@@ -254,7 +254,7 @@ class ComponentInstanceMeta(type):
         if focus is instance:
             return StopPropagate
 
-        if instance.capture(ComponentFocusEvent()) is StopPropagate:
+        if instance.capture(ComponentFocusEvent(instance)) is StopPropagate:
             return StopPropagate
 
         if cls.blur() is StopPropagate:  # pylint: disable=E1120
@@ -265,7 +265,7 @@ class ComponentInstanceMeta(type):
     def blur(cls):
         if (focus := unref(cls._focus)) is not None:
             focus: ComponentInstance  # type: ignore[no-redef]
-            if focus.capture(ComponentBlurEvent()) is StopPropagate:
+            if focus.capture(ComponentBlurEvent(focus)) is StopPropagate:
                 return StopPropagate
             cls._focus.value = None
 
@@ -305,21 +305,37 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
     bound_watchers: set[Watcher] = field(init=False, default_factory=set)
 
     def __post_init__(self):
-        # TODO: merge capturer / handler
         capturers = self._flat_event_capturers.copy()
         handlers = self._flat_event_handlers.copy()
-        capturers.update(
-            {
-                event: lambda _, e, capturer=capturer: capturer(e)
-                for event, capturer in self.component.event_capturers.items()
-            }
-        )
-        handlers.update(
-            {
-                event: lambda _, e, handler=handler: handler(e)
-                for event, handler in self.component.event_handlers.items()
-            }
-        )
+        for event, capturer in self.component.event_capturers.items():
+            if (existed_capturer := capturers.get(event, None)) is not None:
+
+                def merged_capturer(
+                    instance,
+                    event,
+                    existed_capturer=existed_capturer,
+                    capturer=capturer,
+                ):
+                    if existed_capturer(instance, event) is StopPropagate:
+                        return StopPropagate
+                    return capturer(event)
+
+                capturers[event] = merged_capturer
+            else:
+                capturers[event] = lambda _, e, capturer=capturer: capturer(e)
+        for event, handler in self.component.event_handlers.items():
+            if (existed_handler := handlers.get(event, None)) is not None:
+
+                def merged_handler(
+                    instance, event, existed_handler=existed_handler, handler=handler
+                ):
+                    if existed_handler(instance, event) is StopPropagate:
+                        return StopPropagate
+                    return handler(event)
+
+                handlers[event] = merged_handler
+            else:
+                handlers[event] = lambda _, e, handler=handler: handler(e)
         self.event_capturers = capturers
         self.event_handlers = handlers
 
@@ -380,6 +396,7 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
                 child.capture(
                     replace(
                         event,
+                        instance=child,
                         x=(event.x - unref(use_offset_x(child)))
                         / unref(use_scale_x(self)),
                         y=(event.y - unref(use_offset_y(child)))
@@ -405,6 +422,7 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
             child: "ComponentInstance"  # type: ignore[no-redef]
             child.capture(
                 MouseLeaveEvent(
+                    child,
                     (p.x - unref(use_offset_x(child))) / unref(use_scale_x(self)),
                     (p.y - unref(use_offset_y(child))) / unref(use_scale_y(self)),
                 )
@@ -417,6 +435,7 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
                 self._process_child_leave(p, new_child)
                 new_child.capture(
                     MouseEnterEvent(
+                        new_child,
                         (p.x - unref(use_offset_x(new_child)))
                         / unref(use_scale_x(self)),
                         (p.y - unref(use_offset_y(new_child)))
@@ -443,6 +462,7 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
                 child.capture(
                     replace(
                         event,
+                        instance=child,
                         x=(event.x - unref(use_offset_x(child)))
                         / unref(use_scale_x(self)),
                         y=(event.y - unref(use_offset_y(child)))
@@ -470,7 +490,7 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
         for watcher in self.bound_watchers:
             watcher.unwatch()
         for child in unref(use_children(self)):
-            unref(child).capture(ComponentUnmountedEvent())
+            unref(child).capture(ComponentUnmountedEvent(unref(child)))
         self.bound_watchers.clear()
         self.before_mounted_data.value = None
         self.after_mounted_data.value = None
@@ -836,7 +856,7 @@ class PadInstance(ComponentInstance["Pad"]):
                 use_acc_scale_x(self),
                 use_acc_scale_y(self),
             )
-            child.capture(ComponentMountedEvent())
+            child.capture(ComponentMountedEvent(child))
 
         self.bound_watchers.update(
             [
@@ -915,7 +935,7 @@ class LayerInstance(ComponentInstance["Layer"]):
                 use_acc_scale_x(self),
                 use_acc_scale_y(self),
             )
-            child.capture(ComponentMountedEvent())
+            child.capture(ComponentMountedEvent(child))
 
         def mount_children(current_collapsed_children: list[ComponentInstance]):
             nonlocal previous_collapsed_children
@@ -925,7 +945,7 @@ class LayerInstance(ComponentInstance["Layer"]):
             current = set(current_collapsed_children)
             previous = set(previous_collapsed_children)
             for child in previous - current:
-                child.capture(ComponentUnmountedEvent())
+                child.capture(ComponentUnmountedEvent(child))
             for child in current - previous:
                 mount_child(child_lookup[child])
 
@@ -1016,7 +1036,7 @@ class RowInstance(ComponentInstance["Row"]):
                 use_acc_scale_x(self),
                 use_acc_scale_y(self),
             )
-            child.capture(ComponentMountedEvent())
+            child.capture(ComponentMountedEvent(child))
 
         def mount_children(current_collapsed_children: list[ComponentInstance]):
             nonlocal previous_collapsed_children
@@ -1026,7 +1046,7 @@ class RowInstance(ComponentInstance["Row"]):
             current = set(current_collapsed_children)
             previous = set(previous_collapsed_children)
             for child in previous - current:
-                child.capture(ComponentUnmountedEvent())
+                child.capture(ComponentUnmountedEvent(child))
             for child in current - previous:
                 mount_child(child_lookup[child])
 
@@ -1118,7 +1138,7 @@ class ColumnInstance(ComponentInstance["Column"]):
                 use_acc_scale_x(self),
                 use_acc_scale_y(self),
             )
-            child.capture(ComponentMountedEvent())
+            child.capture(ComponentMountedEvent(child))
 
         def mount_children(current_collapsed_children: list[ComponentInstance]):
             nonlocal previous_collapsed_children
@@ -1128,7 +1148,7 @@ class ColumnInstance(ComponentInstance["Column"]):
             current = set(current_collapsed_children)
             previous = set(previous_collapsed_children)
             for child in previous - current:
-                child.capture(ComponentUnmountedEvent())
+                child.capture(ComponentUnmountedEvent(child))
             for child in current - previous:
                 mount_child(child_lookup[child])
 
@@ -1877,7 +1897,9 @@ class InputInstance(ComponentInstance["Input"]):
         new_text = event.text.replace("\r", "\n")
         text = unref(self.component.text)
         self._position.value = position + len(new_text)
-        self.capture(InputEvent("".join((text[:position], new_text, text[position:]))))
+        self.capture(
+            InputEvent(self, "".join((text[:position], new_text, text[position:])))
+        )
 
     def _text_motion_handler(self, event: TextMotionEvent | TextMotionSelectEvent):
         select = isinstance(event, TextMotionSelectEvent)
@@ -1892,18 +1914,22 @@ class InputInstance(ComponentInstance["Input"]):
         match event.motion:
             case key.MOTION_BACKSPACE:
                 if mark is not None:
-                    self.capture(InputEvent(self.delete_selection()))
+                    self.capture(InputEvent(self, self.delete_selection()))
                     return
                 elif position > 0:
                     self._position.value = position - 1
-                    self.capture(InputEvent(text[: position - 1] + text[position:]))
+                    self.capture(
+                        InputEvent(self, text[: position - 1] + text[position:])
+                    )
                     return
             case key.MOTION_DELETE:
                 if mark is not None:
-                    self.capture(InputEvent(self.delete_selection()))
+                    self.capture(InputEvent(self, self.delete_selection()))
                     return
                 elif position < len(text):
-                    self.capture(InputEvent(text[:position] + text[position + 1 :]))
+                    self.capture(
+                        InputEvent(self, text[:position] + text[position + 1 :])
+                    )
                     return
 
         if mark is not None and not select:
@@ -2074,47 +2100,57 @@ class Window:
         @self._window.event
         def on_key_press(symbol, modifiers):
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.capture(KeyPressEvent(symbol, modifiers))
+                scene_instance.capture(KeyPressEvent(scene_instance, symbol, modifiers))
 
         @self._window.event
         def on_key_release(symbol, modifiers):
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.capture(KeyReleaseEvent(symbol, modifiers))
+                scene_instance.capture(
+                    KeyReleaseEvent(scene_instance, symbol, modifiers)
+                )
 
         @self._window.event
         def on_mouse_drag(x, y, dx, dy, buttons, modifiers):
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.capture(MouseDragEvent(x, y, dx, dy, buttons, modifiers))
+                scene_instance.capture(
+                    MouseDragEvent(scene_instance, x, y, dx, dy, buttons, modifiers)
+                )
 
         @self._window.event
         def on_mouse_enter(x, y):
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.capture(MouseEnterEvent(x, y))
+                scene_instance.capture(MouseEnterEvent(scene_instance, x, y))
 
         @self._window.event
         def on_mouse_leave(x, y):
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.capture(MouseLeaveEvent(x, y))
+                scene_instance.capture(MouseLeaveEvent(scene_instance, x, y))
 
         @self._window.event
         def on_mouse_motion(x, y, dx, dy):
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.capture(MouseMotionEvent(x, y, dx, dy))
+                scene_instance.capture(MouseMotionEvent(scene_instance, x, y, dx, dy))
 
         @self._window.event
         def on_mouse_press(x, y, button, modifiers):
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.capture(MousePressEvent(x, y, button, modifiers))
+                scene_instance.capture(
+                    MousePressEvent(scene_instance, x, y, button, modifiers)
+                )
 
         @self._window.event
         def on_mouse_release(x, y, button, modifiers):
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.capture(MouseReleaseEvent(x, y, button, modifiers))
+                scene_instance.capture(
+                    MouseReleaseEvent(scene_instance, x, y, button, modifiers)
+                )
 
         @self._window.event
         def on_mouse_scroll(x, y, scroll_x, scroll_y):
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.capture(MouseScrollEvent(x, y, scroll_x, scroll_y))
+                scene_instance.capture(
+                    MouseScrollEvent(scene_instance, x, y, scroll_x, scroll_y)
+                )
 
         @self._window.event
         def on_resize(width, height):
@@ -2124,17 +2160,17 @@ class Window:
         @self._window.event
         def on_text(text):
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.capture(TextEvent(text))
+                scene_instance.capture(TextEvent(scene_instance, text))
 
         @self._window.event
         def on_text_motion(motion):
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.capture(TextMotionEvent(motion))
+                scene_instance.capture(TextMotionEvent(scene_instance, motion))
 
         @self._window.event
         def on_text_motion_select(motion):
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.capture(TextMotionSelectEvent(motion))
+                scene_instance.capture(TextMotionSelectEvent(scene_instance, motion))
 
     @property
     def scene(self):
@@ -2146,14 +2182,14 @@ class Window:
         if (scene_instance := self._scene_instance) is not None:
             self._scene = new_scene
             self._scene_instance = new_scene_instance
-            scene_instance.capture(ComponentUnmountedEvent())
+            scene_instance.capture(ComponentUnmountedEvent(scene_instance))
         else:
             self._scene = new_scene
             self._scene_instance = new_scene_instance
         new_scene_instance.before_mounted_data.value = (
             BeforeMountedComponentInstanceData(0, 0, 0, 0, 1, 1, 1, 1)
         )
-        new_scene_instance.capture(ComponentMountedEvent())
+        new_scene_instance.capture(ComponentMountedEvent(new_scene_instance))
 
     @property
     def scene_instance(self):

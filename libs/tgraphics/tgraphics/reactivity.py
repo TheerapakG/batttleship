@@ -102,6 +102,9 @@ class Ref(ReadRef[T_contra]):
 
     @value.setter
     def value(self, new_value: T_contra):
+        self.set_value(new_value)
+
+    def set_value(self, new_value: T_contra):
         if self._value != new_value:
             self._value = new_value
             self.update()

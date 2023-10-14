@@ -3,6 +3,7 @@ from tgraphics.component import Component, Window
 from tgraphics.reactivity import ComputedFuture, Ref, unref
 
 from .. import store
+from ..component.button import label_button
 from ..client_thread import BattleshipClientThread
 from ...shared import models
 
@@ -29,10 +30,14 @@ def create_player(window: Window, client: BattleshipClientThread, **kwargs):
     return Component.render_xml(
         """
         <Column gap="16" width="window.width" height="window.height">
-            <Label 
+            <LabelButton 
                 text="'Create User'" 
-                color="colors['white']" 
-                handle-MousePressEvent="on_create_player_button"
+                text_color="colors['white']"
+                color="colors['cyan'][400]"
+                hover_color="colors['cyan'][500]"
+                width="128"
+                height="32 + 4"
+                handle-ClickEvent="on_create_player_button"
             />
             <Layer>
                 <RoundedRect color="colors['white']" width="260" height="36" radius="18" />

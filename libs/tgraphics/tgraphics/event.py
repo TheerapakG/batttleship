@@ -1,5 +1,8 @@
-from dataclasses import dataclass
-from typing import Any, ClassVar, Generic, Protocol, TypeVar
+from dataclasses import dataclass, field as _field
+from typing import Any, ClassVar, Generic, Protocol, TypeVar, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .component import ComponentInstance
 
 T = TypeVar("T")
 
@@ -24,7 +27,7 @@ class EventMeta(type):
 
 @dataclass
 class Event(metaclass=EventMeta):
-    pass
+    instance: "ComponentInstance"
 
 
 @dataclass
@@ -78,9 +81,9 @@ class ModelEvent(Event, Generic[T]):
     value: T
 
 
+@dataclass
 class InputEvent(ModelEvent[str]):
-    def __init__(self, value: str):
-        super().__init__("text", value)
+    field: str = _field(init=False, default="text")
 
 
 @dataclass
