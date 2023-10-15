@@ -35,25 +35,25 @@ def create_player_modal(window: Window, client: BattleshipClient, **kwargs):
                         <LabelButton 
                             text="'Create User'" 
                             text_color="colors['white']"
-                            color="colors['cyan'][500]"
-                            hover_color="colors['cyan'][600]"
-                            t-template="w[48] | h[9]"
+                            color="colors['teal'][400]"
+                            hover_color="colors['teal'][500]"
+                            t-template="w[48] | h[12]"
                             handle-ClickEvent="on_create_player_button"
                         />
                         <Layer>
-                            <RoundedRect t-template="color['cyan'][200] | w[64] | h[9]" />
+                            <RoundedRect t-template="color['teal'][100] | w[64] | h[9]" />
                             <Input
                                 t-model-text="name"
                                 color="colors['black']"
                                 caret_color="colors['black']"
-                                selection_background_color="colors['cyan'][300]"
+                                selection_background_color="colors['teal'][300]"
                                 t-template="w[56] | h[5]"
                             />
                         </Layer>
                     </Column>
                 </Layer>
                 <Layer>
-                    <RoundedRect t-template="color['cyan'][500] | w[128] | h[8] | r_b[0] | r_t[8]" />
+                    <RoundedRect t-template="color['teal'][400] | w[128] | h[12] | r_b[0] | r_t[8]" />
                     <Label
                         text="'Registration'" 
                         t-template="color['white']"
