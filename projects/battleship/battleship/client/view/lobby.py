@@ -12,17 +12,17 @@ from ...shared import models
 
 @Component.register("Lobby")
 def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwargs):
-    player_ids = Ref(room.players)
+    player_infos = Ref(room.players)
 
     async def subscribe_player_join():
-        async for player_id in client.on_room_join():
-            player_ids.value.append(player_id)
-            player_ids.trigger()
+        async for player_info in client.on_room_join():
+            player_infos.value.append(player_info)
+            player_infos.trigger()
 
     async def subscribe_player_leave():
-        async for player_id in client.on_room_leave():
-            player_ids.value.remove(player_id)
-            player_ids.trigger()
+        async for player_info in client.on_room_leave():
+            player_infos.value.remove(player_info)
+            player_infos.trigger()
 
     async def on_mounted(event: ComponentMountedEvent):
         event.instance.bound_tasks.update(
@@ -41,8 +41,8 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
             handle-ComponentMountedEvent="on_mounted"
         >
             <Label 
-                t-for="player_id in player_ids"
-                text="str(player_id)" 
+                t-for="player_info in player_infos"
+                text="str(player_info)" 
                 color="colors['white']" 
             />
         </Column>

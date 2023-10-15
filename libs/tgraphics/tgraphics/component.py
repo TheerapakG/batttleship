@@ -646,6 +646,10 @@ def is_mounted(instance: ComponentInstance):
     )
 
 
+class RenderError(Exception):
+    pass
+
+
 class ComponentMeta(type):
     _components: ClassVar[dict[str, Callable[..., "Component"]]] = dict()
 
@@ -705,7 +709,7 @@ class ComponentMeta(type):
                         directive_value: str,
                     ):
                         for_var, for_values = [
-                            s.strip() for s in directive_value.split("in")
+                            s.strip() for s in directive_value.split(" in ")
                         ]
                         eval_for_values = eval(
                             for_values, frame.frame.f_globals, frame_locals
@@ -863,9 +867,12 @@ class ComponentMeta(type):
     @classmethod
     def render_xml(mcs, xml: str, **kwargs) -> "Component":
         """MAKE SURE THAT THE INPUTTED XML IS SAFE"""
-        return mcs.render_root_element(
-            ElementTree.fromstring(xml), inspect.stack()[1], **kwargs
-        )
+        try:
+            return mcs.render_root_element(
+                ElementTree.fromstring(xml), inspect.stack()[1], **kwargs
+            )
+        except Exception as e:
+            raise RenderError() from e
 
 
 @dataclass(kw_only=True)

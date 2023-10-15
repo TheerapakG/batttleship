@@ -17,7 +17,7 @@ class Room:
     id: UUID  # pylint: disable=C0103
     server: "BattleshipServer"
     lock: asyncio.Lock = field(init=False, default_factory=asyncio.Lock)
-    players: set[models.PlayerId] = field(init=False, default_factory=set)
+    players: set[models.PlayerInfo] = field(init=False, default_factory=set)
     boards: dict[models.PlayerId, models.BoardId] = field(
         init=False, default_factory=dict
     )
@@ -27,29 +27,35 @@ class Room:
 
     async def add_player(self, player_id: models.PlayerId):
         async with self.lock:
-            self.server.on_session_leave(
-                self.server.known_player_session[player_id], self.remove_session
-            )
+            session = self.server.known_player_session[player_id]
+            self.server.on_session_leave(session, self.remove_session)
+            player_info = await self.server.player_info_get(session, player_id)
             async with asyncio.TaskGroup() as tg:
-                for other_player_id in self.players:
+                for other_player_info in self.players:
                     tg.create_task(
                         self.server.on_room_join(
-                            self.server.known_player_session[other_player_id], player_id
+                            self.server.known_player_session[
+                                models.PlayerId.from_player_info(other_player_info)
+                            ],
+                            player_info,
                         )
                     )
-            self.players.add(player_id)
+            self.players.add(player_info)
 
     async def remove_player(self, player_id: models.PlayerId):
         async with self.lock:
-            self.server.off_session_leave(
-                self.server.known_player_session[player_id], self.remove_session
-            )
-            self.players.remove(player_id)
+            session = self.server.known_player_session[player_id]
+            self.server.off_session_leave(session, self.remove_session)
+            player_info = await self.server.player_info_get(session, player_id)
+            self.players.remove(player_info)
             async with asyncio.TaskGroup() as tg:
-                for other_player_id in self.players:
+                for other_player_info in self.players:
                     tg.create_task(
                         self.server.on_room_leave(
-                            self.server.known_player_session[other_player_id], player_id
+                            self.server.known_player_session[
+                                models.PlayerId.from_player_info(other_player_info)
+                            ],
+                            player_info,
                         )
                     )
             if not self.players:

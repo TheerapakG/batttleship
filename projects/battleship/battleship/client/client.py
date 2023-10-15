@@ -34,11 +34,11 @@ class BattleshipClient(Client):
         raise NotImplementedError()
 
     @subscribe
-    def on_room_join(self) -> AsyncIterator[models.PlayerId]:
+    def on_room_join(self) -> AsyncIterator[models.PlayerInfo]:
         raise NotImplementedError()
 
     @subscribe
-    def on_room_leave(self) -> AsyncIterator[models.PlayerId]:
+    def on_room_leave(self) -> AsyncIterator[models.PlayerInfo]:
         raise NotImplementedError()
 
     @Route.simple

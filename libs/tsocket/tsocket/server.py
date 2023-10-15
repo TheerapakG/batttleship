@@ -312,8 +312,9 @@ class Server(metaclass=ServerMeta):
         for cb in reversed(self.session_leave_cbs[session.id]):
             await cb(session)
 
-        await writer.drain()
-        writer.close()
+        with contextlib.suppress(ConnectionResetError):
+            await writer.drain()
+            writer.close()
         del self.session_leave_cbs[session.id]
         del self.sessions[session.id]
 

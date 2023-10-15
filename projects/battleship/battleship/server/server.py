@@ -139,11 +139,11 @@ class BattleshipServer(Server):
                 raise ResponseError("not_found", b"")
 
     @emit
-    async def on_room_join(self, _session: Session, args: models.PlayerId):
+    async def on_room_join(self, _session: Session, args: models.PlayerInfo):
         raise NotImplementedError()
 
     @emit
-    async def on_room_leave(self, _session: Session, args: models.PlayerId):
+    async def on_room_leave(self, _session: Session, args: models.PlayerInfo):
         raise NotImplementedError()
 
     @Route.simple
