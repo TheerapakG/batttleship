@@ -15,16 +15,14 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
     player_ids = Ref(room.players)
 
     async def subscribe_player_join():
-        with client.room_join() as room_join_it:
-            async for player_id in room_join_it:
-                player_ids.value.append(player_id)
-                player_ids.trigger()
+        async for player_id in client.on_room_join():
+            player_ids.value.append(player_id)
+            player_ids.trigger()
 
     async def subscribe_player_leave():
-        with client.room_leave() as room_leave_it:
-            async for player_id in room_leave_it:
-                player_ids.value.remove(player_id)
-                player_ids.trigger()
+        async for player_id in client.on_room_leave():
+            player_ids.value.remove(player_id)
+            player_ids.trigger()
 
     async def on_mounted(event: ComponentMountedEvent):
         event.instance.bound_tasks.update(

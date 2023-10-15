@@ -250,6 +250,9 @@ class Server(metaclass=ServerMeta):
     routes: dict[str, _Route] = field(init=False)
     emits: dict[str, _Emit] = field(init=False)
     sessions: dict[UUID, Session] = field(init=False, default_factory=dict)
+    session_leave_cbs: dict[UUID, set[Callable[[Session], Awaitable[Any]]]] = field(
+        init=False, default_factory=dict
+    )
 
     def __post_init__(self):
         self.routes = self._default_routes.copy()
@@ -261,11 +264,22 @@ class Server(metaclass=ServerMeta):
     def add_emit(self, name: str, emt: _Emit):
         self.emits[name] = emt
 
+    def on_session_leave(
+        self, session: Session, cb: Callable[[Session], Awaitable[Any]]
+    ):
+        self.session_leave_cbs[session.id].add(cb)
+
+    def off_session_leave(
+        self, session: Session, cb: Callable[[Session], Awaitable[Any]]
+    ):
+        self.session_leave_cbs[session.id].remove(cb)
+
     async def handle_client(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ):
         session = Session(uuid4(), reader, writer)
         self.sessions[session.id] = session
+        self.session_leave_cbs[session.id] = set()
         with session.create_channel() as channel:
             await channel.write(
                 Message(
@@ -295,8 +309,13 @@ class Server(metaclass=ServerMeta):
             else:
                 break
 
+        await asyncio.gather(
+            *(cb(session) for cb in self.session_leave_cbs[session.id])
+        )
+
         await writer.drain()
         writer.close()
+        del self.session_leave_cbs[session.id]
         del self.sessions[session.id]
 
     async def run(

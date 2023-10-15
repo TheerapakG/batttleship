@@ -30,11 +30,11 @@ def main_menu(window: Window, client: BattleshipClient, **kwargs):
 
     async def on_public_room_match_button(_e):
         if (user := unref(store.user.store)) is not None:
-            room_id = await client.public_room_match(
+            room_id = await client.room_match(
                 models.BearingPlayerAuth.from_player(user)
             )
 
-            room = await client.public_room_get(room_id)
+            room = await client.room_get(room_id)
 
             from .lobby import lobby
 

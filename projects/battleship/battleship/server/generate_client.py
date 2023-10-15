@@ -86,11 +86,7 @@ for value in server_clss.values():
                                                 1
                                             ).annotation
                                             add_import_name(typ)
-                                            class_body_stmt.returns = ast.Subscript(
-                                                ast.Name(
-                                                    "AbstractContextManager",
-                                                    ctx=ast.Load(),
-                                                ),
+                                            class_body_stmt.returns = (
                                                 ast.Subscript(
                                                     ast.Name(
                                                         "AsyncIterator", ctx=ast.Load()
@@ -100,7 +96,7 @@ for value in server_clss.values():
                                                 if typ is not None
                                                 else ast.Name(
                                                     "AsyncIterator", ctx=ast.Load()
-                                                ),
+                                                )
                                             )
                                             new_class_body_stmts.append(
                                                 ast.FunctionDef(

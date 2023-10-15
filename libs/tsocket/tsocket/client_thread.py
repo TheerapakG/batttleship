@@ -341,10 +341,8 @@ class SubscribeWorkItem(Generic[ClientThreadT_contra, T]):
     async def run(self, client: Client):
         if self.future.set_running_or_notify_cancel():
             out_queue = queue.SimpleQueue[Future[T]]()
-            client_queue = asyncio.Queue[bytes]()
-            queue_set = client.cbs.get(self.name, set())
-            queue_set.add(client_queue)
-            client.cbs[self.name] = queue_set
+            client_queue = client.cbs.get(self.name, asyncio.Queue())
+            client.cbs[self.name] = client_queue
 
             async def async_subscriber():
                 while True:
@@ -355,12 +353,7 @@ class SubscribeWorkItem(Generic[ClientThreadT_contra, T]):
 
             async def async_subscriber_to_queue():
                 with contextlib.suppress(asyncio.CancelledError):
-                    try:
-                        await asynciterator_to_queue(async_subscriber(), out_queue)
-                    finally:
-                        client.cbs[self.name].remove(client_queue)
-                        if not client.cbs[self.name]:
-                            del client.cbs[self.name]
+                    await asynciterator_to_queue(async_subscriber(), out_queue)
 
             subscribe_task = asyncio.create_task(async_subscriber_to_queue())
 

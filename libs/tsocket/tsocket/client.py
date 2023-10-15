@@ -1,6 +1,5 @@
 import asyncio
 from collections.abc import Awaitable, AsyncIterator, Callable
-from contextlib import contextmanager, AbstractContextManager
 from dataclasses import dataclass, field
 from functools import wraps
 import inspect
@@ -217,45 +216,29 @@ class Route:
 
 @dataclass
 class _Subscribe(Generic[ClientT_contra, T]):
-    func: Callable[[ClientT_contra], AbstractContextManager[AsyncIterator[T]]]
+    func: Callable[[ClientT_contra], AsyncIterator[T]]
 
     def get_fake_subscribe(self, name: str):
         func = self.func
 
         @wraps(func)
-        @contextmanager
-        def fake_subscribe(self: ClientT_contra):
-            queue = asyncio.Queue[bytes]()
-            queue_set = self.cbs.get(name, set())
-            queue_set.add(queue)
-            self.cbs[name] = queue_set
-            try:
-
-                async def getter():
-                    while True:
-                        yield converter.loads(
-                            await queue.get(),
-                            get_args(
-                                get_args(inspect.signature(func).return_annotation)[0]
-                            )[0],
-                        )
-
-                yield getter()
-            finally:
-                self.cbs[name].remove(queue)
-                if not self.cbs[name]:
-                    del self.cbs[name]
+        async def fake_subscribe(self: ClientT_contra):
+            queue = self.cbs.get(name, asyncio.Queue())
+            self.cbs[name] = queue
+            while True:
+                yield converter.loads(
+                    await queue.get(),
+                    get_args(inspect.signature(func).return_annotation)[0],
+                )
 
         return fake_subscribe
 
-    def __call__(self) -> AbstractContextManager[AsyncIterator[T]]:
+    def __call__(self) -> AsyncIterator[T]:
         # For tricking LSP / type checker
         raise NotImplementedError()
 
 
-def subscribe(
-    func: Callable[[ClientT_contra], AbstractContextManager[AsyncIterator[T]]]
-):
+def subscribe(func: Callable[[ClientT_contra], AsyncIterator[T]]):
     return _Subscribe(func)
 
 
@@ -280,7 +263,10 @@ class ClientSession:
                 channel, _ = channel_method
                 self.destroy_channel(channel)
                 msg = await channel.read()
-                await self.client.emit(msg.method, msg.content)
+                queue = self.client.cbs.get(msg.method, asyncio.Queue())
+                self.client.cbs[msg.method] = queue
+                log.debug("EMIT: %s %s", msg.method, msg.content)
+                await queue.put(msg.content)
             else:
                 break
 
@@ -321,7 +307,7 @@ class Client(metaclass=ClientMeta):
         ]
     ]
     session: ClientSession | None = field(init=False, default=None)
-    cbs: dict[str, set[asyncio.Queue[bytes]]] = field(init=False, default_factory=dict)
+    cbs: dict[str, asyncio.Queue[bytes]] = field(init=False, default_factory=dict)
 
     async def connect(
         self,
@@ -344,7 +330,3 @@ class Client(metaclass=ClientMeta):
             await channel.write(Message("close", b""))
             await channel.read()
         await session.read_task
-
-    async def emit(self, name: str, data: bytes):
-        log.debug("EMIT: %s %s", name, data)
-        await asyncio.gather(*[queue.put(data) for queue in self.cbs[name].copy()])

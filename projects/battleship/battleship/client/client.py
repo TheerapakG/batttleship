@@ -34,45 +34,37 @@ class BattleshipClient(Client):
         raise NotImplementedError()
 
     @subscribe
-    def room_join(self) -> AbstractContextManager[AsyncIterator[models.PlayerId]]:
+    def on_room_join(self) -> AsyncIterator[models.PlayerId]:
         raise NotImplementedError()
 
     @subscribe
-    def room_leave(self) -> AbstractContextManager[AsyncIterator[models.PlayerId]]:
+    def on_room_leave(self) -> AsyncIterator[models.PlayerId]:
         raise NotImplementedError()
 
     @Route.simple
-    async def public_room_get(self, args: models.RoomId) -> models.RoomInfo:
+    async def room_get(self, args: models.RoomId) -> models.RoomInfo:
         raise NotImplementedError()
 
     @Route.simple
-    async def public_room_match(self, args: models.BearingPlayerAuth) -> models.RoomId:
+    async def room_match(self, args: models.BearingPlayerAuth) -> models.RoomId:
         raise NotImplementedError()
 
     @Route.simple
-    async def public_room_leave(self, args: models.PublicRoomLeaveArgs) -> Empty:
+    async def room_leave(self, args: models.RoomId) -> Empty:
         raise NotImplementedError()
 
     @Route.simple
     async def private_room_create(
         self, args: models.BearingPlayerAuth
-    ) -> models.PrivateRoom:
-        raise NotImplementedError()
-
-    @Route.simple
-    async def private_room_get(self, args: models.PrivateRoomId) -> models.PrivateRoom:
+    ) -> models.PrivateRoomCreateResults:
         raise NotImplementedError()
 
     @Route.simple
     async def private_room_join(
         self, args: models.PrivateRoomJoinArgs
-    ) -> models.PrivateRoom:
+    ) -> models.RoomId:
         raise NotImplementedError()
 
     @Route.simple
-    async def private_room_unlock(self, args: models.PrivateRoomUnlockArgs) -> Empty:
-        raise NotImplementedError()
-
-    @Route.simple
-    async def private_room_leave(self, args: models.PrivateRoomLeaveArgs) -> Empty:
+    async def private_room_unlock(self, args: models.RoomId) -> Empty:
         raise NotImplementedError()

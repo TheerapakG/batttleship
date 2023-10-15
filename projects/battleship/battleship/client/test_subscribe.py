@@ -25,9 +25,9 @@ async def run_client(host: str | None, port: int | str | None):
     player_1 = await client_1.player_create(models.PlayerCreateArgs("player 1"))
     player_2 = await client_2.player_create(models.PlayerCreateArgs("player 2"))
 
-    with await client_1.room_join() as room_join_queue_msg_1, await client_2.room_join() as room_join_queue_msg_2:
-        room_1 = await client_1.public_room_match(player_1)
-        room_2 = await client_2.public_room_match(player_2)
+    with await client_1.on_room_join() as room_join_queue_msg_1, await client_2.on_room_join() as room_join_queue_msg_2:
+        room_1 = await client_1.room_match(player_1)
+        room_2 = await client_2.room_match(player_2)
 
         with contextlib.suppress(asyncio.TimeoutError):
             while True:

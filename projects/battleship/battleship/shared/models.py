@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from typing import Protocol
 from uuid import UUID
 
 
@@ -45,7 +46,7 @@ class PlayerId:
 class Board:
     id: UUID  # pylint: disable=C0103
     player: PlayerId
-    room: "PublicRoomId | PrivateRoomId"
+    room: "RoomId"
 
 
 @dataclass(eq=True, frozen=True)
@@ -87,42 +88,6 @@ class RoomId:
     def from_room_info(cls, room_info: RoomInfo):
         return cls(room_info.id)
 
-    @classmethod
-    def from_public_room_id(cls, room_id: "PublicRoomId"):
-        return cls(room_id.id)
-
-    @classmethod
-    def from_private_room_id(cls, room_id: "PrivateRoomId"):
-        return cls(room_id.id)
-
-
-@dataclass
-class PublicRoom(Room):
-    pass
-
-
-@dataclass(eq=True, frozen=True)
-class PublicRoomId:
-    id: UUID  # pylint: disable=C0103
-
-    @classmethod
-    def from_room(cls, room: PublicRoom):
-        return cls(room.id)
-
-
-@dataclass
-class PrivateRoom(Room):
-    join_code: str
-
-
-@dataclass(eq=True, frozen=True)
-class PrivateRoomId:
-    id: UUID  # pylint: disable=C0103
-
-    @classmethod
-    def from_room(cls, room: PrivateRoom):
-        return cls(room.id)
-
 
 @dataclass(eq=True)
 class BearingPlayerAuth:
@@ -142,20 +107,11 @@ class PlayerCreateArgs:
 
 
 @dataclass
-class PublicRoomLeaveArgs(BearingPlayerAuth):
+class PrivateRoomCreateResults:
     room: RoomId
+    join_code: str
 
 
 @dataclass
 class PrivateRoomJoinArgs(BearingPlayerAuth):
     join_code: str
-
-
-@dataclass
-class PrivateRoomUnlockArgs(BearingPlayerAuth):
-    room: PrivateRoomId
-
-
-@dataclass
-class PrivateRoomLeaveArgs(BearingPlayerAuth):
-    room: PrivateRoomId
