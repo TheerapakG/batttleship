@@ -1169,7 +1169,7 @@ class ColumnInstance(ComponentInstance["Column"]):
         previous_collapsed_children: list[ComponentInstance] = []
 
         sum_height = computed(
-            lambda: sum(unref(c_w) for c_w in unref(children_height))
+            lambda: sum(unref(c_h) for c_h in unref(children_height))
             + (len(unref(children_height)) - 1) * unref(self.component.gap)
         )
 
@@ -1323,6 +1323,17 @@ class Rect(Component):
         return RectInstance(component=self)
 
 
+class _BlendShaderGroup(ShaderGroup):
+    def set_state(self):
+        super().set_state()
+        gl.glEnable(gl.GL_BLEND)
+        gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
+
+    def unset_state(self):
+        gl.glDisable(gl.GL_BLEND)
+        super().unset_state()
+
+
 @dataclass
 class RoundedRectInstance(ComponentInstance["RoundedRect"]):
     vert: ClassVar[Shader] = Shader(
@@ -1332,11 +1343,15 @@ class RoundedRectInstance(ComponentInstance["RoundedRect"]):
         in vec2 size;
         in float radius;
         in vec2 tex_coord;
+        in vec2 tex_off;
+        in float round;
         in vec4 color;
 
         out vec2 vertex_size;
         out float vertex_radius;
         out vec2 vertex_tex_coord;
+        out float vertex_round;
+        out vec2 vertex_radius_direction;
         out vec4 vertex_color;
 
         uniform WindowBlock
@@ -1347,11 +1362,13 @@ class RoundedRectInstance(ComponentInstance["RoundedRect"]):
 
         void main()
         {
-            vec2 pos = size * tex_coord;
+            vec2 pos = size * tex_coord + radius * tex_off;
             gl_Position = window.projection * window.view * vec4(translation + pos, 0.0, 1.0);
             vertex_size = size;
             vertex_radius = radius;
-            vertex_tex_coord = tex_coord;
+            vertex_tex_coord = pos / size;
+            vertex_round = round;
+            vertex_radius_direction = tex_coord;
             vertex_color = color;
         }
         """,
@@ -1363,31 +1380,25 @@ class RoundedRectInstance(ComponentInstance["RoundedRect"]):
         in vec2 vertex_size;
         in float vertex_radius;
         in vec2 vertex_tex_coord;
+        in float vertex_round;
+        in vec2 vertex_radius_direction;
         in vec4 vertex_color;
 
         out vec4 fragColor;
 
-        float RectSDF(vec2 p, vec2 b, float r)
-        {
-            vec2 d = abs(p) - b + vec2(r);
-            return min(max(d.x, d.y), 0.0) + length(max(d, 0.0)) - r;   
-        }
-
         void main() 
         {
-            vec2 pos = vertex_size * vertex_tex_coord;
-                
-            float fDist = RectSDF(pos-vertex_size/2.0, vertex_size/2.0 - 1.0, vertex_radius);
-            float fBlendAmount = smoothstep(-1.0, 1.0, abs(fDist));
+            vec2 off = (vertex_tex_coord * 2 - vec2(1.0)) * vertex_radius_direction - vertex_tex_coord;
+            vec2 pos = vec2(vertex_radius) + off * vertex_size;
 
-            fragColor = mix(vertex_color, fDist < 0.0 ? vertex_color: vec4(0.0), fBlendAmount);
+            fragColor = length(pos) > vertex_radius && vertex_round > 0.0 ? vec4(0.0): vertex_color;
         }
         """,
         "fragment",
     )
     program: ClassVar[ShaderProgram] = ShaderProgram(vert, frag)
     _batch: Batch = field(init=False)
-    _group: ShaderGroup = field(init=False)
+    _group: _BlendShaderGroup = field(init=False)
     _vertex_list: VertexList = field(init=False)
 
     def __hash__(self) -> int:
@@ -1397,22 +1408,31 @@ class RoundedRectInstance(ComponentInstance["RoundedRect"]):
         self._batch.draw()
 
     def _update_x(self, x: float):
-        self._vertex_list.translation[::2] = (x,) * 4
+        self._vertex_list.translation[::2] = (x,) * 16
 
     def _update_y(self, y: float):
-        self._vertex_list.translation[1::2] = (y,) * 4
+        self._vertex_list.translation[1::2] = (y,) * 16
 
     def _update_width(self, width: float):
-        self._vertex_list.size[::2] = (width,) * 4
+        self._vertex_list.size[::2] = (width,) * 16
 
     def _update_height(self, height: float):
-        self._vertex_list.size[1::2] = (height,) * 4
+        self._vertex_list.size[1::2] = (height,) * 16
 
-    def _update_radius(self, radius: float):
-        self._vertex_list.radius[:] = (radius,) * 4
+    def _update_radius_bottom_left(self, radius: float):
+        self._vertex_list.radius[0:4] = (radius,) * 4
+
+    def _update_radius_bottom_right(self, radius: float):
+        self._vertex_list.radius[4:8] = (radius,) * 4
+
+    def _update_radius_top_left(self, radius: float):
+        self._vertex_list.radius[12:16] = (radius,) * 4
+
+    def _update_radius_top_right(self, radius: float):
+        self._vertex_list.radius[8:12] = (radius,) * 4
 
     def _update_color(self, color: tuple[int, int, int, int]):
-        self._vertex_list.color[:] = color * 4
+        self._vertex_list.color[:] = color * 16
 
     @event_handler(ComponentMountedEvent)
     async def component_mounted_handler(self, _: ComponentMountedEvent):
@@ -1424,24 +1444,79 @@ class RoundedRectInstance(ComponentInstance["RoundedRect"]):
         height = computed(
             lambda: unref(self.component.height) * unref(use_acc_scale_y(self))
         )
-        radius = computed(
+        radius_bottom_left = computed(
             lambda: r
-            if (r := unref(self.component.radius)) is not None
+            if (r := unref(self.component.radius_bottom_left)) is not None
+            else min(unref(width), unref(height)) / 2
+        )
+        radius_bottom_right = computed(
+            lambda: r
+            if (r := unref(self.component.radius_bottom_right)) is not None
+            else min(unref(width), unref(height)) / 2
+        )
+        radius_top_left = computed(
+            lambda: r
+            if (r := unref(self.component.radius_top_left)) is not None
+            else min(unref(width), unref(height)) / 2
+        )
+        radius_top_right = computed(
+            lambda: r
+            if (r := unref(self.component.radius_top_right)) is not None
             else min(unref(width), unref(height)) / 2
         )
         self._batch = Batch()
-        self._group = ShaderGroup(self.program)
+        self._group = _BlendShaderGroup(self.program)
         self._vertex_list = self.program.vertex_list_indexed(
-            4,
+            16,
             gl.GL_TRIANGLES,
-            [0, 1, 2, 0, 2, 3],
+            [
+                *[*[0, 1, 2, 0, 2, 3], *[1, 4, 7, 1, 7, 2], *[4, 5, 6, 4, 6, 7]],
+                *[*[3, 2, 13, 3, 13, 12], *[2, 7, 8, 2, 8, 13], *[7, 6, 9, 7, 9, 8]],
+                *[
+                    *[12, 13, 14, 12, 14, 15],
+                    *[13, 8, 11, 13, 11, 14],
+                    *[8, 9, 10, 8, 10, 11],
+                ],
+            ],
             self._batch,
             self._group,
-            translation=("f", (unref(x), unref(y)) * 4),
-            size=("f", (unref(width), unref(height)) * 4),
-            radius=("f", (unref(radius),) * 4),
-            tex_coord=("f", (0, 0, 1, 0, 1, 1, 0, 1)),
-            color=("Bn", unref(self.component.color) * 4),
+            translation=("f", (unref(x), unref(y)) * 16),
+            size=("f", (unref(width), unref(height)) * 16),
+            radius=(
+                "f",
+                (unref(radius_bottom_left),) * 4
+                + (unref(radius_bottom_right),) * 4
+                + (unref(radius_top_right),) * 4
+                + (unref(radius_top_left),) * 4,
+            ),
+            tex_coord=(
+                "f",
+                (
+                    *(0, 0, 0, 0, 0, 0, 0, 0),
+                    *(1, 0, 1, 0, 1, 0, 1, 0),
+                    *(1, 1, 1, 1, 1, 1, 1, 1),
+                    *(0, 1, 0, 1, 0, 1, 0, 1),
+                ),
+            ),
+            tex_off=(
+                "f",
+                (
+                    *(0, 0, 1, 0, 1, 1, 0, 1),
+                    *(-1, 0, 0, 0, 0, 1, -1, 1),
+                    *(-1, -1, 0, -1, 0, 0, -1, 0),
+                    *(0, -1, 1, -1, 1, 0, 0, 0),
+                ),
+            ),
+            round=(
+                "f",
+                (
+                    *(1, 0, 0, 0),
+                    *(0, 1, 0, 0),
+                    *(0, 0, 1, 0),
+                    *(0, 0, 0, 1),
+                ),
+            ),
+            color=("Bn", unref(self.component.color) * 16),
         )
 
         self.bound_watchers.update(
@@ -1452,7 +1527,12 @@ class RoundedRectInstance(ComponentInstance["RoundedRect"]):
                     Watcher.ifref(y, self._update_y),
                     Watcher.ifref(width, self._update_width),
                     Watcher.ifref(height, self._update_height),
-                    Watcher.ifref(radius, self._update_radius),
+                    Watcher.ifref(radius_bottom_left, self._update_radius_bottom_left),
+                    Watcher.ifref(
+                        radius_bottom_right, self._update_radius_bottom_right
+                    ),
+                    Watcher.ifref(radius_top_left, self._update_radius_top_left),
+                    Watcher.ifref(radius_top_right, self._update_radius_top_right),
                     Watcher.ifref(self.component.color, self._update_color),
                 ]
                 if w is not None
@@ -1469,7 +1549,18 @@ class RoundedRect(Component):
     color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]]
     width: int | float | ReadRef[int | float]
     height: int | float | ReadRef[int | float]
-    radius: int | float | None | ReadRef[int | float | None] = field(default=None)
+    radius_bottom_left: int | float | None | ReadRef[int | float | None] = field(
+        default=None
+    )
+    radius_bottom_right: int | float | None | ReadRef[int | float | None] = field(
+        default=None
+    )
+    radius_top_left: int | float | None | ReadRef[int | float | None] = field(
+        default=None
+    )
+    radius_top_right: int | float | None | ReadRef[int | float | None] = field(
+        default=None
+    )
 
     def get_instance(self):
         return RoundedRectInstance(component=self)

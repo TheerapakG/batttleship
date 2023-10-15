@@ -8,7 +8,7 @@ from tgraphics.component import Window, loop
 
 
 from .client import BattleshipClient
-from . import store
+from .view.main_menu import main_menu
 from ..shared.logging import setup_logging
 
 
@@ -24,20 +24,8 @@ if __name__ == "__main__":
     client = BattleshipClient()
     loop.run_until_complete(client.connect("localhost", 60000, ssl=ssl_context))
 
-    try:
-        store.user.load()
+    loop.run_until_complete(window.set_scene(main_menu(window=window, client=client)))
 
-        from .view.main_menu import main_menu
-
-        loop.run_until_complete(
-            window.set_scene(main_menu(window=window, client=client))
-        )
-    except Exception:  # pylint: disable=W0718
-        from .view.create_player import create_player
-
-        loop.run_until_complete(
-            window.set_scene(create_player(window=window, client=client))
-        )
     pyglet.app.run()
     loop.run_until_complete(client.disconnect())
     loop.close()

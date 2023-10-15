@@ -8,11 +8,19 @@ from tsocket.shared import Empty
 
 from .. import store
 from ..client import BattleshipClient
+from ..component import create_player_modal
 from ...shared import models
 
 
 @Component.register("MainMenu")
 def main_menu(window: Window, client: BattleshipClient, **kwargs):
+    try:
+        store.user.load()
+    except FileNotFoundError:
+        pass
+
+    not_have_user = computed(lambda: unref(store.user.store) is None)
+
     user_text = computed(
         lambda: f"user: {unref(store.user.name)} rating: {unref(store.user.rating)}"
     )
@@ -42,20 +50,24 @@ def main_menu(window: Window, client: BattleshipClient, **kwargs):
 
     return Component.render_xml(
         """
-        <Column 
-            gap="16" 
-            width="window.width" 
-            height="window.height" 
-            handle-ComponentMountedEvent="on_mounted"
-        >
-            <Label 
-                text="'Public Match'" 
-                color="colors['white']" 
-                handle-MousePressEvent="on_public_room_match_button"
-            />
-            <Label text="user_text" color="colors['white']" />
-            <Label text="online_text" color="colors['white']" />
-        </Column>
+        <Layer>
+            <Column 
+                gap="16" 
+                width="window.width" 
+                height="window.height" 
+                handle-ComponentMountedEvent="on_mounted"
+            >
+                <Label 
+                    text="'Public Match'" 
+                    color="colors['white']" 
+                    handle-MousePressEvent="on_public_room_match_button"
+                />
+                <Label text="user_text" color="colors['white']" />
+                <Label text="online_text" color="colors['white']" />
+                <Label text="'BATTLESHIP'" color="colors['white']" font_size="72" />
+            </Column>
+            <CreatePlayerModal t-if="not_have_user" window="window" client="client" />
+        </Layer>
         """,
         **kwargs,
     )
