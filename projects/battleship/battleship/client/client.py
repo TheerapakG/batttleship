@@ -42,7 +42,7 @@ class BattleshipClient(Client):
         raise NotImplementedError()
 
     @Route.simple
-    async def room_get(self, args: models.RoomId) -> models.RoomInfo:
+    async def room_info_get(self, args: models.RoomId) -> models.RoomInfo:
         raise NotImplementedError()
 
     @Route.simple

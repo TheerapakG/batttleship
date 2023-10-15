@@ -85,12 +85,14 @@ class Channel:
         return msg
 
 
-@dataclass
+@dataclass(eq=True, frozen=True)
 class Session:
     id: UUID  # pylint: disable=C0103
-    reader: asyncio.StreamReader
-    writer: asyncio.StreamWriter
-    channels: dict[UUID, Channel] = field(default_factory=dict)
+    reader: asyncio.StreamReader = field(hash=False, compare=False)
+    writer: asyncio.StreamWriter = field(hash=False, compare=False)
+    channels: dict[UUID, Channel] = field(
+        default_factory=dict, hash=False, compare=False
+    )
 
     def create_channel(self):
         channel = Channel(self)

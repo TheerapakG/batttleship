@@ -250,7 +250,7 @@ class Server(metaclass=ServerMeta):
     routes: dict[str, _Route] = field(init=False)
     emits: dict[str, _Emit] = field(init=False)
     sessions: dict[UUID, Session] = field(init=False, default_factory=dict)
-    session_leave_cbs: dict[UUID, set[Callable[[Session], Awaitable[Any]]]] = field(
+    session_leave_cbs: dict[UUID, list[Callable[[Session], Awaitable[Any]]]] = field(
         init=False, default_factory=dict
     )
 
@@ -267,7 +267,7 @@ class Server(metaclass=ServerMeta):
     def on_session_leave(
         self, session: Session, cb: Callable[[Session], Awaitable[Any]]
     ):
-        self.session_leave_cbs[session.id].add(cb)
+        self.session_leave_cbs[session.id].append(cb)
 
     def off_session_leave(
         self, session: Session, cb: Callable[[Session], Awaitable[Any]]
@@ -279,7 +279,7 @@ class Server(metaclass=ServerMeta):
     ):
         session = Session(uuid4(), reader, writer)
         self.sessions[session.id] = session
-        self.session_leave_cbs[session.id] = set()
+        self.session_leave_cbs[session.id] = list()
         with session.create_channel() as channel:
             await channel.write(
                 Message(
@@ -309,9 +309,8 @@ class Server(metaclass=ServerMeta):
             else:
                 break
 
-        await asyncio.gather(
-            *(cb(session) for cb in self.session_leave_cbs[session.id])
-        )
+        for cb in reversed(self.session_leave_cbs[session.id]):
+            await cb(session)
 
         await writer.drain()
         writer.close()

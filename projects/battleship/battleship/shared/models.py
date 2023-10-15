@@ -59,21 +59,10 @@ class BoardId:
 
 
 @dataclass
-class Room:
-    id: UUID  # pylint: disable=C0103
-    players: dict[UUID, PlayerId] = field(init=False, default_factory=dict)
-    boards: dict[PlayerId, BoardId] = field(init=False, default_factory=dict)
-
-
-@dataclass
 class RoomInfo:
     id: UUID  # pylint: disable=C0103
     players: list[PlayerId] = field(default_factory=list)
     boards: dict[PlayerId, BoardId] = field(default_factory=dict)
-
-    @classmethod
-    def from_room(cls, room: Room):
-        return cls(room.id, list(room.players.values()), room.boards)
 
 
 @dataclass(eq=True, frozen=True)
@@ -81,15 +70,11 @@ class RoomId:
     id: UUID  # pylint: disable=C0103
 
     @classmethod
-    def from_room(cls, room: Room):
-        return cls(room.id)
-
-    @classmethod
     def from_room_info(cls, room_info: RoomInfo):
         return cls(room_info.id)
 
 
-@dataclass(eq=True)
+@dataclass(eq=True, frozen=True)
 class BearingPlayerAuth:
     auth_token: UUID
 
@@ -112,6 +97,6 @@ class PrivateRoomCreateResults:
     join_code: str
 
 
-@dataclass
+@dataclass(order=True, frozen=True)
 class PrivateRoomJoinArgs(BearingPlayerAuth):
     join_code: str

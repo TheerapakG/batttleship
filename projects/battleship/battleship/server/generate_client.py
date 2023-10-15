@@ -63,6 +63,9 @@ for value in server_clss.values():
                 for class_body_stmt in class_body_stmts:
                     match class_body_stmt:
                         case ast.AsyncFunctionDef():
+                            class_body_stmt.decorator_list = (
+                                class_body_stmt.decorator_list[:1]
+                            )
                             for decorator_expr in class_body_stmt.decorator_list:
                                 match decorator_expr:
                                     case ast.Name(id, ctx=ast.Load()):

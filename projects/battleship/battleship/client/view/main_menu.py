@@ -34,7 +34,7 @@ def main_menu(window: Window, client: BattleshipClient, **kwargs):
                 models.BearingPlayerAuth.from_player(user)
             )
 
-            room = await client.room_get(room_id)
+            room = await client.room_info_get(room_id)
 
             from .lobby import lobby
 
