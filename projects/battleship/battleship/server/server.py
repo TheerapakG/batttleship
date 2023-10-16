@@ -146,9 +146,6 @@ class BattleshipServer(Server):
     async def on_room_leave(self, _session: Session, args: models.PlayerInfo):
         raise NotImplementedError()
 
-    async def session_leave_room(self, session: Session):
-        raise NotImplementedError()
-
     @Route.simple
     @ensure_session_player
     async def room_match(

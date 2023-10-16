@@ -13,9 +13,10 @@ def _to_template_dict(d: dict, template_key: tuple[str, ...]):
     }
 
 
-color = _to_template_dict(colors, ("color",))
-width = _to_template_dict(widths, ("width",))
-height = _to_template_dict(heights, ("height",))
+c = _to_template_dict(colors, ("color",))
+text_c = _to_template_dict(colors, ("text_color",))
+w = _to_template_dict(widths, ("width",))
+h = _to_template_dict(heights, ("height",))
 r = _to_template_dict(
     radii,
     (

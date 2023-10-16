@@ -50,7 +50,7 @@ from .event import (
 )
 from .reactivity import ReadRef, Ref, Watcher, computed, unref, isref
 
-loader = Loader(["resources"])
+loader = Loader(["./resources"])
 
 P = ParamSpec("P")
 
@@ -141,12 +141,12 @@ class ElementComponentData:
         init_locals = _get_merged_locals(frame, **additional_locals)
 
         init_vars = {
-            k: eval(v, frame.frame.f_globals, init_locals)
+            k: eval(v, frame.frame.f_globals | init_locals, {})
             for k, v in self.props.items()
         } | override_vars
 
         event_capturers = {
-            Event.from_name(k): eval(v, frame.frame.f_globals, init_locals)
+            Event.from_name(k): eval(v, frame.frame.f_globals | init_locals, {})
             for k, v in self.capturers.items()
         }
 
@@ -626,6 +626,12 @@ def use_height(
     )
 
 
+def use_hover(
+    instance: ComponentInstance | ReadRef[ComponentInstance],
+) -> bool | ReadRef[bool]:
+    return computed(lambda: unref(unref(instance).hover))
+
+
 def use_children(
     instance: ComponentInstance | ReadRef[ComponentInstance],
 ) -> (
@@ -716,6 +722,7 @@ class ComponentMeta(type):
                         )
 
                         def render_fn(
+                            for_var,
                             eval_for_values,
                             additional_scope_values,
                             override_values,
@@ -739,7 +746,7 @@ class ComponentMeta(type):
                                 for component in components
                             ]
 
-                        return partial(render_fn, eval_for_values)
+                        return partial(render_fn, for_var, eval_for_values)
 
                     render_fn = for_render_fn_wrapper(render_fn, directive_value)
                 case "if":
@@ -940,12 +947,12 @@ class PadInstance(ComponentInstance["Pad"]):
 
         self.after_mounted_data.value = AfterMountedComponentInstanceData(
             computed(
-                lambda: unref(use_width(unref(child)[0]))
+                lambda: unref(use_width(unref(child)))
                 + unref(self.component.pad_left)
                 + unref(self.component.pad_right)
             ),
             computed(
-                lambda: unref(use_height(unref(child)[0]))
+                lambda: unref(use_height(unref(child)))
                 + unref(self.component.pad_bottom)
                 + unref(self.component.pad_top)
             ),
@@ -1602,6 +1609,7 @@ class ImageInstance(ComponentInstance["Image"]):
     async def component_mounted_handler(self, _: ComponentMountedEvent):
         x = use_acc_offset_x(self)
         y = use_acc_offset_y(self)
+        print([*loader._cached_images.keys()])
         image = computed(lambda: loader.image(unref(self.component.name)))
         width = computed(
             lambda: unref(self.component.width)

@@ -1,6 +1,6 @@
 from tgraphics.color import colors, with_alpha
 from tgraphics.event import Event
-from tgraphics.template import color, width as w, height as h, r_b, r_t
+from tgraphics.template import c, text_c, w, h, r_b, r_t
 from tgraphics.component import Component, Window
 from tgraphics.reactivity import Ref, unref
 
@@ -30,18 +30,16 @@ def create_player_modal(window: Window, client: BattleshipClient, **kwargs):
             <Rect width="window.width" height="window.height" color="with_alpha(colors['black'],127)" />
             <Column>
                 <Layer>
-                    <RoundedRect t-template="color['white'] | w[128] | h[64] | r_b[8] | r_t[0]" />
+                    <RoundedRect t-template="c['white'] | w[128] | h[64] | r_b[4] | r_t[0]" />
                     <Column gap="16">
                         <LabelButton 
                             text="'Create User'" 
-                            text_color="colors['white']"
-                            color="colors['teal'][400]"
                             hover_color="colors['teal'][500]"
-                            t-template="w[48] | h[12]"
+                            t-template="c['teal'][400] | text_c['white'] | w[48] | h[12]"
                             handle-ClickEvent="on_create_player_button"
                         />
                         <Layer>
-                            <RoundedRect t-template="color['teal'][100] | w[64] | h[9]" />
+                            <RoundedRect t-template="c['teal'][100] | w[64] | h[9]" />
                             <Input
                                 t-model-text="name"
                                 color="colors['black']"
@@ -53,10 +51,10 @@ def create_player_modal(window: Window, client: BattleshipClient, **kwargs):
                     </Column>
                 </Layer>
                 <Layer>
-                    <RoundedRect t-template="color['teal'][400] | w[128] | h[12] | r_b[0] | r_t[8]" />
+                    <RoundedRect t-template="c['teal'][400] | w[128] | h[12] | r_b[0] | r_t[4]" />
                     <Label
-                        text="'Registration'" 
-                        t-template="color['white']"
+                        text="'Registration'"
+                        t-template="c['white']"
                     />
                 </Layer>
             </Column>

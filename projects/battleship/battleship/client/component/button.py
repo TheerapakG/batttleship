@@ -1,5 +1,5 @@
 from tgraphics.color import colors
-from tgraphics.component import Component
+from tgraphics.component import Component, use_hover
 from tgraphics.event import Event, ComponentMountedEvent, MousePressEvent
 from tgraphics.reactivity import Ref, ReadRef, Watcher, computed, unref
 
@@ -29,7 +29,7 @@ def label_button(
         event.instance.bound_watchers.update(
             [
                 w
-                for w in [Watcher.ifref(event.instance.hover, hover.set_value)]
+                for w in [Watcher.ifref(use_hover(event.instance), hover.set_value)]
                 if w is not None
             ]
         )

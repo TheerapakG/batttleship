@@ -3,11 +3,8 @@ from collections import deque
 from collections.abc import Awaitable, Callable
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from queue import Empty, SimpleQueue
 from typing import Any, ClassVar, Generic, Protocol, TypeGuard, TypeVar, overload
 import weakref
-
-import pyglet
 
 T = TypeVar("T")
 T_co = TypeVar("T_co", covariant=True)
@@ -95,16 +92,16 @@ class ReadRef(Effect, Generic[T_co]):
         return f"{type(self).__name__}({repr(self._value)})"
 
 
-class Ref(ReadRef[T_contra]):
+class Ref(ReadRef[T]):
     @property
     def value(self):
         return super().value
 
     @value.setter
-    def value(self, new_value: T_contra):
+    def value(self, new_value: T):
         self.set_value(new_value)
 
-    def set_value(self, new_value: T_contra):
+    def set_value(self, new_value: T):
         if self._value != new_value:
             self._value = new_value
             self.update()
@@ -118,7 +115,7 @@ class Computed(ReadRef[T_co]):
 
     def __init__(self, func: Callable[[], T_co]):
         self._func = func
-        super().__init__(None)
+        super().__init__(None)  # type: ignore
         with self.track():
             self._value = self._func()
 
@@ -203,7 +200,7 @@ class Watcher:
                 [maybe_ref], lambda: func(unref(maybe_ref)), trigger_init=trigger_init
             )
         if trigger_init:
-            func(maybe_ref)
+            func(maybe_ref)  # type: ignore
         return None
 
 
@@ -226,9 +223,9 @@ def unref(maybe_ref: T) -> T:
     ...
 
 
-def unref(maybe_ref: Callable[[], T] | ReadRef[T] | T):
+def unref(maybe_ref: Callable[[], T] | ReadRef[T] | T) -> T:
     if callable(maybe_ref):
         return maybe_ref()
     if isref(maybe_ref):
         return maybe_ref.value
-    return maybe_ref
+    return maybe_ref  # type: ignore
