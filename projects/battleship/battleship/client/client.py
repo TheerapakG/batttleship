@@ -42,11 +42,7 @@ class BattleshipClient(Client):
         raise NotImplementedError()
 
     @Route.simple
-    async def room_info_get(self, args: models.RoomId) -> models.RoomInfo:
-        raise NotImplementedError()
-
-    @Route.simple
-    async def room_match(self, args: models.BearingPlayerAuth) -> models.RoomId:
+    async def room_match(self, args: models.BearingPlayerAuth) -> models.RoomInfo:
         raise NotImplementedError()
 
     @Route.simple
@@ -62,7 +58,7 @@ class BattleshipClient(Client):
     @Route.simple
     async def private_room_join(
         self, args: models.PrivateRoomJoinArgs
-    ) -> models.RoomId:
+    ) -> models.RoomInfo:
         raise NotImplementedError()
 
     @Route.simple

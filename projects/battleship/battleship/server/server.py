@@ -146,14 +146,6 @@ class BattleshipServer(Server):
     async def on_room_leave(self, _session: Session, args: models.PlayerInfo):
         raise NotImplementedError()
 
-    @Route.simple
-    async def room_info_get(
-        self, _session: Session, args: models.RoomId
-    ) -> models.RoomInfo:
-        if room := self.rooms.get(args, None):
-            return room.to_room_info()
-        raise ResponseError("not_found", b"")
-
     async def session_leave_room(self, session: Session):
         raise NotImplementedError()
 
@@ -161,7 +153,7 @@ class BattleshipServer(Server):
     @ensure_session_player
     async def room_match(
         self, _session: Session, args: models.BearingPlayerAuth
-    ) -> models.RoomId:
+    ) -> models.RoomInfo:
         player = await self._player_get(args)
         player_id = models.PlayerId.from_player(player)
         try:
@@ -173,7 +165,7 @@ class BattleshipServer(Server):
             self.rooms[room_id] = room
         await room.add_player(player_id)
         self.match_rooms.add(room_id)
-        return room_id
+        return room.to_room_info()
 
     @Route.simple
     async def room_leave(self, session: Session, args: models.RoomId) -> Empty:
@@ -197,19 +189,19 @@ class BattleshipServer(Server):
         join_code = "".join(random.choice(string.ascii_lowercase) for _ in range(6))
         self.private_room_codes[join_code] = room_id
         await room.add_player(player_id)
-        return models.PrivateRoomCreateResults(room_id, join_code)
+        return models.PrivateRoomCreateResults(room.to_room_info(), join_code)
 
     @Route.simple
     @ensure_session_player
     async def private_room_join(
         self, _session: Session, args: models.PrivateRoomJoinArgs
-    ) -> models.RoomId:
+    ) -> models.RoomInfo:
         player = await self._player_get(args)
         player_id = models.PlayerId.from_player(player)
         if room_id := self.private_room_codes.get(args.join_code, None):
             room = self.rooms[room_id]
             await room.add_player(player_id)
-            return room_id
+            return room.to_room_info()
         raise ResponseError("not_found", b"")
 
     @Route.simple

@@ -88,7 +88,7 @@ class PlayerCreateArgs:
 
 @dataclass
 class PrivateRoomCreateResults:
-    room: RoomId
+    room: RoomInfo
     join_code: str
 
 
