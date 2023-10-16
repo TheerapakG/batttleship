@@ -51,6 +51,7 @@ from .event import (
 from .reactivity import ReadRef, Ref, Watcher, computed, unref, isref
 
 loader = Loader(["./resources"])
+loader.reindex()
 
 P = ParamSpec("P")
 
@@ -1588,6 +1589,7 @@ class ImageInstance(ComponentInstance["Image"]):
         return id(self)
 
     def _draw(self, _dt: float):
+        gl.glEnable(gl.GL_BLEND)
         self._sprite.draw()
 
     def _update_x(self, x: float):
@@ -1609,7 +1611,6 @@ class ImageInstance(ComponentInstance["Image"]):
     async def component_mounted_handler(self, _: ComponentMountedEvent):
         x = use_acc_offset_x(self)
         y = use_acc_offset_y(self)
-        print([*loader._cached_images.keys()])
         image = computed(lambda: loader.image(unref(self.component.name)))
         width = computed(
             lambda: unref(self.component.width)
@@ -1624,8 +1625,12 @@ class ImageInstance(ComponentInstance["Image"]):
         draw_width = computed(lambda: unref(width) * unref(use_acc_scale_x(self)))
         draw_height = computed(lambda: unref(height) * unref(use_acc_scale_y(self)))
         self._sprite = Sprite(
-            unref(x), unref(y), unref(draw_width), unref(draw_height), unref(image)
+            unref(image),
+            unref(x),
+            unref(y),
         )
+        self._sprite.width = unref(draw_width)
+        self._sprite.height = unref(draw_height)
 
         self.bound_watchers.update(
             [
