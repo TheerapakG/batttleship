@@ -9,13 +9,12 @@ from ..client import BattleshipClient
 
 @Component.register("shipsetup")
 def ship_setup(window: Window, client: BattleshipClient, **kwargs):
-    grid_row = [chr(i + 97) for i in range(8)[::-1]]
-    grid_column = [str(i) for i in range(1, 9)]
-    battleship_state = {}
-    battleship_type = []
-    for row in grid_row:
-        for column in grid_column:
-            battleship_state[(column, row)] = Ref("white")
+    gap_size = 16
+    skill_activated = Ref("False")
+    target_choosen = Ref("False")
+    battleship_state = [[Ref("Normal Space") for _ in range(8)] for i in range(8)]
+    color_state = []
+    # Starting board
     return Component.render_xml(
         """
         <Column gap="16" width="window.width" height="window.height">
