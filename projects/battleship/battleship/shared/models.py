@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import Protocol
 from uuid import UUID
 
 
@@ -38,11 +37,44 @@ class Player(PlayerInfo):
         return self_q / (self_q + other_q)
 
 
+@dataclass
+class EmptyTile:
+    pass
+
+
+@dataclass
+class ShipVariantId:
+    id: int  # pylint: disable=C0103
+
+
+@dataclass
+class Ship:
+    ship_variant: ShipVariantId
+    tile_position: list[tuple[int, int]]
+    orientation: tuple[tuple[int, int], tuple[int, int]]
+
+
+@dataclass
+class ShipTile:
+    ship: Ship
+
+
+@dataclass(eq=True, frozen=True)
+class ObstacleVariantId:
+    id: int  # pylint: disable=C0103
+
+
+@dataclass
+class ObstacleTile:
+    obstacle_variant: ObstacleVariantId
+
+
 @dataclass(eq=True, frozen=True)
 class Board:
     id: UUID  # pylint: disable=C0103
     player: PlayerId = field(compare=False)
     room: "RoomId" = field(compare=False)
+    grid: list[list[EmptyTile, ShipTile, ObstacleTile]] = field(compare=False)
 
 
 @dataclass(eq=True, frozen=True)

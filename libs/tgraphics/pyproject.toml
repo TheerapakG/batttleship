@@ -24,4 +24,5 @@ classifiers = [
 [tool.poetry.dependencies]
 python = "^3.11"
 pyglet = "^2.0.9"
+sphinx = "^7.2.6"
 

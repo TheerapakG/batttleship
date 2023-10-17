@@ -530,6 +530,7 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
 def use_offset_x(
     instance: ComponentInstance | ReadRef[ComponentInstance],
 ) -> float | ReadRef[float]:
+    "get x offset of component instance relative to the parent"
     return computed(
         lambda: unref(data.offset_x)
         if (data := unref(unref(instance).before_mounted_data)) is not None
@@ -540,6 +541,7 @@ def use_offset_x(
 def use_offset_y(
     instance: ComponentInstance | ReadRef[ComponentInstance],
 ) -> float | ReadRef[float]:
+    "get y offset of component instance relative to the parent"
     return computed(
         lambda: unref(data.offset_y)
         if (data := unref(unref(instance).before_mounted_data)) is not None
@@ -550,6 +552,7 @@ def use_offset_y(
 def use_acc_offset_x(
     instance: ComponentInstance | ReadRef[ComponentInstance],
 ) -> float | ReadRef[float]:
+    "get x offset of component instance relative to the window"
     return computed(
         lambda: unref(data.acc_offset_x)
         if (data := unref(unref(instance).before_mounted_data)) is not None
@@ -560,6 +563,7 @@ def use_acc_offset_x(
 def use_acc_offset_y(
     instance: ComponentInstance | ReadRef[ComponentInstance],
 ) -> float | ReadRef[float]:
+    "get y offset of component instance relative to the window"
     return computed(
         lambda: unref(data.acc_offset_y)
         if (data := unref(unref(instance).before_mounted_data)) is not None
@@ -570,6 +574,7 @@ def use_acc_offset_y(
 def use_scale_x(
     instance: ComponentInstance | ReadRef[ComponentInstance],
 ) -> float | ReadRef[float]:
+    "get x scaling of component instance relative to the parent"
     return computed(
         lambda: unref(data.scale_x)
         if (data := unref(unref(instance).before_mounted_data)) is not None
@@ -580,6 +585,7 @@ def use_scale_x(
 def use_scale_y(
     instance: ComponentInstance | ReadRef[ComponentInstance],
 ) -> float | ReadRef[float]:
+    "get y scaling of component instance relative to the parent"
     return computed(
         lambda: unref(data.scale_y)
         if (data := unref(unref(instance).before_mounted_data)) is not None
@@ -590,6 +596,7 @@ def use_scale_y(
 def use_acc_scale_x(
     instance: ComponentInstance | ReadRef[ComponentInstance],
 ) -> float | ReadRef[float]:
+    "get x scaling of component instance relative to the window"
     return computed(
         lambda: unref(data.acc_scale_x)
         if (data := unref(unref(instance).before_mounted_data)) is not None
@@ -600,6 +607,7 @@ def use_acc_scale_x(
 def use_acc_scale_y(
     instance: ComponentInstance | ReadRef[ComponentInstance],
 ) -> float | ReadRef[float]:
+    "get y scaling of component instance relative to the window"
     return computed(
         lambda: unref(data.acc_scale_y)
         if (data := unref(unref(instance).before_mounted_data)) is not None
@@ -610,6 +618,7 @@ def use_acc_scale_y(
 def use_width(
     instance: ComponentInstance | ReadRef[ComponentInstance],
 ) -> float | ReadRef[float]:
+    "get width of component instance unscaled"
     return computed(
         lambda: unref(data.width)
         if (data := unref(unref(instance).after_mounted_data)) is not None
@@ -620,6 +629,7 @@ def use_width(
 def use_height(
     instance: ComponentInstance | ReadRef[ComponentInstance],
 ) -> float | ReadRef[float]:
+    "get height of component instance unscaled"
     return computed(
         lambda: unref(data.height)
         if (data := unref(unref(instance).after_mounted_data)) is not None
@@ -630,6 +640,7 @@ def use_height(
 def use_hover(
     instance: ComponentInstance | ReadRef[ComponentInstance],
 ) -> bool | ReadRef[bool]:
+    "get hover status of component instance"
     return computed(lambda: unref(unref(instance).hover))
 
 
@@ -639,6 +650,7 @@ def use_children(
     list[ComponentInstance | ReadRef[ComponentInstance]]
     | ReadRef[list[ComponentInstance | ReadRef[ComponentInstance]]]
 ):
+    "get children instances of component instance"
     return computed(
         lambda: unref(data.children)
         if (data := unref(unref(instance).after_mounted_data)) is not None
@@ -647,6 +659,7 @@ def use_children(
 
 
 def is_mounted(instance: ComponentInstance):
+    "get mounted status of the component instance"
     return computed(
         lambda: unref(instance.before_mounted_data) is not None
         and unref(instance.after_mounted_data) is not None
@@ -672,6 +685,8 @@ class ComponentMeta(type):
 
     @classmethod
     def register(mcs, name: str):
+        "register component for rendering with XML"
+
         def wrapper(func: Callable[..., "Component"]):
             mcs._components[name] = func
             return func
@@ -680,6 +695,7 @@ class ComponentMeta(type):
 
     @classmethod
     def from_name(mcs, name: str):
+        "get registered component with the name"
         return mcs._components[name]
 
     @classmethod
@@ -689,7 +705,7 @@ class ComponentMeta(type):
         frame: inspect.FrameInfo,
         scope_values: dict | None = None,
     ) -> "list[Component] | ReadRef[list[Component]]":
-        """MAKE SURE THAT INPUTTED XML IS SAFE"""
+        "render child components from XML string"
 
         if scope_values is None:
             scope_values = {}
@@ -853,7 +869,7 @@ class ComponentMeta(type):
     def render_root_element(
         mcs, element: ElementTree.Element, frame: inspect.FrameInfo, **kwargs
     ) -> "Component":
-        """MAKE SURE THAT INPUTTED XML IS SAFE"""
+        "render root component from XML string"
 
         data = ElementComponentData(element)
 
@@ -874,7 +890,7 @@ class ComponentMeta(type):
 
     @classmethod
     def render_xml(mcs, xml: str, **kwargs) -> "Component":
-        """MAKE SURE THAT THE INPUTTED XML IS SAFE"""
+        "render component from XML string"
         try:
             return mcs.render_root_element(
                 ElementTree.fromstring(xml), inspect.stack()[1], **kwargs
