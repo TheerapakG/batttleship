@@ -142,7 +142,7 @@ class ElementComponentData:
         init_locals = _get_merged_locals(frame, **additional_locals)
 
         init_vars = {
-            k: eval(v, frame.frame.f_globals | init_locals, {})
+            k: computed(lambda v=v: eval(v, frame.frame.f_globals | init_locals, {}))
             for k, v in self.props.items()
         } | override_vars
 
@@ -734,8 +734,10 @@ class ComponentMeta(type):
                         for_var, for_values = [
                             s.strip() for s in directive_value.split(" in ")
                         ]
-                        eval_for_values = eval(
-                            for_values, frame.frame.f_globals, frame_locals
+                        eval_for_values = computed(
+                            lambda: eval(
+                                for_values, frame.frame.f_globals, frame_locals
+                            )
                         )
 
                         def render_fn(
@@ -754,7 +756,7 @@ class ComponentMeta(type):
                                 for components in [
                                     unref(
                                         old_render_fn(
-                                            {for_var: v} | additional_scope_values,
+                                            additional_scope_values | {for_var: v},
                                             override_values,
                                         )
                                     )
@@ -772,8 +774,10 @@ class ComponentMeta(type):
                         old_render_fn: Callable[..., list["Component"]],
                         directive_value: str,
                     ):
-                        eval_val = eval(
-                            directive_value, frame.frame.f_globals, frame_locals
+                        eval_val = computed(
+                            lambda: eval(
+                                directive_value, frame.frame.f_globals, frame_locals
+                            )
                         )
 
                         def render_fn(
@@ -785,11 +789,7 @@ class ComponentMeta(type):
                                 override_values["_ref_list"] = _ref_list
 
                             return (
-                                unref(
-                                    old_render_fn(
-                                        additional_scope_values, override_values
-                                    )
-                                )
+                                old_render_fn(additional_scope_values, override_values)
                                 if unref(eval_val)
                                 else []
                             )
@@ -803,8 +803,10 @@ class ComponentMeta(type):
                         old_render_fn: Callable[..., list["Component"]],
                         directive_value: str,
                     ):
-                        eval_val = eval(
-                            directive_value, frame.frame.f_globals, frame_locals
+                        eval_val = computed(
+                            lambda: eval(
+                                directive_value, frame.frame.f_globals, frame_locals
+                            )
                         )
 
                         def render_fn(
@@ -815,15 +817,9 @@ class ComponentMeta(type):
                                 _ref_list.append(eval_val)
                                 override_values["_ref_list"] = _ref_list
 
-                            return (
-                                unref(
-                                    old_render_fn(
-                                        additional_scope_values,
-                                        override_values | eval_val,
-                                    )
-                                )
-                                if unref(eval_val)
-                                else []
+                            return old_render_fn(
+                                additional_scope_values,
+                                override_values | unref(eval_val),
                             )
 
                         return partial(render_fn, eval_val)
@@ -1770,6 +1766,7 @@ class LabelInstance(ComponentInstance["Label"]):
                     Watcher.ifref(self.component.font_size, self._update_font_size),
                     Watcher.ifref(self.component.bold, self._update_bold),
                     Watcher.ifref(self.component.italic, self._update_italic),
+                    Watcher.ifref(self.component.color, self._update_color),
                     Watcher.ifref(draw_width, self._update_width),
                     Watcher.ifref(draw_height, self._update_height),
                 ]

@@ -19,14 +19,7 @@ def main_menu(window: Window, client: BattleshipClient, name: str | None, **kwar
     except FileNotFoundError:
         pass
 
-    not_have_user = computed(lambda: unref(store.user.store) is None)
-
-    user_text = computed(
-        lambda: f"user: {unref(store.user.name)} rating: {unref(store.user.rating)}"
-    )
-
     online_count = Ref(None)
-    online_text = computed(lambda: f"online: {unref(online_count)}")
 
     async def set_online_count():
         while True:
@@ -80,11 +73,11 @@ def main_menu(window: Window, client: BattleshipClient, name: str | None, **kwar
                     color="colors['white']" 
                     handle-MousePressEvent="on_public_room_match_button"
                 />
-                <Label text="user_text" color="colors['white']" />
-                <Label text="online_text" color="colors['white']" />
+                <Label text="f'user: {unref(store.user.name)} rating: {unref(store.user.rating)}'" color="colors['white']" />
+                <Label text="f'online: {unref(online_count)}'" color="colors['white']" />
                 <Label text="'BATTLESHIP'" color="colors['white']" font_size="72" />
             </Column>
-            <CreatePlayerModal t-if="not_have_user" window="window" client="client" />
+            <CreatePlayerModal t-if="unref(store.user.store) is None" window="window" client="client" />
         </Layer>
         """,
         **kwargs,
