@@ -146,6 +146,14 @@ class BattleshipServer(Server):
     async def on_room_leave(self, _session: Session, args: models.PlayerInfo):
         raise NotImplementedError()
 
+    @emit
+    async def on_room_player_ready(self, _session: Session, args: models.PlayerId):
+        raise NotImplementedError()
+
+    @emit
+    async def on_room_ready(self, _session: Session, args: Empty):
+        raise NotImplementedError()
+
     @Route.simple
     @ensure_session_player
     async def room_match(
@@ -167,9 +175,18 @@ class BattleshipServer(Server):
     @Route.simple
     async def room_leave(self, session: Session, args: models.RoomId) -> Empty:
         if (room := self.rooms.get(args, None)) and (
-            (player_id := self.known_player_session_rev[session]) in room.players
+            (player_id := self.known_player_session_rev[session]) in room
         ):
             await room.remove_player(player_id)
+            return Empty()
+        raise ResponseError("not_found", b"")
+
+    @Route.simple
+    async def room_ready(self, session: Session, args: models.RoomId) -> Empty:
+        if (room := self.rooms.get(args, None)) and (
+            (player_id := self.known_player_session_rev[session]) in room
+        ):
+            await room.add_ready(player_id)
             return Empty()
         raise ResponseError("not_found", b"")
 
@@ -204,7 +221,7 @@ class BattleshipServer(Server):
     @Route.simple
     async def private_room_unlock(self, session: Session, args: models.RoomId) -> Empty:
         if (room := self.rooms.get(args, None)) and (
-            self.known_player_session_rev[session] in room.players
+            self.known_player_session_rev[session] in room
         ):
             self.match_rooms.add(args)
             return Empty()

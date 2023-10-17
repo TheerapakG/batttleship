@@ -98,6 +98,7 @@ class RoomId:
 @dataclass(eq=True, frozen=True)
 class RoomInfo(RoomId):
     players: list[PlayerInfo] = field(compare=False, default_factory=list)
+    readies: list[PlayerId] = field(compare=False, default_factory=list)
     boards: dict[PlayerId, BoardId] = field(compare=False, default_factory=dict)
 
 

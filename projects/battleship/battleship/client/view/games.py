@@ -56,9 +56,16 @@ def games_ui(window: Window, client: BattleshipClient, **kwargs):
                         text_color="colors['white']"
                         color="colors['white']"
                         hover_color="colors['white']"
+<<<<<<< HEAD
                         width="4"
                         height="4"
                         handle-ClickEvent="select_shooting_spot((column, row))"
+=======
+                        disable_color="colors['white']"
+                        width="1"
+                        height="1"
+                        handle-ClickEvent="select_shooting_spot"
+>>>>>>> c94206af55dc9d0d8bba9253b27a7da50a431a92
                     />
                 </Row>
             </Column>

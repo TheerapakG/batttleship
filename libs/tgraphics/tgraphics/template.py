@@ -15,6 +15,8 @@ def _to_template_dict(d: dict, template_key: tuple[str, ...]):
 
 c = _to_template_dict(colors, ("color",))
 text_c = _to_template_dict(colors, ("text_color",))
+hover_c = _to_template_dict(colors, ("hover_color",))
+disable_c = _to_template_dict(colors, ("disable_color",))
 w = _to_template_dict(widths, ("width",))
 h = _to_template_dict(heights, ("height",))
 r = _to_template_dict(

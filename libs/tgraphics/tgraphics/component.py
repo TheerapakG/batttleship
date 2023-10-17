@@ -2293,7 +2293,7 @@ class Window:
         def on_draw():
             self._window.clear()
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.draw(0) # TODO: calc this
+                scene_instance.draw(0)  # TODO: calc this
 
         @self._window.event
         def on_key_press(symbol, modifiers):
