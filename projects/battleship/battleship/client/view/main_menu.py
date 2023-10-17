@@ -43,16 +43,25 @@ def main_menu(window: Window, client: BattleshipClient, **kwargs):
             from .lobby import lobby
 
             await window.set_scene(lobby(window, client, room))
+
     async def on_private_room_create_button(_e):
-        if (user :=unref(store.user.store)) is not None:
-            room = await client.private_room_create(models.BearingPlayerAuth.from_player(user))
+        if (user := unref(store.user.store)) is not None:
+            room = await client.private_room_create(
+                models.BearingPlayerAuth.from_player(user)
+            )
             from .lobby import lobby
-            await window.set_scene(lobby(window,client,room))
-    async def on_private_room_join_button(_e,code:str):
-        if (user:=unref(store.user.store))is not None:
-            room = await client.private_room_join(models.PrivateRoomJoinArgs(user.auth_token,code))
+
+            await window.set_scene(lobby(window, client, room))
+
+    async def on_private_room_join_button(_e, code: str):
+        if (user := unref(store.user.store)) is not None:
+            room = await client.private_room_join(
+                models.PrivateRoomJoinArgs(user.auth_token, code)
+            )
             from .lobby import lobby
-            await window.set_scene(lobby(window,client,room))
+
+            await window.set_scene(lobby(window, client, room))
+
     return Component.render_xml(
         """
         <Layer>
