@@ -5,6 +5,7 @@ from tgraphics.component import Component, Window
 from tgraphics.event import ComponentMountedEvent
 from tgraphics.reactivity import Ref, computed, unref
 from tsocket.shared import Empty
+from tgraphics.template import c, text_c, hover_c, disable_c, w, h, r_b, r_t
 
 from .. import store
 from ..client import BattleshipClient
@@ -63,20 +64,38 @@ def main_menu(window: Window, client: BattleshipClient, name: str | None, **kwar
         """
         <Layer>
             <Column 
-                gap="16" 
+                gap="0" 
                 width="window.width" 
                 height="window.height" 
                 handle-ComponentMountedEvent="on_mounted"
             >
-                <Label 
-                    text="'Public Match'" 
-                    color="colors['white']" 
-                    handle-MousePressEvent="on_public_room_match_button"
-                />
-                <Label text="f'user: {unref(store.user.name)} rating: {unref(store.user.rating)}'" color="colors['white']" />
-                <Label text="f'online: {unref(online_count)}'" color="colors['white']" />
-                <Label text="'BATTLESHIP'" color="colors['white']" font_size="72" />
+                <Pad pad_bottom="100">
+                        <Label text="'BATTLESHIP'" bold="True" color="colors['white']" font_size="88" />
+                </Pad>
             </Column>
+
+            <Layer>
+                <Pad pad_top="150">
+                    <Column gap="10"
+                    >
+                        <Label text="f'There are currently {unref(online_count)} player(s) online.'" color="colors['white']" />
+                        <LabelButton 
+                            text="'Public Match'"
+                            t-template="c['teal'][400] | hover_c['teal'][500] | disable_c['slate'][500] | text_c['white'] | w[48] | h[12]"
+                            handle-ClickEvent="on_public_room_match_button"
+                        />
+                    </Column>
+                </Pad>
+            </Layer> 
+
+            <Layer>
+                <Pad pad_bottom="400">
+                    <Column gap="0">   
+                        <Label text="f'Your current rating is {unref(store.user.rating)}'" color="colors['white']" />
+                        <Label text="f'Welcome, {unref(store.user.name)}'" /> 
+                    </Column>
+                </Pad>
+            </Layer>
             <CreatePlayerModal t-if="unref(store.user.store) is None" window="window" client="client" />
         </Layer>
         """,
