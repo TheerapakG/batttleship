@@ -16,7 +16,7 @@ def games_ui(window: Window, client: BattleshipClient, **kwargs):
     battleship_state = {}
     for row in grid_row:
         for column in grid_column:
-            battleship_state[(column,row)] = Ref("white")
+            battleship_state[(column, row)] = Ref("white")
     # Starting board
 
     async def select_shooting_spot(e_):
@@ -26,17 +26,21 @@ def games_ui(window: Window, client: BattleshipClient, **kwargs):
                     battleship_state[(column, row)].value = "green"
             elif unref(skill_activated) == "True":
                 # A skill that bomb a row
-                for each_column in range(1,9):
+                for each_column in range(1, 9):
                     if battleship_state[(column, each_column)] != "brown":
                         battleship_state[(column, each_column)].value = "green"
+
     async def select_skill(e_):
         skill_activated.value = "True"
+
     async def confirm_shoot(e_):
         async def check_hit():
             pass
+
         for position, color in battleship_state.items():
             if unref(color) == "green":
                 pass
+
     return Component.render_xml(
         """
         <Column gap="16" width="window.width" height="window.height">
