@@ -1,4 +1,3 @@
-
 from tgraphics.color import colors
 from tgraphics.component import Component, Window
 from tgraphics.reactivity import computed, unref, Ref
@@ -8,6 +7,7 @@ from tsocket.shared import Empty
 from .. import store
 from ..client import BattleshipClient
 from ..component.button import ClickEvent
+
 
 @Component.register("Games")
 def games_ui(window: Window, client: BattleshipClient, **kwargs):
@@ -36,15 +36,19 @@ def games_ui(window: Window, client: BattleshipClient, **kwargs):
                 for each_column in range(8):
                     if unref(battleship_state[row][each_column]) != "Environment Space":
                         battleship_state[row][each_column].value = "Choosen Space"
+
     def select_skill(e_):
         skill_activated.value = "True"
+
     async def confirm_shoot(e_):
         async def check_hit():
             pass
+
         for state in battleship_state:
             for values in state:
                 if unref(values) == "Choosen Space":
                     pass
+
     return Component.render_xml(
         """
         <Column gap="16" width="window.width" height="window.height">
@@ -56,16 +60,10 @@ def games_ui(window: Window, client: BattleshipClient, **kwargs):
                         text_color="colors['white']"
                         color="colors['white']"
                         hover_color="colors['white']"
-<<<<<<< HEAD
                         width="4"
                         height="4"
                         handle-ClickEvent="select_shooting_spot((column, row))"
-=======
                         disable_color="colors['white']"
-                        width="1"
-                        height="1"
-                        handle-ClickEvent="select_shooting_spot"
->>>>>>> c94206af55dc9d0d8bba9253b27a7da50a431a92
                     />
                 </Row>
             </Column>
