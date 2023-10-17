@@ -69,12 +69,19 @@ class ObstacleTile:
     obstacle_variant: ObstacleVariantId
 
 
+@dataclass
+class MineTile:
+    pass
+
+
 @dataclass(eq=True, frozen=True)
 class Board:
     id: UUID  # pylint: disable=C0103
     player: PlayerId = field(compare=False)
     room: "RoomId" = field(compare=False)
-    grid: list[list[EmptyTile, ShipTile, ObstacleTile]] = field(compare=False)
+    grid: list[list[EmptyTile | ShipTile | ObstacleTile | MineTile]] = field(
+        compare=False
+    )
 
 
 @dataclass(eq=True, frozen=True)

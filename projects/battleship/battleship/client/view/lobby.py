@@ -46,7 +46,6 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
 
     async def subscribe_room_ready():
         async for _ in client.on_room_ready():
-            print("yo")
             from .ship_setup import ship_setup
 
             # TODO: see what this takes
