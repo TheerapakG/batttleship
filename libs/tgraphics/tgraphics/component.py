@@ -2267,17 +2267,17 @@ class Window:
             unref(_width),
             unref(_height),
             resizable=resizable,
-            config=gl.Config(sample_buffers=1, samples=4),
+            config=gl.Config(sample_buffers=1, samples=4, double_buffer=True),
         )
 
         self.width = Ref(self._window.width)
         self.height = Ref(self._window.height)
 
         @self._window.event
-        def on_refresh(dt: float):
+        def on_draw():
             self._window.clear()
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.draw(dt)
+                scene_instance.draw(0) # TODO: calc this
 
         @self._window.event
         def on_key_press(symbol, modifiers):
