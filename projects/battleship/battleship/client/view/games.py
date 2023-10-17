@@ -12,8 +12,6 @@ from ..component.button import ClickEvent
 @Component.register("Games")
 def games_ui(window: Window, client: BattleshipClient, **kwargs):
     gap_size = 16
-    grid_row = [i for i in range(8)]
-    grid_column = [i for i in range(8)]
     skill_activated = Ref("False")
     target_choosen = Ref("False")
     battleship_state = []
@@ -23,8 +21,6 @@ def games_ui(window: Window, client: BattleshipClient, **kwargs):
         battleship_state.append([])
         for column in range(8):
             battleship_state[row].append(Ref("Normal Space"))
-    for row in range(8):
-        battleship_state.append([])
 
     def select_shooting_spot(position: (int, int)):
         def shooting(event: ClickEvent):
@@ -53,9 +49,9 @@ def games_ui(window: Window, client: BattleshipClient, **kwargs):
         """
         <Column gap="16" width="window.width" height="window.height">
             <Column gap="gap_size">
-                <Row t-for="row in grid_row" gap="gap_size">
+                <Row t-for="row in range(8)" gap="gap_size">
                     <LabelButton 
-                        t-for="column in grid_column"
+                        t-for="column in range(8)"
                         text="str(row)+str(column)" 
                         text_color="colors['white']"
                         color="colors['white']"
