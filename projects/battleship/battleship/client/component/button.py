@@ -14,16 +14,22 @@ def label_button(
     text_color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]],
     color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]],
     hover_color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]],
+    disable_color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]],
     width: float | ReadRef[float],
     height: float | ReadRef[float],
     font_name: str | None | ReadRef[str | None] = None,
     font_size: int | float | None | ReadRef[int | float | None] = None,
     bold: bool | ReadRef[bool] = False,
     italic: bool | ReadRef[bool] = False,
+    disable: bool | ReadRef[bool] = False,
     **kwargs
 ):
     hover = Ref(False)
-    bg_color = computed(lambda: unref(hover_color) if unref(hover) else unref(color))
+    bg_color = computed(
+        lambda: unref(disable_color)
+        if unref(disable)
+        else (unref(hover_color) if unref(hover) else unref(color))
+    )
 
     async def on_mounted(event: ComponentMountedEvent):
         event.instance.bound_watchers.update(

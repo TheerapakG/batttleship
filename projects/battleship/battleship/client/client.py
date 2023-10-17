@@ -41,12 +41,24 @@ class BattleshipClient(Client):
     def on_room_leave(self) -> AsyncIterator[models.PlayerInfo]:
         raise NotImplementedError()
 
+    @subscribe
+    def on_room_player_ready(self) -> AsyncIterator[models.PlayerId]:
+        raise NotImplementedError()
+
+    @subscribe
+    def on_room_ready(self) -> AsyncIterator[Empty]:
+        raise NotImplementedError()
+
     @Route.simple
     async def room_match(self, args: models.BearingPlayerAuth) -> models.RoomInfo:
         raise NotImplementedError()
 
     @Route.simple
     async def room_leave(self, args: models.RoomId) -> Empty:
+        raise NotImplementedError()
+
+    @Route.simple
+    async def room_ready(self, args: models.RoomId) -> Empty:
         raise NotImplementedError()
 
     @Route.simple

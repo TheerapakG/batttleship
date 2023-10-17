@@ -13,7 +13,7 @@ from ...shared import models
 
 
 @Component.register("MainMenu")
-def main_menu(window: Window, client: BattleshipClient, **kwargs):
+def main_menu(window: Window, client: BattleshipClient, name: str | None, **kwargs):
     try:
         store.user.load()
     except FileNotFoundError:
@@ -34,6 +34,10 @@ def main_menu(window: Window, client: BattleshipClient, **kwargs):
             await asyncio.sleep(1.0)
 
     async def on_mounted(event: ComponentMountedEvent):
+        # TODO: async component
+        if name is not None:
+            player = await client.player_create(models.PlayerCreateArgs(name))
+            store.user.save(player)
         event.instance.bound_tasks.update([asyncio.create_task(set_online_count())])
 
     async def on_public_room_match_button(_e):

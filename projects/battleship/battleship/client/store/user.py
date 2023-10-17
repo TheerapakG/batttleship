@@ -13,6 +13,14 @@ rating = computed(
 )
 
 
+def is_player(player: models.PlayerId):
+    return computed(
+        lambda: player == models.PlayerId.from_player(user)
+        if (user := unref(store)) is not None
+        else False
+    )
+
+
 def load():
     Path("./.data").mkdir(parents=True, exist_ok=True)
     with open("./.data/user.json", encoding="utf-8") as f:

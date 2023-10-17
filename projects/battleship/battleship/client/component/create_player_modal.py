@@ -1,6 +1,6 @@
 from tgraphics.color import colors, with_alpha
 from tgraphics.event import Event
-from tgraphics.template import c, text_c, w, h, r_b, r_t
+from tgraphics.template import c, text_c, hover_c, disable_c, w, h, r_b, r_t
 from tgraphics.component import Component, Window
 from tgraphics.reactivity import Ref, unref
 
@@ -33,9 +33,8 @@ def create_player_modal(window: Window, client: BattleshipClient, **kwargs):
                     <RoundedRect t-template="c['white'] | w[128] | h[64] | r_b[4] | r_t[0]" />
                     <Column gap="16">
                         <LabelButton 
-                            text="'Create User'" 
-                            hover_color="colors['teal'][500]"
-                            t-template="c['teal'][400] | text_c['white'] | w[48] | h[12]"
+                            text="'Create User'"
+                            t-template="c['teal'][400] | hover_c['teal'][500] | disable_c['slate'][500] | text_c['white'] | w[48] | h[12]"
                             handle-ClickEvent="on_create_player_button"
                         />
                         <Layer>
