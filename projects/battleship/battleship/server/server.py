@@ -73,6 +73,7 @@ class BattleshipServer(Server):
             else:
                 self.known_player_session[player_id] = session
                 self.known_player_session_rev[session] = player_id
+                self.on_session_leave(session, self.remove_session)
             return await func(self, session, args)
 
         return checker

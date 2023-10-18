@@ -44,7 +44,7 @@ class EmptyTile:
 
 @dataclass
 class ShipVariantId:
-    id: int  # pylint: disable=C0103
+    id: UUID  # pylint: disable=C0103
 
 
 @dataclass

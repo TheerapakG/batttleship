@@ -2274,6 +2274,7 @@ class Window:
     width: ReadRef[int] = field(init=False)
     height: ReadRef[int] = field(init=False)
     _window: _Window = field(init=False)
+    _last_draw_time: float | None = field(init=False, default=None)
 
     def __post_init__(self, _width, _height, resizable):
         self._window = _Window(
@@ -2288,9 +2289,11 @@ class Window:
 
         @self._window.event
         def on_draw():
+            _t  = time.time()
             self._window.clear()
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.draw(0)  # TODO: calc this
+                scene_instance.draw(_t-_lt if (_lt := self._last_draw_time is not None) else 0)
+            self._last_draw_time = _t
 
         @self._window.event
         def on_key_press(symbol, modifiers):
