@@ -17,6 +17,10 @@ def label_button(
     disable_color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]],
     width: float | ReadRef[float],
     height: float | ReadRef[float],
+    radius_bottom_left: int | float | None | ReadRef[int | float | None] = None,
+    radius_bottom_right: int | float | None | ReadRef[int | float | None] = None,
+    radius_top_left: int | float | None | ReadRef[int | float | None] = None,
+    radius_top_right: int | float | None | ReadRef[int | float | None] = None,
     font_name: str | None | ReadRef[str | None] = None,
     font_size: int | float | None | ReadRef[int | float | None] = None,
     bold: bool | ReadRef[bool] = False,
@@ -46,7 +50,15 @@ def label_button(
     return Component.render_xml(
         """
         <Layer handle-ComponentMountedEvent="on_mounted" handle-MousePressEvent="on_click">
-            <RoundedRect width="width" height="height" color="bg_color" />
+            <RoundedRect 
+                width="width" 
+                height="height" 
+                color="bg_color" 
+                radius_bottom_left="radius_bottom_left" 
+                radius_bottom_right="radius_bottom_right"
+                radius_top_left="radius_top_left"
+                radius_top_right="radius_top_right"
+            />
             <Label text="text" color="text_color" font_name="font_name" font_size="font_size" bold="bold" italic="italic" />
         </Layer>
         """,

@@ -5,7 +5,7 @@ from tgraphics.component import Component, Window
 from tgraphics.event import ComponentMountedEvent
 from tgraphics.reactivity import Ref, computed, unref
 from tsocket.shared import Empty
-from tgraphics.template import c, text_c, hover_c, disable_c, w, h, r_b, r_t
+from tgraphics.template import c, text_c, hover_c, disable_c, w, h, r_b, r_t, r_l, r_r
 
 from .. import store
 from ..client import BattleshipClient
@@ -21,6 +21,7 @@ def main_menu(window: Window, client: BattleshipClient, name: str | None, **kwar
         pass
 
     online_count = Ref(None)
+    code = Ref("")
 
     async def set_online_count():
         while True:
@@ -51,10 +52,10 @@ def main_menu(window: Window, client: BattleshipClient, name: str | None, **kwar
 
             await window.set_scene(lobby(window, client, room))
 
-    async def on_private_room_join_button(_e, code: str):
+    async def on_private_room_join_button(_e):
         if (user := unref(store.user.store)) is not None:
             room = await client.private_room_join(
-                models.PrivateRoomJoinArgs(user.auth_token, code)
+                models.PrivateRoomJoinArgs(user.auth_token, unref(code))
             )
             from .lobby import lobby
 
@@ -64,21 +65,71 @@ def main_menu(window: Window, client: BattleshipClient, name: str | None, **kwar
         """
         <Layer handle-ComponentMountedEvent="on_mounted">
             <Column 
-                gap="50" 
+                gap="0" 
                 width="window.width" 
                 height="window.height"
             >
                 <Column gap="10">
-                    <Label text="f'There are currently {unref(online_count)} player(s) online.'" color="colors['white']" />
-                    <LabelButton 
-                        text="'Public Match'"
-                        t-template="c['teal'][400] | hover_c['teal'][500] | disable_c['slate'][500] | text_c['white'] | w[48] | h[12]"
-                        handle-ClickEvent="on_public_room_match_button"
-                    />
+                    <Pad pad_top="90">
+                        <Label text="f'There are currently {unref(online_count)} player(s) online.'" color="colors['white']" />
+                    </Pad>
+                    <Layer>
+                        <Pad pad_bottom="20">
+                            <Pad pad_right="310">
+                                <LabelButton 
+                                    text="'+'"
+                                    font_size="20"
+                                    t-template="c['teal'][300] | hover_c['teal'][400] | disable_c['slate'][500] | text_c['white'] | w[10] | h[10]"
+                                    handle-ClickEvent="on_private_room_create_button"
+                                />
+                            </Pad>
+                        </Pad>
+                        <Pad t-if="len(unref(code)) == 0" pad_right="130"> 
+                            <Pad pad_bottom="20">
+                                <Label text="'Password'" italic="True" color="colors['slate'][400]" />
+                            </Pad>
+                        </Pad>
+                        <Pad pad_bottom="20"> 
+                            <Pad pad_right="65">
+                                <RoundedRect t-template="c['teal'][100] | w[48] | h[12] | r_r[0]"/>
+                            </Pad>
+                        </Pad>
+                        <Row gap="20">
+                        <Pad pad_left="11">
+                            <Input
+                                t-model-text="code"
+                                color="colors['black']"
+                                caret_color="colors['black']"
+                                selection_background_color="colors['teal'][300]"
+                                t-template="w[40] | h[8]"
+                            />
+                            </Pad>
+                            <Pad pad_bottom="20"> 
+                                <LabelButton 
+                                    text="'Join'"
+                                    t-template="c['teal'][300] | hover_c['teal'][400] | disable_c['slate'][500] | text_c['white'] | w[16] | h[12] | r_l[0]"
+                                    handle-ClickEvent="on_private_room_join_button"
+                                />
+                            </Pad>
+                        </Row>    
+                    </Layer>
+                    <Layer>
+                        <Pad pad_top="25">
+                            <LabelButton 
+                                text="'Public Match'"
+                                t-template="c['teal'][400] | hover_c['teal'][500] | disable_c['slate'][500] | text_c['white'] | w[64] | h[12]"
+                                handle-ClickEvent="on_public_room_match_button"
+                            />
+                        </Pad>
+                    </Layer>
                 </Column>
-                <Label text="'BATTLESHIP'" bold="True" color="colors['white']" font_size="88" />
-                <Column gap="0">   
-                    <Label text="f'Your current rating is {unref(store.user.rating)}'" color="colors['white']" />
+                <Pad pad_bottom="10">
+                    <Label text="'BATTLESHIP'" bold="True" color="colors['white']" font_size="88" />
+                </Pad>
+                <Column gap="0">
+                    <Pad pad_bottom="60">   
+                        <Label text="f'Your current rating is {unref(store.user.rating)}'" color="colors['white']" />
+                    </Pad>
                     <Label text="f'Welcome, {unref(store.user.name)}'" /> 
                 </Column>
             </Column>
@@ -88,43 +139,4 @@ def main_menu(window: Window, client: BattleshipClient, name: str | None, **kwar
         **kwargs,
     )
 
-    return Component.render_xml(
-        """
-        <Layer>
-            <Column 
-                gap="0" 
-                width="window.width" 
-                height="window.height" 
-                handle-ComponentMountedEvent="on_mounted"
-            >
-                <Pad pad_bottom="100">
-                    <Label text="'BATTLESHIP'" bold="True" color="colors['white']" font_size="88" />
-                </Pad>
-            </Column>
-
-            <Layer>
-                <Pad pad_top="150">
-                    <Column gap="10">
-                        <Label text="f'There are currently {unref(online_count)} player(s) online.'" color="colors['white']" />
-                        <LabelButton 
-                            text="'Public Match'"
-                            t-template="c['teal'][400] | hover_c['teal'][500] | disable_c['slate'][500] | text_c['white'] | w[48] | h[12]"
-                            handle-ClickEvent="on_public_room_match_button"
-                        />
-                    </Column>
-                </Pad>
-            </Layer> 
-
-            <Layer>
-                <Pad pad_bottom="400">
-                    <Column gap="0">   
-                        <Label text="f'Your current rating is {unref(store.user.rating)}'" color="colors['white']" />
-                        <Label text="f'Welcome, {unref(store.user.name)}'" /> 
-                    </Column>
-                </Pad>
-            </Layer>
-            <CreatePlayerModal t-if="unref(store.user.store) is None" window="window" client="client" />
-        </Layer>
-        """,
-        **kwargs,
-    )
+ 
