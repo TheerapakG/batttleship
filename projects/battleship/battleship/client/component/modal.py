@@ -1,13 +1,8 @@
 from tgraphics.color import colors, with_alpha
 from tgraphics.event import Event
-from tgraphics.template import c, text_c, hover_c, disable_c, w, h, r_b, r_t
+from tgraphics.template import c, w, h, r_b, r_t
 from tgraphics.component import Component, Window
-from tgraphics.reactivity import Ref, ReadRef, unref
-
-from .. import store
-from .button import ClickEvent
-from ..client import BattleshipClient
-from ...shared import models
+from tgraphics.reactivity import ReadRef
 
 
 class PlayerCreatedEvent(Event):
@@ -26,7 +21,10 @@ def modal(
         <Layer>
             <Rect width="window.width" height="window.height" color="with_alpha(colors['black'],127)" />
             <Column>
-                <Slot component="inner_component" />
+                <Layer>
+                    <RoundedRect t-template="c['white'] | w[128] | h[64] | r_b[4] | r_t[0]" />
+                    <Slot component="inner_component" />
+                </Layer>
                 <Layer>
                     <RoundedRect t-template="c['teal'][400] | w[128] | h[12] | r_b[0] | r_t[4]" />
                     <Label
