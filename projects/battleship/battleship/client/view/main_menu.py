@@ -62,6 +62,34 @@ def main_menu(window: Window, client: BattleshipClient, name: str | None, **kwar
 
     return Component.render_xml(
         """
+        <Layer handle-ComponentMountedEvent="on_mounted">
+            <Column 
+                gap="50" 
+                width="window.width" 
+                height="window.height"
+            >
+                <Column gap="10">
+                    <Label text="f'There are currently {unref(online_count)} player(s) online.'" color="colors['white']" />
+                    <LabelButton 
+                        text="'Public Match'"
+                        t-template="c['teal'][400] | hover_c['teal'][500] | disable_c['slate'][500] | text_c['white'] | w[48] | h[12]"
+                        handle-ClickEvent="on_public_room_match_button"
+                    />
+                </Column>
+                <Label text="'BATTLESHIP'" bold="True" color="colors['white']" font_size="88" />
+                <Column gap="0">   
+                    <Label text="f'Your current rating is {unref(store.user.rating)}'" color="colors['white']" />
+                    <Label text="f'Welcome, {unref(store.user.name)}'" /> 
+                </Column>
+            </Column>
+            <CreatePlayerModal t-if="unref(store.user.store) is None" window="window" client="client" />
+        </Layer>
+        """,
+        **kwargs,
+    )
+
+    return Component.render_xml(
+        """
         <Layer>
             <Column 
                 gap="0" 
@@ -70,14 +98,13 @@ def main_menu(window: Window, client: BattleshipClient, name: str | None, **kwar
                 handle-ComponentMountedEvent="on_mounted"
             >
                 <Pad pad_bottom="100">
-                        <Label text="'BATTLESHIP'" bold="True" color="colors['white']" font_size="88" />
+                    <Label text="'BATTLESHIP'" bold="True" color="colors['white']" font_size="88" />
                 </Pad>
             </Column>
 
             <Layer>
                 <Pad pad_top="150">
-                    <Column gap="10"
-                    >
+                    <Column gap="10">
                         <Label text="f'There are currently {unref(online_count)} player(s) online.'" color="colors['white']" />
                         <LabelButton 
                             text="'Public Match'"
