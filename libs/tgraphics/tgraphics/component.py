@@ -1292,6 +1292,83 @@ class Column(Component):
 
 
 @dataclass
+class SlotInstance(ComponentInstance["Slot"]):
+    _instance: Ref[ComponentInstance | None] = field(init=False)
+
+    def __hash__(self) -> int:
+        return id(self)
+
+    def _draw(self, dt: float):
+        if (instance := self._instance.value) is not None:
+            instance.draw(dt)
+
+    @event_handler(ComponentMountedEvent)
+    async def component_mounted_handler(self, _: ComponentMountedEvent):
+        self._instance = Ref(None)
+
+        width = computed(
+            lambda: unref(use_width(instance)) * unref(use_acc_scale_x(self))
+            if (instance := unref(self._instance)) is not None
+            else 0
+        )
+        height = computed(
+            lambda: unref(use_height(instance)) * unref(use_acc_scale_y(self))
+            if (instance := unref(self._instance)) is not None
+            else 0
+        )
+
+        async def mount_slot():
+            if (instance := unref(self._instance)) is not None:
+                await instance.capture(ComponentUnmountedEvent(instance))
+            instance = self.component.component.get_instance()
+            self._instance.value = instance
+
+            instance.before_mounted_data.value = BeforeMountedComponentInstanceData(
+                0,
+                0,
+                use_acc_offset_x(self),
+                use_acc_offset_y(self),
+                1,
+                1,
+                use_acc_scale_x(self),
+                use_acc_scale_y(self),
+            )
+            await instance.capture(ComponentMountedEvent(instance))
+
+        self.bound_watchers.update(
+            [
+                w
+                for w in [
+                    Watcher.ifref(
+                        self.component.component,
+                        lambda cs: asyncio.create_task(mount_slot()),
+                        trigger_init=True,
+                    ),
+                ]
+                if w is not None
+            ]
+        )
+
+        self.after_mounted_data.value = AfterMountedComponentInstanceData(
+            width,
+            height,
+            computed(
+                lambda: [instance]
+                if (instance := unref(self._instance)) is not None
+                else []
+            ),
+        )
+
+
+@dataclass
+class Slot(Component):
+    component: Component | ReadRef[Component]
+
+    def get_instance(self):
+        return SlotInstance(component=self)
+
+
+@dataclass
 class RectInstance(ComponentInstance["Rect"]):
     _rect: Rectangle = field(init=False)
 
