@@ -1,4 +1,6 @@
 import argparse
+import asyncio
+import contextlib
 import os
 import ssl
 
@@ -35,4 +37,13 @@ if __name__ == "__main__":
 
     pyglet.app.run()
     loop.run_until_complete(client.disconnect())
+
+    async def cleanup():
+        tasks = asyncio.all_tasks(loop)
+        for task in tasks:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, RuntimeError):
+                await task
+
+    loop.run_until_complete(cleanup())
     loop.close()

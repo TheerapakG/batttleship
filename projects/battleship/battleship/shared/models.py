@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from enum import Enum
 from uuid import UUID
 
 
@@ -48,20 +49,25 @@ class ShipVariantId:
 
 
 @dataclass
-class Ship:
+class ShipId:
+    id: UUID  # pylint: disable=C0103
+
+
+@dataclass
+class Ship(ShipId):
     ship_variant: ShipVariantId
     tile_position: list[tuple[int, int]]
-    orientation: tuple[tuple[int, int], tuple[int, int]]
+    orientation: int
 
 
 @dataclass
 class ShipTile:
-    ship: Ship
+    ship: ShipId
 
 
 @dataclass(eq=True, frozen=True)
 class ObstacleVariantId:
-    id: int  # pylint: disable=C0103
+    id: UUID  # pylint: disable=C0103
 
 
 @dataclass
@@ -69,9 +75,14 @@ class ObstacleTile:
     obstacle_variant: ObstacleVariantId
 
 
+@dataclass(eq=True, frozen=True)
+class MineVariantId:
+    id: UUID  # pylint: disable=C0103
+
+
 @dataclass
 class MineTile:
-    pass
+    mine_variant: MineVariantId
 
 
 @dataclass(eq=True, frozen=True)

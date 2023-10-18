@@ -14,7 +14,9 @@ from ...shared import models
 
 
 @Component.register("MainMenu")
-def main_menu(window: Window, client: BattleshipClient, name: str | None, **kwargs):
+def main_menu(
+    window: Window, client: BattleshipClient, name: str | None = None, **kwargs
+):
     try:
         store.user.load()
     except FileNotFoundError:
@@ -138,5 +140,3 @@ def main_menu(window: Window, client: BattleshipClient, name: str | None, **kwar
         """,
         **kwargs,
     )
-
- 

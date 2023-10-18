@@ -507,10 +507,10 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
 
     @event_handler(ComponentUnmountedEvent)
     async def component_unmounted_handler(self, _: ComponentUnmountedEvent):
-        gather = asyncio.gather(*self.bound_tasks)
-        gather.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await gather
+        for task in self.bound_tasks:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
         self.bound_tasks.clear()
         for watcher in self.bound_watchers:
             watcher.unwatch()
@@ -751,12 +751,21 @@ class ComponentMeta(type):
                                 _ref_list.append(eval_for_values)
                                 override_values["_ref_list"] = _ref_list
 
+                            def assign_var(for_var, v):
+                                for_vars = [f_v.strip() for f_v in for_var.split(",")]
+                                return (
+                                    {f_v: val for f_v, val in zip(for_vars, v)}
+                                    if len(for_vars) > 1
+                                    else {for_vars[0]: v}
+                                )
+
                             return [
                                 component
                                 for components in [
                                     unref(
                                         old_render_fn(
-                                            additional_scope_values | {for_var: v},
+                                            additional_scope_values
+                                            | assign_var(for_var, v),
                                             override_values,
                                         )
                                     )
@@ -2289,10 +2298,12 @@ class Window:
 
         @self._window.event
         def on_draw():
-            _t  = time.time()
+            _t = time.time()
             self._window.clear()
             if (scene_instance := self.scene_instance) is not None:
-                scene_instance.draw(_t-_lt if (_lt := self._last_draw_time is not None) else 0)
+                scene_instance.draw(
+                    _t - _lt if (_lt := self._last_draw_time is not None) else 0
+                )
             self._last_draw_time = _t
 
         @self._window.event

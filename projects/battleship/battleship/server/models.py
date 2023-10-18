@@ -50,6 +50,15 @@ class Room:
         async with self.lock:
             session = self.server.known_player_session[player_id]
             self.server.off_session_leave(session, self.remove_session)
+            if len(self.players) < 2 or len(self.readies) == len(self.players):
+                room_id = self.to_room_id()
+                del self.server.rooms[room_id]
+                with contextlib.suppress(KeyError):
+                    self.server.match_rooms.remove(room_id)
+                with contextlib.suppress(KeyError):
+                    join_code = self.server.private_room_codes_rev[room_id]
+                    del self.server.private_room_codes[join_code]
+                    del self.server.private_room_codes_rev[room_id]
             player_info = await self.server.player_info_get(session, player_id)
             self.players.remove(player_info)
             with contextlib.suppress(KeyError):
@@ -64,15 +73,6 @@ class Room:
                             player_info,
                         )
                     )
-            if not self.players:
-                room_id = self.to_room_id()
-                del self.server.rooms[room_id]
-                with contextlib.suppress(KeyError):
-                    self.server.match_rooms.remove(room_id)
-                with contextlib.suppress(KeyError):
-                    join_code = self.server.private_room_codes_rev[room_id]
-                    del self.server.private_room_codes[join_code]
-                    del self.server.private_room_codes_rev[room_id]
 
     async def add_ready(self, player_id: models.PlayerId):
         async with self.lock:
