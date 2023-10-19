@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from enum import Enum
 from uuid import UUID
 
 
@@ -48,12 +47,16 @@ class ShipVariantId:
     id: UUID  # pylint: disable=C0103
 
 
-@dataclass
+@dataclass(eq=True, frozen=True)
 class ShipId:
     id: UUID  # pylint: disable=C0103
 
+    @classmethod
+    def from_ship(cls, ship: "Ship"):
+        return cls(ship.id)
 
-@dataclass
+
+@dataclass(eq=True, frozen=True)
 class Ship(ShipId):
     ship_variant: ShipVariantId
     tile_position: list[tuple[int, int]]

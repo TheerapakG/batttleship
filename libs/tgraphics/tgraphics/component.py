@@ -152,17 +152,45 @@ class ElementComponentData:
         }
 
         if (capturers := init_vars.get("event_capturers", None)) is not None:
-            capturers.update(event_capturers)
+            for event, capturer in event_capturers.items():
+                if (existed_capturer := capturers.get(event, None)) is not None:
+
+                    async def merged_capturer(
+                        event,
+                        existed_capturer=existed_capturer,
+                        capturer=capturer,
+                    ):
+                        if await existed_capturer(event) is StopPropagate:
+                            return StopPropagate
+                        return await capturer(event)
+
+                    capturers[event] = merged_capturer
+                else:
+                    capturers[event] = capturer
         else:
             init_vars["event_capturers"] = event_capturers
 
         event_handlers = {
-            Event.from_name(k): eval(v, frame.frame.f_globals, init_locals)
+            Event.from_name(k): eval(v, frame.frame.f_globals | init_locals, {})
             for k, v in self.handlers.items()
         }
 
         if (handlers := init_vars.get("event_handlers", None)) is not None:
-            handlers.update(event_handlers)
+            for event, handler in event_handlers.items():
+                if (existed_handler := handlers.get(event, None)) is not None:
+
+                    async def merged_handler(
+                        event,
+                        existed_handler=existed_handler,
+                        handler=handler,
+                    ):
+                        if await existed_handler(event) is StopPropagate:
+                            return StopPropagate
+                        return await handler(event)
+
+                    handlers[event] = merged_handler
+                else:
+                    handlers[event] = handler
         else:
             init_vars["event_handlers"] = event_handlers
 
@@ -2349,6 +2377,12 @@ class Input(Component):
 loop = asyncio.get_event_loop()
 pyglet.clock.schedule(lambda dt: loop.run_until_complete(asyncio.sleep(0)))
 
+_current_keys = Ref(dict())
+
+
+def use_key_pressed(key):
+    return computed(lambda: unref(_current_keys).get(key, False))
+
 
 @dataclass
 class Window:
@@ -2385,6 +2419,8 @@ class Window:
 
         @self._window.event
         def on_key_press(symbol, modifiers):
+            _current_keys.value[symbol] = True
+            _current_keys.trigger()
             if (scene_instance := self.scene_instance) is not None:
                 loop.create_task(
                     scene_instance.capture(
@@ -2398,6 +2434,8 @@ class Window:
 
         @self._window.event
         def on_key_release(symbol, modifiers):
+            _current_keys.value[symbol] = False
+            _current_keys.trigger()
             if (scene_instance := self.scene_instance) is not None:
                 loop.create_task(
                     scene_instance.capture(

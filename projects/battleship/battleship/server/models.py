@@ -52,7 +52,8 @@ class Room:
             self.server.off_session_leave(session, self.remove_session)
             if len(self.players) < 2 or len(self.readies) == len(self.players):
                 room_id = self.to_room_id()
-                del self.server.rooms[room_id]
+                with contextlib.suppress(KeyError):
+                    del self.server.rooms[room_id]
                 with contextlib.suppress(KeyError):
                     self.server.match_rooms.remove(room_id)
                 with contextlib.suppress(KeyError):
