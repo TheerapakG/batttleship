@@ -38,11 +38,12 @@ def games(window: Window, client: BattleshipClient, **kwargs):
             for grid in state:
                 if unref(grid) == "Choosen Space":
                     pass
+
     return Component.render_xml(
         """
         <Column gap="4" width="window.width" height="window.height">
             <Row t-for="col in range(8)" gap="4">
-                <LabelButton 
+                <RoundedRectLabelButton 
                     t-for="row in range(8)"
                     text="''" 
                     text_color="colors['white']"

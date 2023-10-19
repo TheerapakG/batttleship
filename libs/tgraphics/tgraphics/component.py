@@ -849,9 +849,9 @@ class ComponentMeta(type):
                             return partial(render_fn, eval_val)
 
                         render_fn = if_render_fn_wrapper(render_fn, directive_value)
-                    case "template":
+                    case "style":
 
-                        def template_render_fn_wrapper(
+                        def style_render_fn_wrapper(
                             old_render_fn: Callable[..., list["Component"]],
                             directive_value: str,
                         ):
@@ -876,9 +876,7 @@ class ComponentMeta(type):
 
                             return partial(render_fn, eval_val)
 
-                        render_fn = template_render_fn_wrapper(
-                            render_fn, directive_value
-                        )
+                        render_fn = style_render_fn_wrapper(render_fn, directive_value)
 
                     case _ if directive_key.startswith("model-"):
 

@@ -78,10 +78,10 @@ def main_menu(
                     <Layer>
                         <Pad pad_bottom="20">
                             <Pad pad_right="310">
-                                <LabelButton 
+                                <RoundedRectLabelButton 
                                     text="'+'"
                                     font_size="20"
-                                    t-template="c['teal'][300] | hover_c['teal'][400] | disable_c['slate'][500] | text_c['white'] | w[10] | h[10]"
+                                    t-style="c['teal'][300] | hover_c['teal'][400] | disable_c['slate'][500] | text_c['white'] | w[10] | h[10]"
                                     handle-ClickEvent="on_private_room_create_button"
                                 />
                             </Pad>
@@ -93,7 +93,7 @@ def main_menu(
                         </Pad>
                         <Pad pad_bottom="20"> 
                             <Pad pad_right="65">
-                                <RoundedRect t-template="c['teal'][100] | w[48] | h[12] | r_r[0]"/>
+                                <RoundedRect t-style="c['teal'][100] | w[48] | h[12] | r_r[0]"/>
                             </Pad>
                         </Pad>
                         <Row gap="20">
@@ -103,13 +103,13 @@ def main_menu(
                                 color="colors['black']"
                                 caret_color="colors['black']"
                                 selection_background_color="colors['teal'][300]"
-                                t-template="w[40] | h[8]"
+                                t-style="w[40] | h[8]"
                             />
                             </Pad>
                             <Pad pad_bottom="20"> 
-                                <LabelButton 
+                                <RoundedRectLabelButton 
                                     text="'Join'"
-                                    t-template="c['teal'][300] | hover_c['teal'][400] | disable_c['slate'][500] | text_c['white'] | w[16] | h[12] | r_l[0]"
+                                    t-style="c['teal'][300] | hover_c['teal'][400] | disable_c['slate'][500] | text_c['white'] | w[16] | h[12] | r_l[0]"
                                     handle-ClickEvent="on_private_room_join_button"
                                 />
                             </Pad>
@@ -117,9 +117,9 @@ def main_menu(
                     </Layer>
                     <Layer>
                         <Pad pad_top="25">
-                            <LabelButton 
+                            <RoundedRectLabelButton 
                                 text="'Public Match'"
-                                t-template="c['teal'][400] | hover_c['teal'][500] | disable_c['slate'][500] | text_c['white'] | w[64] | h[12]"
+                                t-style="c['teal'][400] | hover_c['teal'][500] | disable_c['slate'][500] | text_c['white'] | w[64] | h[12]"
                                 handle-ClickEvent="on_public_room_match_button"
                             />
                         </Pad>

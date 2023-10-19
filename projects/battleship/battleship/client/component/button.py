@@ -8,8 +8,8 @@ class ClickEvent(Event):
     pass
 
 
-@Component.register("LabelButton")
-def label_button(
+@Component.register("RoundedRectLabelButton")
+def rounded_rect_label_button(
     text: str | ReadRef[str],
     text_color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]],
     color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]],

@@ -194,7 +194,7 @@ def ship_setup(window: Window, client: BattleshipClient, **kwargs):
         """
         <Column gap="16" width="window.width" height="window.height" handle-ComponentMountedEvent="on_mounted">
             <Row gap="4">
-                <LabelButton 
+                <RoundedRectLabelButton 
                     t-for="ship_id, ship in ships.items()"
                     text="''" 
                     text_color="colors['white']"
@@ -208,7 +208,7 @@ def ship_setup(window: Window, client: BattleshipClient, **kwargs):
             </Row>
             <Column gap="4">
                 <Row t-for="col, board_col in enumerate(board)" gap="4">
-                    <LabelButton 
+                    <RoundedRectLabelButton 
                         t-for="row, tile in enumerate(board_col)"
                         text="''" 
                         text_color="colors['white']"

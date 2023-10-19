@@ -31,19 +31,19 @@ def create_player_modal(window: Window, client: BattleshipClient, **kwargs):
         Component.render_xml(
             """
             <Column gap="16">
-                <LabelButton 
+                <RoundedRectLabelButton 
                     text="'Create User'"
-                    t-template="c['teal'][400] | hover_c['teal'][500] | disable_c['slate'][500] | text_c['white'] | w[48] | h[12]"
+                    t-style="c['teal'][400] | hover_c['teal'][500] | disable_c['slate'][500] | text_c['white'] | w[48] | h[12]"
                     handle-ClickEvent="on_create_player_button"
                 />
                 <Layer>
-                    <RoundedRect t-template="c['teal'][100] | w[64] | h[9]" />
+                    <RoundedRect t-style="c['teal'][100] | w[64] | h[9]" />
                     <Input
                         t-model-text="name"
                         color="colors['black']"
                         caret_color="colors['black']"
                         selection_background_color="colors['teal'][300]"
-                        t-template="w[56] | h[5]"
+                        t-style="w[56] | h[5]"
                     />
                 </Layer>
             </Column>

@@ -75,11 +75,11 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
             handle-ComponentMountedEvent="on_mounted"
         >
             <Column t-for="player_info in player_infos">
-                <LabelButton
+                <RoundedRectLabelButton
                     t-if="store.user.is_player(models.PlayerId.from_player_info(player_info))"
                     text="'Ready'"
                     disable="ready"
-                    t-template="c['teal'][400] | hover_c['teal'][500] | disable_c['slate'][500] | text_c['white'] | w[48] | h[12]"
+                    t-style="c['teal'][400] | hover_c['teal'][500] | disable_c['slate'][500] | text_c['white'] | w[48] | h[12]"
                     handle-ClickEvent="on_ready_button"
                 />
                 <Label

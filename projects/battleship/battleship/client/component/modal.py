@@ -22,14 +22,14 @@ def modal(
             <Rect width="window.width" height="window.height" color="with_alpha(colors['black'],127)" />
             <Column>
                 <Layer>
-                    <RoundedRect t-template="c['white'] | w[128] | h[64] | r_b[4] | r_t[0]" />
+                    <RoundedRect t-style="c['white'] | w[128] | h[64] | r_b[4] | r_t[0]" />
                     <Slot component="inner_component" />
                 </Layer>
                 <Layer>
-                    <RoundedRect t-template="c['teal'][400] | w[128] | h[12] | r_b[0] | r_t[4]" />
+                    <RoundedRect t-style="c['teal'][400] | w[128] | h[12] | r_b[0] | r_t[4]" />
                     <Label
                         text="name"
-                        t-template="c['white']"
+                        t-style="c['white']"
                     />
                 </Layer>
             </Column>
