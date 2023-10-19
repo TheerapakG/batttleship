@@ -26,4 +26,17 @@ NORMAL_SHIP_VARIANT = ShipVariant(
     },
 )
 
-SHIP_VARIANTS = {NORMAL_SHIP_VARIANT.id: NORMAL_SHIP_VARIANT}
+T_SHIP_VARIANT = ShipVariant(
+    UUID("e544f063-bba5-42ad-830e-20739640f5ec"),
+    {
+        (0, 0): ["", "", "", ""],
+        (1, 0): ["", "", "", ""],
+        (2, 0): ["", "", "", ""],
+        (1, 1): ["", "", "", ""],
+    },
+)
+
+SHIP_VARIANTS = {
+    NORMAL_SHIP_VARIANT.id: NORMAL_SHIP_VARIANT,
+    T_SHIP_VARIANT.id: T_SHIP_VARIANT,
+}

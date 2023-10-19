@@ -37,7 +37,10 @@ def ship_setup(
     ships = {
         models.ShipId.from_ship(ship): Ref(ship)
         for ship in [
-            models.Ship(uuid4(), ship.NORMAL_SHIP_VARIANT, [], 0) for _ in range(4)
+            models.Ship(uuid4(), ship.NORMAL_SHIP_VARIANT, [], 0),
+            models.Ship(uuid4(), ship.NORMAL_SHIP_VARIANT, [], 0),
+            models.Ship(uuid4(), ship.T_SHIP_VARIANT, [], 0),
+            models.Ship(uuid4(), ship.T_SHIP_VARIANT, [], 0),
         ]
     }
     current_ship_id = Ref[models.ShipId | None](None)

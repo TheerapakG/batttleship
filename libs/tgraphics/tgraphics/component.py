@@ -985,26 +985,36 @@ class PadInstance(ComponentInstance["Pad"]):
     async def component_mounted_handler(self, _: ComponentMountedEvent):
         child = computed(
             lambda: unref(unref(self.component.children)[0]).get_instance()
+            if unref(self.component.children)
+            else None
         )
+        previous_child: ComponentInstance | None = None
 
         async def mount_child(child: ComponentInstance):
-            off_x = computed(
-                lambda: unref(self.component.pad_left) * unref(use_acc_scale_x(self))
-            )
-            off_y = computed(
-                lambda: unref(self.component.pad_bottom) * unref(use_acc_scale_y(self))
-            )
-            child.before_mounted_data.value = BeforeMountedComponentInstanceData(
-                off_x,
-                off_y,
-                computed(lambda: unref(use_acc_offset_x(self)) + unref(off_x)),
-                computed(lambda: unref(use_acc_offset_y(self)) + unref(off_y)),
-                1,
-                1,
-                use_acc_scale_x(self),
-                use_acc_scale_y(self),
-            )
-            await child.capture(ComponentMountedEvent(child))
+            nonlocal previous_child
+            if previous_child is not None:
+                previous_child.capture(ComponentUnmountedEvent(previous_child))
+            previous_child = child
+            if child is not None:
+                off_x = computed(
+                    lambda: unref(self.component.pad_left)
+                    * unref(use_acc_scale_x(self))
+                )
+                off_y = computed(
+                    lambda: unref(self.component.pad_bottom)
+                    * unref(use_acc_scale_y(self))
+                )
+                child.before_mounted_data.value = BeforeMountedComponentInstanceData(
+                    off_x,
+                    off_y,
+                    computed(lambda: unref(use_acc_offset_x(self)) + unref(off_x)),
+                    computed(lambda: unref(use_acc_offset_y(self)) + unref(off_y)),
+                    1,
+                    1,
+                    use_acc_scale_x(self),
+                    use_acc_scale_y(self),
+                )
+                await child.capture(ComponentMountedEvent(child))
 
         self.bound_watchers.update(
             [
@@ -1022,16 +1032,20 @@ class PadInstance(ComponentInstance["Pad"]):
 
         self.after_mounted_data.value = AfterMountedComponentInstanceData(
             computed(
-                lambda: unref(use_width(unref(child)))
+                lambda: (
+                    unref(use_width(unref(child))) if unref(child) is not None else 0
+                )
                 + unref(self.component.pad_left)
                 + unref(self.component.pad_right)
             ),
             computed(
-                lambda: unref(use_height(unref(child)))
+                lambda: (
+                    unref(use_height(unref(child))) if unref(child) is not None else 0
+                )
                 + unref(self.component.pad_bottom)
                 + unref(self.component.pad_top)
             ),
-            computed(lambda: [unref(child)]),
+            computed(lambda: [unref(child)] if unref(child) is not None else []),
         )
 
 
