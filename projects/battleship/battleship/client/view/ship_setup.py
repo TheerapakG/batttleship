@@ -9,27 +9,19 @@ from tgraphics.color import colors
 from tgraphics.event import ComponentMountedEvent
 from tgraphics.component import Component, Window, use_key_pressed
 from tgraphics.reactivity import computed, unref, Ref, Watcher
+from tgraphics.style import c, text_c, hover_c, disable_c, w, h
 
 from .. import store
 from ..client import BattleshipClient
-from ...shared import models, ship
 from ..component.button import ClickEvent
-
-
-def add(vec1: tuple[int, ...], vec2: tuple[int, ...]):
-    return tuple(i + j for i, j in zip(vec1, vec2))
-
-
-def dot(vec1: tuple[int, ...], vec2: tuple[int, ...]):
-    return tuple(i * j for i, j in zip(vec1, vec2))
-
-
-def mat_mul_vec(mat: tuple[tuple[int, ...], ...], vec: tuple[int, ...]):
-    return tuple(sum(dot(i, vec)) for i in mat)
+from ...shared import models, ship
+from ...shared.utils import add, mat_mul_vec
 
 
 @Component.register("ShipSetup")
-def ship_setup(window: Window, client: BattleshipClient, **kwargs):
+def ship_setup(
+    window: Window, client: BattleshipClient, room: models.RoomInfo, **kwargs
+):
     board = [
         [
             Ref[
@@ -50,6 +42,12 @@ def ship_setup(window: Window, client: BattleshipClient, **kwargs):
     }
     current_ship_id = Ref[models.ShipId | None](None)
     hover_index = Ref[tuple[int, int]]((0, 0))
+    submit = Ref(False)
+    not_submitable = computed(
+        lambda: unref(submit)
+        or not all(unref(ship).tile_position for ship in ships.values())
+    )
+    player_submits = Ref(set())
 
     current_placement = computed(
         lambda: (
@@ -126,6 +124,17 @@ def ship_setup(window: Window, client: BattleshipClient, **kwargs):
 
             await window.set_scene(main_menu(window=window, client=client))
 
+    async def subscribe_room_player_submit():
+        async for player_id in client.on_room_player_submit():
+            player_submits.value.add(player_id)
+            player_submits.trigger()
+
+    async def subscribe_room_submit():
+        async for _ in client.on_room_submit():
+            from .games import games
+
+            await window.set_scene(games(window, client))
+
     def on_key_r_change(state: bool):
         if state and ((ship_id := unref(current_ship_id)) is not None):
             current_ship_ref = ships[ship_id]
@@ -139,6 +148,8 @@ def ship_setup(window: Window, client: BattleshipClient, **kwargs):
         event.instance.bound_tasks.update(
             [
                 asyncio.create_task(subscribe_player_leave()),
+                asyncio.create_task(subscribe_room_player_submit()),
+                asyncio.create_task(subscribe_room_submit()),
             ]
         )
         event.instance.bound_watchers.update(
@@ -152,26 +163,29 @@ def ship_setup(window: Window, client: BattleshipClient, **kwargs):
         )
 
     async def on_tile_click(col: int, row: int, event: ClickEvent):
-        if (placement := unref(current_placement)) is not None and (
-            (ship_id := unref(current_ship_id)) is not None
-            and unref(current_placement_legal)
-        ):
-            for col, row in placement.keys():
-                board[col][row].value = models.ShipTile(ship_id)
-            current_ship_ref = ships[ship_id]
-            current_ship_ref.value = replace(
-                unref(current_ship_ref),
-                tile_position=[position for position in placement.keys()],
-            )
-            current_ship_ref.trigger()
-            current_ship_id.value = None
-        elif isinstance((ship_tile := unref(board[col][row])), models.ShipTile):
-            current_ship_ref = ships[ship_tile.ship]
-            for col, row in unref(current_ship_ref).tile_position:
-                board[col][row].value = models.EmptyTile()
-            current_ship_ref.value = replace(unref(current_ship_ref), tile_position=[])
-            current_ship_ref.trigger()
-            current_ship_id.value = models.ShipId.from_ship(unref(current_ship_ref))
+        if not unref(submit):
+            if (placement := unref(current_placement)) is not None and (
+                (ship_id := unref(current_ship_id)) is not None
+                and unref(current_placement_legal)
+            ):
+                for col, row in placement.keys():
+                    board[col][row].value = models.ShipTile(ship_id)
+                current_ship_ref = ships[ship_id]
+                current_ship_ref.value = replace(
+                    unref(current_ship_ref),
+                    tile_position=[position for position in placement.keys()],
+                )
+                current_ship_ref.trigger()
+                current_ship_id.value = None
+            elif isinstance((ship_tile := unref(board[col][row])), models.ShipTile):
+                current_ship_ref = ships[ship_tile.ship]
+                for col, row in unref(current_ship_ref).tile_position:
+                    board[col][row].value = models.EmptyTile()
+                current_ship_ref.value = replace(
+                    unref(current_ship_ref), tile_position=[]
+                )
+                current_ship_ref.trigger()
+                current_ship_id.value = models.ShipId.from_ship(unref(current_ship_ref))
 
     async def on_tile_mounted(col: int, row: int, event: ComponentMountedEvent):
         event.instance.bound_watchers.update(
@@ -188,11 +202,36 @@ def ship_setup(window: Window, client: BattleshipClient, **kwargs):
         )
 
     async def on_ship_click(ship_id: int, _event: ClickEvent):
-        current_ship_id.value = ship_id
+        if not unref(submit):
+            current_ship_ref = ships[ship_id]
+            for col, row in unref(current_ship_ref).tile_position:
+                board[col][row].value = models.EmptyTile()
+            current_ship_ref.value = replace(unref(current_ship_ref), tile_position=[])
+            current_ship_ref.trigger()
+            current_ship_id.value = ship_id
+
+    async def on_submit_button(_e):
+        if (user := unref(store.user.store)) is not None:
+            submit.value = True
+            await client.board_submit(
+                models.Board(
+                    uuid4(),
+                    models.PlayerId.from_player(user),
+                    models.RoomId.from_room_info(room),
+                    [[unref(tile) for tile in row] for row in board],
+                    [unref(ship) for ship in ships.values()],
+                )
+            )
 
     return Component.render_xml(
         """
         <Column gap="16" width="window.width" height="window.height" handle-ComponentMountedEvent="on_mounted">
+            <RoundedRectLabelButton
+                text="'Submit'"
+                disable="not_submitable"
+                t-style="c['teal'][400] | hover_c['teal'][500] | disable_c['slate'][500] | text_c['white'] | w[48] | h[12]"
+                handle-ClickEvent="on_submit_button"
+            />
             <Row gap="4">
                 <RoundedRectLabelButton 
                     t-for="ship_id, ship in ships.items()"
@@ -222,6 +261,20 @@ def ship_setup(window: Window, client: BattleshipClient, **kwargs):
                     />
                 </Row>
             </Column>
+            <Row 
+                gap="16"
+            >
+                <Column t-for="player_info in room.players">
+                    <Label
+                        text="'Submitted' if models.PlayerId.from_player_info(player_info) in unref(player_submits) else 'Not Submitted'"
+                        color="colors['white']" 
+                    />
+                    <Label
+                        text="player_info.name" 
+                        color="colors['white']" 
+                    />
+                </Column>
+            </Row>
         </Column>
         """,
         **kwargs,

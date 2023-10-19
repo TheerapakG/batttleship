@@ -49,6 +49,14 @@ class BattleshipClient(Client):
     def on_room_ready(self) -> AsyncIterator[Empty]:
         raise NotImplementedError()
 
+    @subscribe
+    def on_room_player_submit(self) -> AsyncIterator[models.PlayerId]:
+        raise NotImplementedError()
+
+    @subscribe
+    def on_room_submit(self) -> AsyncIterator[Empty]:
+        raise NotImplementedError()
+
     @Route.simple
     async def room_match(self, args: models.BearingPlayerAuth) -> models.RoomInfo:
         raise NotImplementedError()
@@ -75,4 +83,8 @@ class BattleshipClient(Client):
 
     @Route.simple
     async def private_room_unlock(self, args: models.RoomId) -> Empty:
+        raise NotImplementedError()
+
+    @Route.simple
+    async def board_submit(self, args: models.Board) -> Empty:
         raise NotImplementedError()

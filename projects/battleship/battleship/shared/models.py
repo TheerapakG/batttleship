@@ -1,3 +1,4 @@
+from attrs import define
 from dataclasses import dataclass, field
 from uuid import UUID
 
@@ -37,7 +38,7 @@ class Player(PlayerInfo):
         return self_q / (self_q + other_q)
 
 
-@dataclass
+@define
 class EmptyTile:
     pass
 
@@ -63,7 +64,7 @@ class Ship(ShipId):
     orientation: int
 
 
-@dataclass
+@define
 class ShipTile:
     ship: ShipId
 
@@ -73,7 +74,7 @@ class ObstacleVariantId:
     id: UUID  # pylint: disable=C0103
 
 
-@dataclass
+@define
 class ObstacleTile:
     obstacle_variant: ObstacleVariantId
 
@@ -83,19 +84,9 @@ class MineVariantId:
     id: UUID  # pylint: disable=C0103
 
 
-@dataclass
+@define
 class MineTile:
     mine_variant: MineVariantId
-
-
-@dataclass(eq=True, frozen=True)
-class Board:
-    id: UUID  # pylint: disable=C0103
-    player: PlayerId = field(compare=False)
-    room: "RoomId" = field(compare=False)
-    grid: list[list[EmptyTile | ShipTile | ObstacleTile | MineTile]] = field(
-        compare=False
-    )
 
 
 @dataclass(eq=True, frozen=True)
@@ -103,8 +94,19 @@ class BoardId:
     id: UUID  # pylint: disable=C0103
 
     @classmethod
-    def from_board(cls, board: Board):
+    def from_board(cls, board: "Board"):
         return cls(board.id)
+
+
+@dataclass(eq=True, frozen=True)
+class Board(BoardId):
+    id: UUID  # pylint: disable=C0103
+    player: PlayerId = field(compare=False)
+    room: "RoomId" = field(compare=False)
+    grid: list[list[EmptyTile | ShipTile | ObstacleTile | MineTile]] = field(
+        compare=False
+    )
+    ship: list[Ship] = field(compare=False)
 
 
 @dataclass(eq=True, frozen=True)

@@ -1,11 +1,12 @@
 import asyncio
 import contextlib
+from dataclasses import replace
 
 from tgraphics.color import colors
 from tgraphics.component import Component, Window
 from tgraphics.event import ComponentMountedEvent
 from tgraphics.reactivity import Ref, computed, unref
-from tgraphics.template import c, text_c, hover_c, disable_c, w, h
+from tgraphics.style import c, text_c, hover_c, disable_c, w, h
 
 from .. import store
 from ..client import BattleshipClient
@@ -48,8 +49,9 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
         async for _ in client.on_room_ready():
             from .ship_setup import ship_setup
 
-            # TODO: see what this takes
-            await window.set_scene(ship_setup(window, client))
+            await window.set_scene(
+                ship_setup(window, client, replace(room, players=unref(player_infos)))
+            )
 
     async def on_mounted(event: ComponentMountedEvent):
         # TODO: async component

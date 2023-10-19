@@ -5,7 +5,7 @@ from tgraphics.component import Component, Window
 from tgraphics.event import ComponentMountedEvent
 from tgraphics.reactivity import Ref, computed, unref
 from tsocket.shared import Empty
-from tgraphics.template import c, text_c, hover_c, disable_c, w, h, r_b, r_t, r_l, r_r
+from tgraphics.style import c, text_c, hover_c, disable_c, w, h, r_b, r_t, r_l, r_r
 
 from .. import store
 from ..client import BattleshipClient

@@ -1,6 +1,6 @@
 from tgraphics.color import colors, with_alpha
 from tgraphics.event import Event
-from tgraphics.template import c, w, h, r_b, r_t
+from tgraphics.style import c, w, h, r_b, r_t
 from tgraphics.component import Component, Window
 from tgraphics.reactivity import ReadRef
 

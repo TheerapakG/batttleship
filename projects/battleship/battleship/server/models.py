@@ -89,9 +89,41 @@ class Room:
                         )
                     )
                 if len(self.players) > 1 and len(self.readies) == len(self.players):
+                    room_id = self.to_room_id()
+                    with contextlib.suppress(KeyError):
+                        self.server.match_rooms.remove(room_id)
+                    with contextlib.suppress(KeyError):
+                        join_code = self.server.private_room_codes_rev[room_id]
+                        del self.server.private_room_codes[join_code]
+                        del self.server.private_room_codes_rev[room_id]
                     for player_info in self.players:
                         tg.create_task(
                             self.server.on_room_ready(
+                                self.server.known_player_session[
+                                    models.PlayerId.from_player_info(player_info)
+                                ],
+                                Empty(),
+                            )
+                        )
+
+    async def add_submit(self, board: models.Board):
+        async with self.lock:
+            self.boards[board.player] = board
+            # TODO: board check??
+            async with asyncio.TaskGroup() as tg:
+                for player_info in self.players:
+                    tg.create_task(
+                        self.server.on_room_player_submit(
+                            self.server.known_player_session[
+                                models.PlayerId.from_player_info(player_info)
+                            ],
+                            board.player,
+                        )
+                    )
+                if len(self.boards) == len(self.players):
+                    for player_info in self.players:
+                        tg.create_task(
+                            self.server.on_room_submit(
                                 self.server.known_player_session[
                                     models.PlayerId.from_player_info(player_info)
                                 ],
