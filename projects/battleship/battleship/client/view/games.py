@@ -1,72 +1,59 @@
 from tgraphics.color import colors
 from tgraphics.component import Component, Window
 from tgraphics.reactivity import computed, unref, Ref
-from tsocket.shared import Empty
+from tgraphics.template import c, text_c, hover_c, disable_c, w, h
 
 
 from .. import store
 from ..client import BattleshipClient
-from ..component.button import ClickEvent
 
 
 @Component.register("Games")
-def games_ui(window: Window, client: BattleshipClient, **kwargs):
-    gap_size = 16
+def games(window: Window, client: BattleshipClient, **kwargs):
     skill_activated = Ref("False")
     target_choosen = Ref("False")
-    battleship_state = []
-    color_state = []
+    board = []
     # Starting board
     for row in range(8):
-        battleship_state.append([])
+        board.append([])
         for column in range(8):
-            battleship_state[row].append(Ref("Normal Space"))
+            board[row].append(Ref("Normal Space"))
 
-    def select_shooting_spot(position: (int, int)):
-        def shooting(event: ClickEvent):
-            (column, row) = position
-            if unref(target_choosen) == "True":
-                pass
-            if unref(skill_activated) == "False":
-                if unref(battleship_state[row][column]) == "Normal Space":
-                    battleship_state[row][column].value = "Choosen Space"
-                print(battleship_state)
-            elif unref(skill_activated) == "True":
-                # A skill that bomb a row
-                for each_column in range(8):
-                    if unref(battleship_state[row][each_column]) != "Environment Space":
-                        battleship_state[row][each_column].value = "Choosen Space"
+    def select_grid(column: int, row: int, event):
+        if unref(target_choosen) == "True":
+            pass
+        if unref(skill_activated) == "False":
+            if unref(board[row][column]) == "Normal Space":
+                board[row][column].value = "Choosen Space"
+        elif unref(skill_activated) == "True":
+            for each_column in range(8):
+                if unref(board[row][each_column]) != "Environment Space":
+                    board[row][each_column].value = "Choosen Space"
 
-    def select_skill(e_):
+    async def select_skill(e_):
         skill_activated.value = "True"
 
     async def confirm_shoot(e_):
-        async def check_hit():
-            pass
-
-        for state in battleship_state:
-            for values in state:
-                if unref(values) == "Choosen Space":
+        for state in board:
+            for grid in state:
+                if unref(grid) == "Choosen Space":
                     pass
-
     return Component.render_xml(
         """
-        <Column gap="16" width="window.width" height="window.height">
-            <Column gap="gap_size">
-                <Row t-for="row in range(8)" gap="gap_size">
-                    <LabelButton 
-                        t-for="column in range(8)"
-                        text="str(row)+str(column)" 
-                        text_color="colors['white']"
-                        color="colors['white']"
-                        hover_color="colors['white']"
-                        width="4"
-                        height="4"
-                        handle-ClickEvent="select_shooting_spot((column, row))"
-                        disable_color="colors['white']"
-                    />
-                </Row>
-            </Column>
+        <Column gap="4" width="window.width" height="window.height">
+            <Row t-for="col in range(8)" gap="4">
+                <LabelButton 
+                    t-for="row in range(8)"
+                    text="''" 
+                    text_color="colors['white']"
+                    color="colors['white']"
+                    hover_color="colors['white']"
+                    disable_color="colors['white']"
+                    width="32"
+                    height="32"
+                    handle-ClickEvent="select_grid(col, row)"
+                />
+            </Row>
         </Column>
         """,
         **kwargs,
