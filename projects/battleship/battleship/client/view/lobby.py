@@ -6,7 +6,7 @@ from tgraphics.color import colors
 from tgraphics.component import Component, Window
 from tgraphics.event import ComponentMountedEvent
 from tgraphics.reactivity import Ref, computed, unref
-from tgraphics.style import c, text_c, hover_c, disable_c, w, h
+from tgraphics.style import c, text_c, hover_c, disable_c, w, h, r_b, r_t, r_l, r_r
 
 from .. import store
 from ..client import BattleshipClient
@@ -19,6 +19,7 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
     player_readies = Ref(set(room.readies))
 
     ready = Ref(False)
+    class_ready = Ref(False)
 
     def get_player_ready_text(player_id: models.PlayerId):
         return computed(
@@ -68,6 +69,10 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
         ready.value = True
         await client.room_ready(models.RoomId.from_room_info(room))
 
+    async def class_select(_e):
+        class_ready.value = True
+        # TODO: assign class to player
+
     return Component.render_xml(
         """
         <Row 
@@ -76,14 +81,34 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
             height="window.height"
             handle-ComponentMountedEvent="on_mounted"
         >
-            <Column t-for="player_info in player_infos">
-                <RoundedRectLabelButton
-                    t-if="store.user.is_player(models.PlayerId.from_player_info(player_info))"
-                    text="'Ready'"
-                    disable="ready"
-                    t-style="c['teal'][400] | hover_c['teal'][500] | disable_c['slate'][500] | text_c['white'] | w[48] | h[12]"
-                    handle-ClickEvent="on_ready_button"
-                />
+            <Column t-for="player_info in player_infos" gap="12">
+                    <RoundedRectLabelButton
+                        t-if="store.user.is_player(models.PlayerId.from_player_info(player_info))"
+                        text="'Ready'"
+                        disable="not(unref(ready)^unref(class_ready))"
+                        t-style="c['teal'][400] | hover_c['teal'][500] | disable_c['slate'][500] | text_c['white'] | w[48] | h[12]"
+                        handle-ClickEvent="on_ready_button"
+                    />
+                    <Row gap="16" t-if="store.user.is_player(models.PlayerId.from_player_info(player_info))">
+                        <RoundedRectLabelButton 
+                            text="'NAVY'"
+                            disable="class_ready"
+                            t-style="c['teal'][300] | hover_c['teal'][400] | disable_c['slate'][500] | text_c['white'] | w[12] | h[12]"
+                            handle-ClickEvent="class_select"
+                        />
+                        <RoundedRectLabelButton 
+                            text="'Scout'"
+                            disable="class_ready"
+                            t-style="c['teal'][300] | hover_c['teal'][400] | disable_c['slate'][500] | text_c['white'] | w[12] | h[12]"
+                            handle-ClickEvent="class_select"
+                        />
+                        <RoundedRectLabelButton 
+                            text="'Pirate'"
+                            disable="class_ready"
+                            t-style="c['teal'][300] | hover_c['teal'][400] | disable_c['slate'][500] | text_c['white'] | w[12] | h[12]"
+                            handle-ClickEvent="class_select"
+                        />
+                    </Row>
                 <Label
                     text="get_player_ready_text(models.PlayerId.from_player_info(player_info))" 
                     color="colors['white']" 
