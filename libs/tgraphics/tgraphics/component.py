@@ -694,6 +694,12 @@ def is_mounted(instance: ComponentInstance):
     )
 
 
+@dataclass
+class ElementRenderError(Exception):
+    exc: Exception
+    element: ElementTree.Element
+
+
 class RenderError(Exception):
     pass
 
@@ -735,189 +741,208 @@ class ComponentMeta(type):
     ) -> "list[Component] | ReadRef[list[Component]]":
         "render child components from XML string"
 
-        if scope_values is None:
-            scope_values = {}
+        try:
+            if scope_values is None:
+                scope_values = {}
 
-        frame_locals = _get_merged_locals(frame, **scope_values)
+            frame_locals = _get_merged_locals(frame, **scope_values)
 
-        data = ElementComponentData(element)
+            data = ElementComponentData(element)
 
-        def render_fn(additional_scope_values, override_values) -> list["Component"]:
-            return [
-                data.cls(
-                    **data.get_init_vars(
-                        frame, (scope_values | additional_scope_values), override_values
-                    )
-                )
-            ]
-
-        for directive_key, directive_value in data.directives.items():
-            match directive_key:
-                case "for":
-
-                    def for_render_fn_wrapper(
-                        old_render_fn: Callable[..., list["Component"]],
-                        directive_value: str,
-                    ):
-                        for_var, for_values = [
-                            s.strip() for s in directive_value.split(" in ")
-                        ]
-                        eval_for_values = computed(
-                            lambda: eval(
-                                for_values, frame.frame.f_globals, frame_locals
-                            )
-                        )
-
-                        def render_fn(
-                            for_var,
-                            eval_for_values,
-                            additional_scope_values,
+            def render_fn(
+                additional_scope_values, override_values
+            ) -> list["Component"]:
+                return [
+                    data.cls(
+                        **data.get_init_vars(
+                            frame,
+                            (scope_values | additional_scope_values),
                             override_values,
-                        ):
-                            if isref(eval_for_values):
-                                _ref_list = override_values.get("_ref_list", [])
-                                _ref_list.append(eval_for_values)
-                                override_values["_ref_list"] = _ref_list
+                        )
+                    )
+                ]
 
-                            def assign_var(for_var, v):
-                                for_vars = [f_v.strip() for f_v in for_var.split(",")]
+            for directive_key, directive_value in data.directives.items():
+                match directive_key:
+                    case "for":
+
+                        def for_render_fn_wrapper(
+                            old_render_fn: Callable[..., list["Component"]],
+                            directive_value: str,
+                        ):
+                            for_var, for_values = [
+                                s.strip() for s in directive_value.split(" in ")
+                            ]
+                            eval_for_values = computed(
+                                lambda: eval(
+                                    for_values, frame.frame.f_globals, frame_locals
+                                )
+                            )
+
+                            def render_fn(
+                                for_var,
+                                eval_for_values,
+                                additional_scope_values,
+                                override_values,
+                            ):
+                                if isref(eval_for_values):
+                                    _ref_list = override_values.get("_ref_list", [])
+                                    _ref_list.append(eval_for_values)
+                                    override_values["_ref_list"] = _ref_list
+
+                                def assign_var(for_var, v):
+                                    for_vars = [
+                                        f_v.strip() for f_v in for_var.split(",")
+                                    ]
+                                    return (
+                                        {f_v: val for f_v, val in zip(for_vars, v)}
+                                        if len(for_vars) > 1
+                                        else {for_vars[0]: v}
+                                    )
+
+                                return [
+                                    component
+                                    for components in [
+                                        unref(
+                                            old_render_fn(
+                                                additional_scope_values
+                                                | assign_var(for_var, v),
+                                                override_values,
+                                            )
+                                        )
+                                        for v in unref(eval_for_values)
+                                    ]
+                                    for component in components
+                                ]
+
+                            return partial(render_fn, for_var, eval_for_values)
+
+                        render_fn = for_render_fn_wrapper(render_fn, directive_value)
+                    case "if":
+
+                        def if_render_fn_wrapper(
+                            old_render_fn: Callable[..., list["Component"]],
+                            directive_value: str,
+                        ):
+                            eval_val = computed(
+                                lambda: eval(
+                                    directive_value, frame.frame.f_globals, frame_locals
+                                )
+                            )
+
+                            def render_fn(
+                                eval_val, additional_scope_values, override_values
+                            ):
+                                if isref(eval_val):
+                                    _ref_list = override_values.get("_ref_list", [])
+                                    _ref_list.append(eval_val)
+                                    override_values["_ref_list"] = _ref_list
+
                                 return (
-                                    {f_v: val for f_v, val in zip(for_vars, v)}
-                                    if len(for_vars) > 1
-                                    else {for_vars[0]: v}
+                                    old_render_fn(
+                                        additional_scope_values, override_values
+                                    )
+                                    if unref(eval_val)
+                                    else []
                                 )
 
-                            return [
-                                component
-                                for components in [
-                                    unref(
-                                        old_render_fn(
-                                            additional_scope_values
-                                            | assign_var(for_var, v),
-                                            override_values,
-                                        )
-                                    )
-                                    for v in unref(eval_for_values)
-                                ]
-                                for component in components
-                            ]
+                            return partial(render_fn, eval_val)
 
-                        return partial(render_fn, for_var, eval_for_values)
+                        render_fn = if_render_fn_wrapper(render_fn, directive_value)
+                    case "template":
 
-                    render_fn = for_render_fn_wrapper(render_fn, directive_value)
-                case "if":
-
-                    def if_render_fn_wrapper(
-                        old_render_fn: Callable[..., list["Component"]],
-                        directive_value: str,
-                    ):
-                        eval_val = computed(
-                            lambda: eval(
-                                directive_value, frame.frame.f_globals, frame_locals
+                        def template_render_fn_wrapper(
+                            old_render_fn: Callable[..., list["Component"]],
+                            directive_value: str,
+                        ):
+                            eval_val = computed(
+                                lambda: eval(
+                                    directive_value, frame.frame.f_globals, frame_locals
+                                )
                             )
+
+                            def render_fn(
+                                eval_val, additional_scope_values, override_values
+                            ):
+                                if isref(eval_val):
+                                    _ref_list = override_values.get("_ref_list", [])
+                                    _ref_list.append(eval_val)
+                                    override_values["_ref_list"] = _ref_list
+
+                                return old_render_fn(
+                                    additional_scope_values,
+                                    override_values | unref(eval_val),
+                                )
+
+                            return partial(render_fn, eval_val)
+
+                        render_fn = template_render_fn_wrapper(
+                            render_fn, directive_value
                         )
 
-                        def render_fn(
-                            eval_val, additional_scope_values, override_values
+                    case _ if directive_key.startswith("model-"):
+
+                        def model_render_fn_wrapper(
+                            old_render_fn: Callable[..., list["Component"]],
+                            directive_key: str,
+                            directive_value: str,
                         ):
-                            if isref(eval_val):
+                            def render_fn(additional_scope_values, override_values):
+                                model = directive_key.removeprefix("model-")
+
+                                models = override_values.get("models", [])
+                                models.append(model)
+                                override_values["models"] = models
+
+                                model_ref = eval(
+                                    directive_value, frame.frame.f_globals, frame_locals
+                                )
+                                override_values[model] = model_ref
+
                                 _ref_list = override_values.get("_ref_list", [])
-                                _ref_list.append(eval_val)
+                                _ref_list.append(model_ref)
                                 override_values["_ref_list"] = _ref_list
 
-                            return (
-                                old_render_fn(additional_scope_values, override_values)
-                                if unref(eval_val)
-                                else []
-                            )
+                                return old_render_fn(
+                                    additional_scope_values, override_values
+                                )
 
-                        return partial(render_fn, eval_val)
+                            return render_fn
 
-                    render_fn = if_render_fn_wrapper(render_fn, directive_value)
-                case "template":
-
-                    def template_render_fn_wrapper(
-                        old_render_fn: Callable[..., list["Component"]],
-                        directive_value: str,
-                    ):
-                        eval_val = computed(
-                            lambda: eval(
-                                directive_value, frame.frame.f_globals, frame_locals
-                            )
+                        render_fn = model_render_fn_wrapper(
+                            render_fn, directive_key, directive_value
                         )
 
-                        def render_fn(
-                            eval_val, additional_scope_values, override_values
-                        ):
-                            if isref(eval_val):
-                                _ref_list = override_values.get("_ref_list", [])
-                                _ref_list.append(eval_val)
-                                override_values["_ref_list"] = _ref_list
-
-                            return old_render_fn(
-                                additional_scope_values,
-                                override_values | unref(eval_val),
-                            )
-
-                        return partial(render_fn, eval_val)
-
-                    render_fn = template_render_fn_wrapper(render_fn, directive_value)
-
-                case _ if directive_key.startswith("model-"):
-
-                    def model_render_fn_wrapper(
-                        old_render_fn: Callable[..., list["Component"]],
-                        directive_key: str,
-                        directive_value: str,
-                    ):
-                        def render_fn(additional_scope_values, override_values):
-                            model = directive_key.removeprefix("model-")
-
-                            models = override_values.get("models", [])
-                            models.append(model)
-                            override_values["models"] = models
-
-                            model_ref = eval(
-                                directive_value, frame.frame.f_globals, frame_locals
-                            )
-                            override_values[model] = model_ref
-
-                            _ref_list = override_values.get("_ref_list", [])
-                            _ref_list.append(model_ref)
-                            override_values["_ref_list"] = _ref_list
-
-                            return old_render_fn(
-                                additional_scope_values, override_values
-                            )
-
-                        return render_fn
-
-                    render_fn = model_render_fn_wrapper(
-                        render_fn, directive_key, directive_value
-                    )
-
-        return computed(lambda: render_fn({}, {}))
+            return computed(lambda: render_fn({}, {}))
+        except ElementRenderError:
+            raise
+        except Exception as exc:
+            raise ElementRenderError(exc, element) from exc
 
     @classmethod
     def render_root_element(
         mcs, element: ElementTree.Element, frame: inspect.FrameInfo, **kwargs
     ) -> "Component":
         "render root component from XML string"
+        try:
+            data = ElementComponentData(element)
 
-        data = ElementComponentData(element)
+            for directive_key, directive_value in data.directives.items():
+                match directive_key:
+                    case _ if directive_key.startswith("model-"):
+                        model = directive_key.removeprefix("model-")
+                        models = kwargs.get("models", [])
+                        models.append(model)
+                        kwargs["models"] = models
 
-        for directive_key, directive_value in data.directives.items():
-            match directive_key:
-                case _ if directive_key.startswith("model-"):
-                    model = directive_key.removeprefix("model-")
-                    models = kwargs.get("models", [])
-                    models.append(model)
-                    kwargs["models"] = models
-
-                    model_ref = eval(
-                        directive_value, frame.frame.f_globals, frame.frame.f_locals
-                    )
-                    kwargs[model] = model_ref
+                        model_ref = eval(
+                            directive_value, frame.frame.f_globals, frame.frame.f_locals
+                        )
+                        kwargs[model] = model_ref
+        except ElementRenderError:
+            raise
+        except Exception as exc:
+            raise ElementRenderError(exc, element) from exc
 
         return data.cls(**data.get_init_vars(frame, {}, kwargs))
 
@@ -928,8 +953,10 @@ class ComponentMeta(type):
             return mcs.render_root_element(
                 ElementTree.fromstring(xml), inspect.stack()[1], **kwargs
             )
-        except Exception as e:
-            raise RenderError() from e
+        except ElementTree.ParseError as exc:
+            raise RenderError(str(exc)) from exc
+        except ElementRenderError as exc:
+            raise RenderError(f"{exc.exc} in element {exc.element.tag}") from exc
 
 
 @dataclass(kw_only=True)
