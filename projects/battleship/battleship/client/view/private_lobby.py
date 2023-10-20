@@ -1,5 +1,7 @@
 from tgraphics.color import colors
 from tgraphics.component import Component, Window
+from tgraphics.style import w, h
+
 from .lobby import lobby
 from ..client import BattleshipClient
 from ...shared import models
@@ -18,7 +20,7 @@ def private_lobby(
     return Component.render_xml(
         """
         <Layer>
-            <Column width="window.width" height="window.height" >
+            <Column t-style="w['full'](window) | h['full'](window)" >
                 <Pad pad_top="300">
                     <Label text="join_code" color="colors['white']" />
                 </Pad>

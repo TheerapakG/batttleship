@@ -228,7 +228,7 @@ def ship_setup(
 
     return Component.render_xml(
         """
-        <Column gap="16" width="window.width" height="window.height" handle-ComponentMountedEvent="on_mounted">
+        <Column gap="16" t-style="w['full'](window) | h['full'](window)" handle-ComponentMountedEvent="on_mounted">
             <RoundedRectLabelButton
                 text="'Submit'"
                 disable="not_submitable"

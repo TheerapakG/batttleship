@@ -19,7 +19,7 @@ def modal(
     return Component.render_xml(
         """
         <Layer>
-            <Rect width="window.width" height="window.height" color="with_alpha(colors['black'],127)" />
+            <Rect t-style="w['full'](window) | h['full'](window)" color="with_alpha(colors['black'],127)" />
             <Column>
                 <Layer>
                     <RoundedRect t-style="c['white'] | w[128] | h[64] | r_b[4] | r_t[0]" />

@@ -25,9 +25,8 @@ def main_menu(
         """
         <Layer handle-ComponentMountedEvent="on_mounted">
             <Column 
-                gap="0" 
-                width="window.width" 
-                height="window.height"
+                gap="0"
+                t-style="w['full'](window) | h['full'](window)"
             >
                 <Label 
                     text="'test'" 

@@ -70,8 +70,7 @@ def main_menu(
         <Layer handle-ComponentMountedEvent="on_mounted">
             <Column 
                 gap="0" 
-                width="window.width" 
-                height="window.height"
+                t-style="w['full'](window) | h['full'](window)"
             >
                 <Column gap="10">
                     <Pad pad_top="90">

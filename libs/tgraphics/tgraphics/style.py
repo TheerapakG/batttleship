@@ -5,7 +5,11 @@ from .size import widths, heights, radii
 def _to_template_dict(d: dict, template_key: tuple[str, ...]):
     return {
         k: (
-            {t_k: v for t_k in template_key}
+            (
+                {t_k: v for t_k in template_key}
+                if not callable(v)
+                else lambda e, v=v: {t_k: v(e) for t_k in template_key}
+            )
             if not isinstance(v, dict)
             else _to_template_dict(v, template_key)
         )

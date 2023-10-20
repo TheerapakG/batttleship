@@ -668,25 +668,31 @@ def use_acc_scale_y(
 
 
 def use_width(
-    instance: ComponentInstance | ReadRef[ComponentInstance],
+    instance: ComponentInstance | ReadRef[ComponentInstance] | "Window",
 ) -> float | ReadRef[float]:
     "get width of component instance unscaled"
-    return computed(
-        lambda: unref(data.width)
-        if (data := unref(unref(instance).after_mounted_data)) is not None
-        else 0
-    )
+    if isinstance(instance, Window):
+        return instance.width
+    else:
+        return computed(
+            lambda: unref(data.width)
+            if (data := unref(unref(instance).after_mounted_data)) is not None
+            else 0
+        )
 
 
 def use_height(
-    instance: ComponentInstance | ReadRef[ComponentInstance],
+    instance: ComponentInstance | ReadRef[ComponentInstance] | "Window",
 ) -> float | ReadRef[float]:
     "get height of component instance unscaled"
-    return computed(
-        lambda: unref(data.height)
-        if (data := unref(unref(instance).after_mounted_data)) is not None
-        else 0
-    )
+    if isinstance(instance, Window):
+        return instance.height
+    else:
+        return computed(
+            lambda: unref(data.height)
+            if (data := unref(unref(instance).after_mounted_data)) is not None
+            else 0
+        )
 
 
 def use_hover(
@@ -961,6 +967,16 @@ class ComponentMeta(type):
                             directive_value, frame.frame.f_globals, frame.frame.f_locals
                         )
                         kwargs[model] = model_ref
+                    case "style":
+                        style = unref(
+                            eval(
+                                directive_value,
+                                frame.frame.f_globals,
+                                frame.frame.f_locals,
+                            )
+                        )
+
+                        kwargs = kwargs | style
         except ElementRenderError:
             raise
         except Exception as exc:

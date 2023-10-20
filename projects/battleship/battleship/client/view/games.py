@@ -41,7 +41,7 @@ def games(window: Window, client: BattleshipClient, **kwargs):
 
     return Component.render_xml(
         """
-        <Column gap="4" width="window.width" height="window.height">
+        <Column gap="4" t-style="w['full'](window) | h['full'](window)">
             <Row t-for="col in range(8)" gap="4">
                 <RoundedRectLabelButton 
                     t-for="row in range(8)"

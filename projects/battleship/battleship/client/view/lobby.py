@@ -77,8 +77,7 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
         """
         <Row 
             gap="16"
-            width="window.width"
-            height="window.height"
+            t-style="w['full'](window) | h['full'](window)"
             handle-ComponentMountedEvent="on_mounted"
         >
             <Column t-for="player_info in player_infos" gap="12">
