@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 import contextlib
 from dataclasses import dataclass, field, replace, InitVar
 from functools import partial
@@ -336,7 +336,7 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
     )
     mount_duration: Ref[float] = field(init=False, default_factory=lambda: Ref(0))
     hover: Ref[bool] = field(init=False, default_factory=lambda: Ref(False))
-    child_hover: Ref["ComponentInstance | None"] = field(
+    _hover: Ref["ComponentInstance | None"] = field(
         init=False, default_factory=lambda: Ref(None)
     )
     bound_tasks: set[asyncio.Task] = field(init=False, default_factory=set)
@@ -418,7 +418,7 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
                 if (handler := self.event_handlers.get(event_type)) is not None:
                     return await handler(self, event)
 
-    def get_child_at(self, p: Positional) -> "ComponentInstance | None":
+    def get_child_at(self, p: Positional) -> Iterator["ComponentInstance"]:
         for child in reversed(unref(use_children(self))):
             unref_child = unref(child)
             if (
@@ -436,8 +436,7 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
                     + unref(use_height(unref_child)) * unref(use_scale_y(self))
                 )
             ):
-                return unref_child
-        return None
+                yield unref_child
 
     @event_capturer(FocusEvent)
     async def focus_capturer(self, event: FocusEvent):
@@ -447,7 +446,7 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
 
     @event_capturer(BubblingEvent)
     async def bubbling_capturer(self, event: BubblingEvent):
-        if (child := self.get_child_at(event)) is not None:
+        for child in self.get_child_at(event):
             if (
                 await child.capture(
                     replace(
@@ -471,51 +470,21 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
     async def generic_capturer(self, event: Event):
         return await self.dispatch(event)
 
-    async def _process_child_leave(
-        self, p: Positional, new_child: "ComponentInstance | None" = None
-    ):
-        if child := unref(self.child_hover):
-            child: "ComponentInstance"  # type: ignore[no-redef]
-            await child.capture(
+    async def _set_hover(self, child: "ComponentInstance| None", p: Positional):
+        if (hover := unref(self._hover)) is not None:
+            await hover.capture(
                 MouseLeaveEvent(
-                    child,
-                    (p.x - unref(use_offset_x(child))) / unref(use_scale_x(self)),
-                    (p.y - unref(use_offset_y(child))) / unref(use_scale_y(self)),
+                    hover,
+                    x=(p.x - unref(use_offset_x(hover))) / unref(use_scale_x(self)),
+                    y=(p.y - unref(use_offset_y(hover))) / unref(use_scale_y(self)),
                 )
             )
-        self.child_hover.value = new_child
-
-    async def _process_child_position(
-        self, p: Positional
-    ) -> "ComponentInstance | None":
-        if (new_child := self.get_child_at(p)) is not None:
-            if self.child_hover.value is not new_child:
-                await self._process_child_leave(p, new_child)
-                await new_child.capture(
-                    MouseEnterEvent(
-                        new_child,
-                        (p.x - unref(use_offset_x(new_child)))
-                        / unref(use_scale_x(self)),
-                        (p.y - unref(use_offset_y(new_child)))
-                        / unref(use_scale_y(self)),
-                    )
-                )
-                self.child_hover.value = new_child
-            return new_child
-        else:
-            await self._process_child_leave(p, None)
-            return None
+        self._hover.value = child
 
     @event_capturer(MouseEnterEvent)
     async def mouse_enter_capturer(self, event: MouseEnterEvent):
         self.hover.value = True
-        self.child_hover.value = None
-        await self._process_child_position(event)
-        return await self.dispatch(event)
-
-    @event_capturer(MouseMotionEvent)
-    async def mouse_motion_capturer(self, event: MouseMotionEvent):
-        if (child := await self._process_child_position(event)) is not None:
+        for child in self.get_child_at(event):
             if (
                 await child.capture(
                     replace(
@@ -529,13 +498,57 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
                 )
                 is StopPropagate
             ):
+                await self._set_hover(child, event)
                 return StopPropagate
         return await self.dispatch(event)
+
+    @event_handler(MouseEnterEvent)
+    async def mouse_enter_handler(self, event: MouseEnterEvent):
+        return StopPropagate
+
+    @event_capturer(MouseMotionEvent)
+    async def mouse_motion_capturer(self, event: MouseMotionEvent):
+        for child in self.get_child_at(event):
+            if child is unref(self._hover):
+                if (
+                    await child.capture(
+                        replace(
+                            event,
+                            instance=child,
+                            x=(event.x - unref(use_offset_x(child)))
+                            / unref(use_scale_x(self)),
+                            y=(event.y - unref(use_offset_y(child)))
+                            / unref(use_scale_y(self)),
+                        )
+                    )
+                    is StopPropagate
+                ):
+                    return StopPropagate
+            elif (
+                await child.capture(
+                    MouseEnterEvent(
+                        child,
+                        (event.x - unref(use_offset_x(child)))
+                        / unref(use_scale_x(self)),
+                        (event.y - unref(use_offset_y(child)))
+                        / unref(use_scale_y(self)),
+                    )
+                )
+                is StopPropagate
+            ):
+                await self._set_hover(child, event)
+                return StopPropagate
+        await self._set_hover(None, event)
+        return await self.dispatch(event)
+
+    @event_handler(MouseMotionEvent)
+    async def mouse_motion_handler(self, event: MouseMotionEvent):
+        return StopPropagate
 
     @event_capturer(MouseLeaveEvent)
     async def mouse_leave_capturer(self, event: MouseLeaveEvent):
         self.hover.value = False
-        await self._process_child_leave(event, None)
+        await self._set_hover(None, event)
         return await self.dispatch(event)
 
     @event_handler(MousePressEvent)
@@ -1059,6 +1072,14 @@ class PadInstance(ComponentInstance["Pad"]):
             computed(lambda: [unref(child)] if unref(child) is not None else []),
         )
 
+    @event_handler(MouseEnterEvent)
+    async def mouse_enter_handler(self, _e: MouseEnterEvent):
+        return None
+
+    @event_handler(MouseMotionEvent)
+    async def mouse_motion_handler(self, _e: MouseMotionEvent):
+        return None
+
 
 @dataclass
 class Pad(Component):
@@ -1149,6 +1170,14 @@ class LayerInstance(ComponentInstance["Layer"]):
             ),
             children,
         )
+
+    @event_handler(MouseEnterEvent)
+    async def mouse_enter_handler(self, _e: MouseEnterEvent):
+        return None
+
+    @event_handler(MouseMotionEvent)
+    async def mouse_motion_handler(self, _e: MouseMotionEvent):
+        return None
 
 
 @dataclass
@@ -1250,6 +1279,14 @@ class RowInstance(ComponentInstance["Row"]):
         self.after_mounted_data.value = AfterMountedComponentInstanceData(
             width, height, children
         )
+
+    @event_handler(MouseEnterEvent)
+    async def mouse_enter_handler(self, _e: MouseEnterEvent):
+        return None
+
+    @event_handler(MouseMotionEvent)
+    async def mouse_motion_handler(self, _e: MouseMotionEvent):
+        return None
 
 
 @dataclass
@@ -1354,6 +1391,14 @@ class ColumnInstance(ComponentInstance["Column"]):
         self.after_mounted_data.value = AfterMountedComponentInstanceData(
             width, height, children
         )
+
+    @event_handler(MouseEnterEvent)
+    async def mouse_enter_handler(self, _e: MouseEnterEvent):
+        return None
+
+    @event_handler(MouseMotionEvent)
+    async def mouse_motion_handler(self, _e: MouseMotionEvent):
+        return None
 
 
 @dataclass
