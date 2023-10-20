@@ -50,7 +50,7 @@ def ship_setup(
         lambda: unref(submit)
         or not all(unref(ship).tile_position for ship in ships.values())
     )
-    player_submits = Ref(set())
+    player_submits = Ref(set[models.PlayerId]())
 
     current_placement = computed(
         lambda: (

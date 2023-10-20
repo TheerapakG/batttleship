@@ -19,7 +19,7 @@ class Room:
     lock: asyncio.Lock = field(init=False, default_factory=asyncio.Lock)
     players: set[models.PlayerInfo] = field(init=False, default_factory=set)
     readies: set[models.PlayerId] = field(init=False, default_factory=set)
-    boards: dict[models.PlayerId, models.BoardId] = field(
+    boards: dict[models.PlayerId, models.Board] = field(
         init=False, default_factory=dict
     )
 
@@ -135,4 +135,12 @@ class Room:
         return models.RoomId(self.id)
 
     def to_room_info(self):
-        return models.RoomInfo(self.id, [*self.players], [*self.readies], self.boards)
+        return models.RoomInfo(
+            self.id,
+            [*self.players],
+            [*self.readies],
+            {
+                player_id: models.BoardId.from_board(board_id)
+                for player_id, board in self.boards.items()
+            },
+        )

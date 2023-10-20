@@ -50,9 +50,11 @@ def main_menu(
             room = await client.private_room_create(
                 models.BearingPlayerAuth.from_player(user)
             )
-            from .lobby import lobby
+            from .private_lobby import private_lobby
 
-            await window.set_scene(lobby(window, client, room))
+            await window.set_scene(
+                private_lobby(window, client, room.join_code, room.room)
+            )
 
     async def on_private_room_join_button(_e):
         if (user := unref(store.user.store)) is not None:
