@@ -110,15 +110,15 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
                     </Row>
                 <Label
                     text="get_player_ready_text(models.PlayerId.from_player_info(player_info))" 
-                    color="colors['white']" 
+                    text_color="colors['white']" 
                 />
                 <Label
                     text="f'rating: {str(player_info.rating)}'" 
-                    color="colors['white']" 
+                    text_color="colors['white']" 
                 />
                 <Label
                     text="player_info.name" 
-                    color="colors['white']" 
+                    text_color="colors['white']" 
                 />
             </Column>
         </Row>

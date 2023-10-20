@@ -22,7 +22,7 @@ def private_lobby(
         <Layer>
             <Column t-style="w['full'](window) | h['full'](window)" >
                 <Pad pad_top="300">
-                    <Label text="join_code" color="colors['white']" />
+                    <Label text="join_code" text_color="colors['white']" />
                 </Pad>
             </Column>
             <Slot component="lobby_component" />

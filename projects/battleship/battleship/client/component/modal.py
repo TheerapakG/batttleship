@@ -1,6 +1,6 @@
 from tgraphics.color import colors, with_alpha
 from tgraphics.event import Event
-from tgraphics.style import c, w, h, r_b, r_t
+from tgraphics.style import c, text_c, w, h, r_b, r_t
 from tgraphics.component import Component, Window
 from tgraphics.reactivity import ReadRef
 
@@ -29,7 +29,7 @@ def modal(
                     <RoundedRect t-style="c['teal'][400] | w[128] | h[12] | r_b[0] | r_t[4]" />
                     <Label
                         text="name"
-                        t-style="c['white']"
+                        t-style="text_c['white']"
                     />
                 </Layer>
             </Column>

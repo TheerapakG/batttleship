@@ -40,10 +40,9 @@ def create_player_modal(window: Window, client: BattleshipClient, **kwargs):
                     <RoundedRect t-style="c['teal'][100] | w[64] | h[9]" />
                     <Input
                         t-model-text="name"
-                        color="colors['black']"
                         caret_color="colors['black']"
                         selection_background_color="colors['teal'][300]"
-                        t-style="w[56] | h[5]"
+                        t-style="text_c['black'] | w[56] | h[5]"
                     />
                 </Layer>
             </Column>

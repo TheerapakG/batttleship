@@ -60,7 +60,7 @@ def rounded_rect_label_button(
                 radius_top_left="radius_top_left"
                 radius_top_right="radius_top_right"
             />
-            <Label text="text" color="text_color" font_name="font_name" font_size="font_size" bold="bold" italic="italic" />
+            <Label text="text" text_color="text_color" font_name="font_name" font_size="font_size" bold="bold" italic="italic" />
         </Layer>
         """,
         **kwargs,

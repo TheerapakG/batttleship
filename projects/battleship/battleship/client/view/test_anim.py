@@ -30,7 +30,7 @@ def main_menu(
             >
                 <Label 
                     text="'test'" 
-                    color="use_interpolate(with_alpha(colors['cyan'][300], 0), with_alpha(colors['cyan'][300], 255), duration_ratio)"
+                    text_color="use_interpolate(with_alpha(colors['cyan'][300], 0), with_alpha(colors['cyan'][300], 255), duration_ratio)"
                     font_size="50"
                     bold="True"
                 />

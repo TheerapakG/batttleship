@@ -1,5 +1,5 @@
 from .color import colors
-from .size import widths, heights, radii
+from .size import widths, heights, radii, pads
 
 
 def _to_template_dict(d: dict, template_key: tuple[str, ...]):
@@ -60,19 +60,22 @@ r_r = _to_template_dict(
         "radius_top_right",
     ),
 )
-r_bl = _to_template_dict(
-    radii,
-    ("radius_bottom_left",),
+r_bl = _to_template_dict(radii, ("radius_bottom_left",))
+r_br = _to_template_dict(radii, ("radius_bottom_right",))
+r_tl = _to_template_dict(radii, ("radius_top_left",))
+r_tr = _to_template_dict(radii, ("radius_top_right",))
+p = _to_template_dict(
+    pads,
+    (
+        "pad_top",
+        "pad_bottom",
+        "pad_left",
+        "pad_right",
+    ),
 )
-r_br = _to_template_dict(
-    radii,
-    ("radius_bottom_right",),
-)
-r_tl = _to_template_dict(
-    radii,
-    ("radius_top_left",),
-)
-r_tr = _to_template_dict(
-    radii,
-    ("radius_top_right",),
-)
+p_t = _to_template_dict(pads, ("pad_top",))
+p_b = _to_template_dict(pads, ("pad_bottom",))
+p_l = _to_template_dict(pads, ("pad_left",))
+p_r = _to_template_dict(pads, ("pad_right",))
+p_x = _to_template_dict(pads, ("pad_left", "pad_right"))
+p_y = _to_template_dict(pads, ("pad_bottom", "pad_top"))

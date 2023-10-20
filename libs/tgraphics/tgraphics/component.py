@@ -1924,7 +1924,7 @@ class LabelInstance(ComponentInstance["Label"]):
         self._label.value.text = text
         self._label.trigger()
 
-    def _update_color(self, color: tuple[int, int, int, int]):
+    def _update_text_color(self, color: tuple[int, int, int, int]):
         self._label.value.color = color
 
     def _update_font_name(self, font_name: str | None):
@@ -1972,7 +1972,7 @@ class LabelInstance(ComponentInstance["Label"]):
                 font_size=unref(self.component.font_size),
                 bold=unref(self.component.bold),
                 italic=unref(self.component.italic),
-                color=unref(self.component.color),
+                color=unref(self.component.text_color),
                 width=unref(draw_width),
                 height=unref(draw_height),
             )
@@ -1991,7 +1991,7 @@ class LabelInstance(ComponentInstance["Label"]):
                     Watcher.ifref(self.component.font_size, self._update_font_size),
                     Watcher.ifref(self.component.bold, self._update_bold),
                     Watcher.ifref(self.component.italic, self._update_italic),
-                    Watcher.ifref(self.component.color, self._update_color),
+                    Watcher.ifref(self.component.text_color, self._update_text_color),
                     Watcher.ifref(draw_width, self._update_width),
                     Watcher.ifref(draw_height, self._update_height),
                 ]
@@ -2018,7 +2018,7 @@ class LabelInstance(ComponentInstance["Label"]):
 @dataclass
 class Label(Component):
     text: str | ReadRef[str]
-    color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]] = field(
+    text_color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]] = field(
         default=(255, 255, 255, 255)
     )
     font_name: str | None | ReadRef[str | None] = field(default=None)
@@ -2070,7 +2070,7 @@ class InputInstance(ComponentInstance["Input"]):
         self._document.text = text
         self._layout.trigger()
 
-    def _update_color(self, color: tuple[int, int, int, int]):
+    def _update_text_color(self, color: tuple[int, int, int, int]):
         self._document.set_style(0, 0, {"color": color})
 
     def _update_selection_background_color(
@@ -2127,7 +2127,7 @@ class InputInstance(ComponentInstance["Input"]):
             0,
             0,
             {
-                "color": unref(self.component.color),
+                "color": unref(self.component.text_color),
                 "font_name": unref(self.component.font_name),
                 "font_size": unref(self.component.font_size),
                 "bold": unref(self.component.bold),
@@ -2209,7 +2209,7 @@ class InputInstance(ComponentInstance["Input"]):
                     Watcher.ifref(x, self._update_x),
                     Watcher.ifref(y, self._update_y),
                     Watcher.ifref(self.component.text, self._update_text),
-                    Watcher.ifref(self.component.color, self._update_color),
+                    Watcher.ifref(self.component.text_color, self._update_text_color),
                     Watcher.ifref(
                         self.component.selection_background_color,
                         self._update_selection_background_color,
@@ -2462,7 +2462,7 @@ class InputInstance(ComponentInstance["Input"]):
 @dataclass
 class Input(Component):
     text: ReadRef[str]
-    color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]] = field(
+    text_color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]] = field(
         default=(255, 255, 255, 255)
     )
     caret_color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]] = field(

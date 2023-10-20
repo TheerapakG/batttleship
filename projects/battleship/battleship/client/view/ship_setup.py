@@ -270,11 +270,11 @@ def ship_setup(
                 <Column t-for="player_info in room.players">
                     <Label
                         text="'Submitted' if models.PlayerId.from_player_info(player_info) in unref(player_submits) else 'Not Submitted'"
-                        color="colors['white']" 
+                        text_color="colors['white']" 
                     />
                     <Label
                         text="player_info.name" 
-                        color="colors['white']" 
+                        text_color="colors['white']" 
                     />
                 </Column>
             </Row>

@@ -74,7 +74,7 @@ def main_menu(
             >
                 <Column gap="10">
                     <Pad pad_top="90">
-                        <Label text="f'There are currently {unref(online_count)} player(s) online.'" color="colors['white']" />
+                        <Label text="f'There are currently {unref(online_count)} player(s) online.'" text_color="colors['white']" />
                     </Pad>
                     <Layer>
                         <Pad pad_bottom="20">
@@ -89,7 +89,7 @@ def main_menu(
                         </Pad>
                         <Pad t-if="len(unref(code)) == 0" pad_right="130"> 
                             <Pad pad_bottom="20">
-                                <Label text="'Password'" italic="True" color="colors['slate'][400]" />
+                                <Label text="'Password'" italic="True" text_color="colors['slate'][400]" />
                             </Pad>
                         </Pad>
                         <Pad pad_bottom="20"> 
@@ -101,10 +101,9 @@ def main_menu(
                         <Pad pad_left="11">
                             <Input
                                 t-model-text="code"
-                                color="colors['black']"
                                 caret_color="colors['black']"
                                 selection_background_color="colors['teal'][300]"
-                                t-style="w[40] | h[8]"
+                                t-style="text_c['black'] | w[40] | h[8]"
                             />
                             </Pad>
                             <Pad pad_bottom="20"> 
@@ -127,11 +126,11 @@ def main_menu(
                     </Layer>
                 </Column>
                 <Pad pad_bottom="10">
-                    <Label text="'BATTLESHIP'" bold="True" color="colors['white']" font_size="88" />
+                    <Label text="'BATTLESHIP'" bold="True" text_color="colors['white']" font_size="88" />
                 </Pad>
                 <Column gap="0">
                     <Pad pad_bottom="60">   
-                        <Label text="f'Your current rating is {unref(store.user.rating)}'" color="colors['white']" />
+                        <Label text="f'Your current rating is {unref(store.user.rating)}'" text_color="colors['white']" />
                     </Pad>
                     <Label text="f'Welcome, {unref(store.user.name)}'" /> 
                 </Column>
