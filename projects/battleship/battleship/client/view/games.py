@@ -106,7 +106,7 @@ def games(
                 match inner_tile:
                     case models.EmptyTile():
                         return colors["white"]
-                    case models.ShipTile():
+                    case models.ChoosenTile():
                         return colors["cyan"][300]
 
         return computed(lambda: _get_tile_color(unref(tile)))
@@ -169,15 +169,6 @@ def games(
                     tile_position=[position for position in placement.keys()],
                 )
                 current_shot_ref.trigger()
-            elif isinstance((shot_tile := unref(board[col][row])), models.ChoosenTile):
-                current_shot_ref = shots[shot_tile.ship]
-                for col, row in unref(current_shot_ref).tile_position:
-                    board[col][row].value = models.EmptyTile()
-                current_shot_ref.value = replace(
-                    unref(current_shot_ref), tile_position=[]
-                )
-                current_shot_ref.trigger()
-                current_shot_id.value = models.ShipId.from_ship(unref(current_shot_ref))
 
     async def on_tile_mounted(col: int, row: int, event: ComponentMountedEvent):
         event.instance.bound_watchers.update(
