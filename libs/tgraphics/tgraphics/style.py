@@ -1,5 +1,5 @@
 from .color import colors
-from .size import widths, heights, radii, pads
+from .size import widths, heights, radii, pads, gaps
 
 
 def _to_template_dict(d: dict, template_key: tuple[str, ...]):
@@ -79,3 +79,4 @@ p_l = _to_template_dict(pads, ("pad_left",))
 p_r = _to_template_dict(pads, ("pad_right",))
 p_x = _to_template_dict(pads, ("pad_left", "pad_right"))
 p_y = _to_template_dict(pads, ("pad_bottom", "pad_top"))
+g = _to_template_dict(gaps, ("gap",))

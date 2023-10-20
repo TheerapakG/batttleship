@@ -1,7 +1,7 @@
 from tgraphics.color import colors
 from tgraphics.component import Component, Window
 from tgraphics.reactivity import computed, unref, Ref
-from tgraphics.style import c, text_c, hover_c, disable_c, w, h
+from tgraphics.style import c, text_c, hover_c, disable_c, w, h, g
 
 
 from .. import store
@@ -41,8 +41,8 @@ def games(window: Window, client: BattleshipClient, **kwargs):
 
     return Component.render_xml(
         """
-        <Column gap="4" t-style="w['full'](window) | h['full'](window)">
-            <Row t-for="col in range(8)" gap="4">
+        <Column t-style="w['full'](window) | h['full'](window) | g[1]">
+            <Row t-for="col in range(8)" t-style="g[1]">
                 <RoundedRectLabelButton 
                     t-for="row in range(8)"
                     text="''" 

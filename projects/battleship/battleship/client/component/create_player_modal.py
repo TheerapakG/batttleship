@@ -1,6 +1,6 @@
 from tgraphics.color import colors, with_alpha
 from tgraphics.event import Event
-from tgraphics.style import c, text_c, hover_c, disable_c, w, h, r_b, r_t
+from tgraphics.style import c, text_c, hover_c, disable_c, w, h, r_b, r_t, g
 from tgraphics.component import Component, Window
 from tgraphics.reactivity import Ref, unref
 
@@ -30,7 +30,7 @@ def create_player_modal(window: Window, client: BattleshipClient, **kwargs):
         "Registration",
         Component.render_xml(
             """
-            <Column gap="16">
+            <Column t-style="g[4]">
                 <RoundedRectLabelButton 
                     text="'Create User'"
                     t-style="c['teal'][400] | hover_c['teal'][500] | disable_c['slate'][500] | text_c['white'] | w[48] | h[12]"

@@ -5,7 +5,7 @@ from tgraphics.component import Component, Window
 from tgraphics.event import ComponentMountedEvent
 from tgraphics.reactivity import Ref, computed, unref
 from tsocket.shared import Empty
-from tgraphics.style import c, text_c, hover_c, disable_c, w, h, r_b, r_t, r_l, r_r
+from tgraphics.style import c, text_c, hover_c, disable_c, w, h, r_b, r_t, r_l, r_r, g
 
 from .. import store
 from ..client import BattleshipClient
@@ -69,10 +69,9 @@ def main_menu(
         """
         <Layer handle-ComponentMountedEvent="on_mounted">
             <Column 
-                gap="0" 
-                t-style="w['full'](window) | h['full'](window)"
+                t-style="w['full'](window) | h['full'](window) | g[0]"
             >
-                <Column gap="10">
+                <Column t-style="g[2]">
                     <Pad pad_top="90">
                         <Label text="f'There are currently {unref(online_count)} player(s) online.'" text_color="colors['white']" />
                     </Pad>
@@ -97,14 +96,14 @@ def main_menu(
                                 <RoundedRect t-style="c['teal'][100] | w[48] | h[12] | r_r[0]"/>
                             </Pad>
                         </Pad>
-                        <Row gap="20">
-                        <Pad pad_left="11">
-                            <Input
-                                t-model-text="code"
-                                caret_color="colors['black']"
-                                selection_background_color="colors['teal'][300]"
-                                t-style="text_c['black'] | w[40] | h[8]"
-                            />
+                        <Row t-style="g[4]">
+                            <Pad pad_left="11">
+                                <Input
+                                    t-model-text="code"
+                                    caret_color="colors['black']"
+                                    selection_background_color="colors['teal'][300]"
+                                    t-style="text_c['black'] | w[40] | h[8]"
+                                />
                             </Pad>
                             <Pad pad_bottom="20"> 
                                 <RoundedRectLabelButton 
@@ -128,7 +127,7 @@ def main_menu(
                 <Pad pad_bottom="10">
                     <Label text="'BATTLESHIP'" bold="True" text_color="colors['white']" font_size="88" />
                 </Pad>
-                <Column gap="0">
+                <Column t-style="g[0]">
                     <Pad pad_bottom="60">   
                         <Label text="f'Your current rating is {unref(store.user.rating)}'" text_color="colors['white']" />
                     </Pad>

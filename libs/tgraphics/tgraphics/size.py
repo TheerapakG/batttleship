@@ -129,3 +129,4 @@ widths = _common_fixed_sizes | _common_pct_sizes(use_width)
 heights = _common_fixed_sizes | _common_pct_sizes(use_height)
 radii = _common_fixed_sizes
 pads = _common_fixed_sizes
+gaps = _common_fixed_sizes

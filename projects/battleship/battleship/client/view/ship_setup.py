@@ -9,7 +9,7 @@ from tgraphics.color import colors
 from tgraphics.event import ComponentMountedEvent
 from tgraphics.component import Component, Window, use_key_pressed
 from tgraphics.reactivity import computed, unref, Ref, Watcher
-from tgraphics.style import c, text_c, hover_c, disable_c, w, h
+from tgraphics.style import c, text_c, hover_c, disable_c, w, h, g
 
 from .. import store
 from ..client import BattleshipClient
@@ -228,14 +228,14 @@ def ship_setup(
 
     return Component.render_xml(
         """
-        <Column gap="16" t-style="w['full'](window) | h['full'](window)" handle-ComponentMountedEvent="on_mounted">
+        <Column t-style="w['full'](window) | h['full'](window) | g[4]" handle-ComponentMountedEvent="on_mounted">
             <RoundedRectLabelButton
                 text="'Submit'"
                 disable="not_submitable"
                 t-style="c['teal'][400] | hover_c['teal'][500] | disable_c['slate'][500] | text_c['white'] | w[48] | h[12]"
                 handle-ClickEvent="on_submit_button"
             />
-            <Row gap="4">
+            <Row t-style="g[1]">
                 <RoundedRectLabelButton 
                     t-for="ship_id, ship in ships.items()"
                     text="''" 
@@ -248,8 +248,8 @@ def ship_setup(
                     handle-ClickEvent="partial(on_ship_click, ship_id)"
                 />
             </Row>
-            <Column gap="4">
-                <Row t-for="col, board_col in enumerate(board)" gap="4">
+            <Column t-style="g[1]">
+                <Row t-for="col, board_col in enumerate(board)" t-style="g[1]">
                     <RoundedRectLabelButton 
                         t-for="row, tile in enumerate(board_col)"
                         text="''" 
@@ -264,9 +264,7 @@ def ship_setup(
                     />
                 </Row>
             </Column>
-            <Row 
-                gap="16"
-            >
+            <Row t-style="g[4]">
                 <Column t-for="player_info in room.players">
                     <Label
                         text="'Submitted' if models.PlayerId.from_player_info(player_info) in unref(player_submits) else 'Not Submitted'"

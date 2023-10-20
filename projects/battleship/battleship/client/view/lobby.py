@@ -6,7 +6,7 @@ from tgraphics.color import colors
 from tgraphics.component import Component, Window
 from tgraphics.event import ComponentMountedEvent
 from tgraphics.reactivity import Ref, computed, unref
-from tgraphics.style import c, text_c, hover_c, disable_c, w, h, r_b, r_t, r_l, r_r
+from tgraphics.style import c, text_c, hover_c, disable_c, w, h, r_b, r_t, r_l, r_r, g
 
 from .. import store
 from ..client import BattleshipClient
@@ -76,11 +76,10 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
     return Component.render_xml(
         """
         <Row 
-            gap="16"
-            t-style="w['full'](window) | h['full'](window)"
+            t-style="w['full'](window) | h['full'](window) | g[4]"
             handle-ComponentMountedEvent="on_mounted"
         >
-            <Column t-for="player_info in player_infos" gap="12">
+            <Column t-for="player_info in player_infos" t-style="g[3]">
                     <RoundedRectLabelButton
                         t-if="store.user.is_player(models.PlayerId.from_player_info(player_info))"
                         text="'Ready'"
@@ -88,7 +87,7 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
                         t-style="c['teal'][400] | hover_c['teal'][500] | disable_c['slate'][500] | text_c['white'] | w[48] | h[12]"
                         handle-ClickEvent="on_ready_button"
                     />
-                    <Row gap="16" t-if="store.user.is_player(models.PlayerId.from_player_info(player_info))">
+                    <Row t-if="store.user.is_player(models.PlayerId.from_player_info(player_info))" t-style="g[4]">
                         <RoundedRectLabelButton 
                             text="'NAVY'"
                             disable="class_ready"
