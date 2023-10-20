@@ -334,6 +334,7 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
     after_mounted_data: Ref[AfterMountedComponentInstanceData | None] = field(
         init=False, default_factory=lambda: Ref(None)
     )
+    mount_duration: Ref[float] = field(init=False, default_factory=lambda: Ref(0))
     hover: Ref[bool] = field(init=False, default_factory=lambda: Ref(False))
     child_hover: Ref["ComponentInstance | None"] = field(
         init=False, default_factory=lambda: Ref(None)
@@ -387,8 +388,17 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
     def __hash__(self) -> int:
         return id(self)
 
+    def _before_draw(self, _dt: float):
+        self.mount_duration.value = self.mount_duration.value + _dt
+
     def _draw(self, _dt: float):
         pass
+
+    def before_draw(self, dt: float):
+        if unref(is_mounted(self)):
+            self._before_draw(dt)
+            for children in unref(use_children(self)):
+                unref(children).before_draw(dt)
 
     def draw(self, dt: float):
         if unref(is_mounted(self)):
@@ -547,6 +557,7 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
         self.bound_watchers.clear()
         self.before_mounted_data.value = None
         self.after_mounted_data.value = None
+        self.mount_duration.value = 0
 
     @event_handler(ModelEvent)
     async def component_model_handler(self, event: ModelEvent):
@@ -2451,8 +2462,11 @@ class Window:
             _t = time.time()
             self._window.clear()
             if (scene_instance := self.scene_instance) is not None:
+                scene_instance.before_draw(
+                    (_t - _lt) if (_lt := self._last_draw_time) is not None else 0
+                )
                 scene_instance.draw(
-                    _t - _lt if (_lt := self._last_draw_time is not None) else 0
+                    (_t - _lt) if (_lt := self._last_draw_time) is not None else 0
                 )
             self._last_draw_time = _t
 

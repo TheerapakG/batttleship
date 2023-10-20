@@ -35,8 +35,8 @@ def ship_setup(
         for _ in range(8)
     ]
     ships = {
-        models.ShipId.from_ship(ship): Ref(ship)
-        for ship in [
+        models.ShipId.from_ship(s): Ref(s)
+        for s in [
             models.Ship(uuid4(), ship.NORMAL_SHIP_VARIANT, [], 0),
             models.Ship(uuid4(), ship.NORMAL_SHIP_VARIANT, [], 0),
             models.Ship(uuid4(), ship.T_SHIP_VARIANT, [], 0),

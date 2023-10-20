@@ -78,7 +78,7 @@ def rgb_from_xyz(xyz: tuple[float, float, float, int]):
 
     r, g, b = int(norm_r * 255), int(norm_g * 255), int(norm_b * 255)
 
-    return r, g, b, a
+    return r, g, b, int(a)
 
 
 def use_interpolate(
