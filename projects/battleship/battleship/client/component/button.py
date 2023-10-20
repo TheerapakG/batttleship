@@ -1,6 +1,6 @@
 from tgraphics.color import colors
 from tgraphics.component import Component, use_hover
-from tgraphics.event import Event, ComponentMountedEvent, MousePressEvent
+from tgraphics.event import Event, ComponentMountedEvent, MousePressEvent, StopPropagate
 from tgraphics.reactivity import Ref, ReadRef, Watcher, computed, unref
 
 
@@ -46,6 +46,7 @@ def rounded_rect_label_button(
 
     async def on_click(event: MousePressEvent):
         await event.instance.capture(ClickEvent(event.instance))
+        return StopPropagate
 
     return Component.render_xml(
         """
