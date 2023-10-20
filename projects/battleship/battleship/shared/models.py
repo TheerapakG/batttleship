@@ -124,6 +124,28 @@ class RoomInfo(RoomId):
     readies: list[PlayerId] = field(compare=False, default_factory=list)
     boards: dict[PlayerId, BoardId] = field(compare=False, default_factory=dict)
 
+@dataclass
+class ShotTypeVariantId:
+    id: UUID  # pylint: disable=C0103
+
+
+@dataclass(eq=True, frozen=True)
+class ShotType:
+    shot_variant: ShotTypeVariantId
+    tile_position: list[tuple[int, int]]
+    orientation: int
+
+@dataclass
+class HitTile:
+    pass
+
+@dataclass
+class MissTile:
+    pass
+
+@dataclass
+class ChoosenTile:
+    pass
 
 # API args below
 
