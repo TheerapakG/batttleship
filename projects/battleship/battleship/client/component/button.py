@@ -57,7 +57,7 @@ def rounded_rect_label_button(
         lambda: f_s if (f_s := unref(font_size)) != "full" else unref(calc_label_height)
     )
 
-    async def on_mounted(event: ComponentMountedEvent):
+    def on_mounted(event: ComponentMountedEvent):
         event.instance.bound_watchers.update(
             [
                 w

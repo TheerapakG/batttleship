@@ -147,7 +147,7 @@ def ship_setup(
             )
             current_ship_ref.trigger()
 
-    async def on_mounted(event: ComponentMountedEvent):
+    def on_mounted(event: ComponentMountedEvent):
         event.instance.bound_tasks.update(
             [
                 asyncio.create_task(subscribe_player_leave()),
@@ -165,7 +165,7 @@ def ship_setup(
             ]
         )
 
-    async def on_tile_click(col: int, row: int, event: ClickEvent):
+    def on_tile_click(col: int, row: int, event: ClickEvent):
         if not unref(submit):
             if (placement := unref(current_placement)) is not None and (
                 (ship_id := unref(current_ship_id)) is not None
@@ -190,7 +190,7 @@ def ship_setup(
                 current_ship_ref.trigger()
                 current_ship_id.value = models.ShipId.from_ship(unref(current_ship_ref))
 
-    async def on_tile_mounted(col: int, row: int, event: ComponentMountedEvent):
+    def on_tile_mounted(col: int, row: int, event: ComponentMountedEvent):
         event.instance.bound_watchers.update(
             [
                 w
@@ -204,7 +204,7 @@ def ship_setup(
             ]
         )
 
-    async def on_ship_click(ship_id: int, _event: ClickEvent):
+    def on_ship_click(ship_id: int, _event: ClickEvent):
         if not unref(submit):
             current_ship_ref = ships[ship_id]
             for col, row in unref(current_ship_ref).tile_position:

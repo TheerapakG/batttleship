@@ -49,6 +49,7 @@ from .event import (
     InputEvent,
 )
 from .reactivity import ReadRef, Ref, Watcher, computed, unref, isref
+from .utils import maybe_await
 
 loader = Loader(["./resources"])
 loader.reindex()
@@ -77,14 +78,14 @@ class _EventHandler:
 
 
 def event_capturer(cls: type[Event]):
-    def make_capturer(func: Callable[["ComponentInstance", Event], Awaitable[Any]]):
+    def make_capturer(func: Callable[["ComponentInstance", Event], Any]):
         return _EventCapturer(cls, func)
 
     return make_capturer
 
 
 def event_handler(cls: type[Event]):
-    def make_handler(func: Callable[["ComponentInstance", Event], Awaitable[Any]]):
+    def make_handler(func: Callable[["ComponentInstance", Event], Any]):
         return _EventHandler(cls, func)
 
     return make_handler
@@ -160,9 +161,9 @@ class ElementComponentData:
                         existed_capturer=existed_capturer,
                         capturer=capturer,
                     ):
-                        if await existed_capturer(event) is StopPropagate:
+                        if await maybe_await(existed_capturer(event)) is StopPropagate:
                             return StopPropagate
-                        return await capturer(event)
+                        return await maybe_await(capturer(event))
 
                     capturers[event] = merged_capturer
                 else:
@@ -184,9 +185,9 @@ class ElementComponentData:
                         existed_handler=existed_handler,
                         handler=handler,
                     ):
-                        if await existed_handler(event) is StopPropagate:
+                        if await maybe_await(existed_handler(event)) is StopPropagate:
                             return StopPropagate
-                        return await handler(event)
+                        return await maybe_await(handler(event))
 
                     handlers[event] = merged_handler
                 else:
@@ -235,18 +236,12 @@ C = TypeVar("C", bound="Component")
 
 
 class ComponentInstanceMeta(type):
-    _cls_event_capturers: dict[
-        type[Event], Callable[["ComponentInstance", Event], Awaitable[Any]]
-    ]
-    _cls_event_handlers: dict[
-        type[Event], Callable[["ComponentInstance", Event], Awaitable[Any]]
-    ]
+    _cls_event_capturers: dict[type[Event], Callable[["ComponentInstance", Event], Any]]
+    _cls_event_handlers: dict[type[Event], Callable[["ComponentInstance", Event], Any]]
     _flat_event_capturers: dict[
-        type[Event], Callable[["ComponentInstance", Event], Awaitable[Any]]
+        type[Event], Callable[["ComponentInstance", Event], Any]
     ]
-    _flat_event_handlers: dict[
-        type[Event], Callable[["ComponentInstance", Event], Awaitable[Any]]
-    ]
+    _flat_event_handlers: dict[type[Event], Callable[["ComponentInstance", Event], Any]]
     _focus: Ref["ComponentInstance | None"]
 
     def __new__(
@@ -309,24 +304,24 @@ class ComponentInstanceMeta(type):
 @dataclass(kw_only=True)
 class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
     _cls_event_capturers: ClassVar[
-        dict[type[Event], Callable[["ComponentInstance", Event], Awaitable[Any]]]
+        dict[type[Event], Callable[["ComponentInstance", Event], Any]]
     ]
     _cls_event_handlers: ClassVar[
-        dict[type[Event], Callable[["ComponentInstance", Event], Awaitable[Any]]]
+        dict[type[Event], Callable[["ComponentInstance", Event], Any]]
     ]
     _flat_event_capturers: ClassVar[
-        dict[type[Event], Callable[["ComponentInstance", Event], Awaitable[Any]]]
+        dict[type[Event], Callable[["ComponentInstance", Event], Any]]
     ]
     _flat_event_handlers: ClassVar[
-        dict[type[Event], Callable[["ComponentInstance", Event], Awaitable[Any]]]
+        dict[type[Event], Callable[["ComponentInstance", Event], Any]]
     ]
     _focus: ClassVar[Ref["ComponentInstance | None"]] = Ref(None)
     component: C
     event_capturers: dict[
-        type[Event], Callable[["ComponentInstance", Event], Awaitable[Any]]
+        type[Event], Callable[["ComponentInstance", Event], Any]
     ] = field(init=False)
     event_handlers: dict[
-        type[Event], Callable[["ComponentInstance", Event], Awaitable[Any]]
+        type[Event], Callable[["ComponentInstance", Event], Any]
     ] = field(init=False)
     before_mounted_data: Ref[BeforeMountedComponentInstanceData | None] = field(
         init=False, default_factory=lambda: Ref(None)
@@ -354,15 +349,18 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
                     existed_capturer=existed_capturer,
                     capturer=capturer,
                 ):
-                    if await existed_capturer(instance, event) is StopPropagate:
+                    if (
+                        await maybe_await(existed_capturer(instance, event))
+                        is StopPropagate
+                    ):
                         return StopPropagate
-                    return await capturer(event)
+                    return await maybe_await(capturer(event))
 
                 capturers[event] = merged_capturer
             else:
 
                 async def transform_capturer(_, event, capturer=capturer):
-                    return await capturer(event)
+                    return await maybe_await(capturer(event))
 
                 capturers[event] = transform_capturer
         for event, handler in self.component.event_handlers.items():
@@ -371,15 +369,18 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
                 async def merged_handler(
                     instance, event, existed_handler=existed_handler, handler=handler
                 ):
-                    if await existed_handler(instance, event) is StopPropagate:
+                    if (
+                        await maybe_await(existed_handler(instance, event))
+                        is StopPropagate
+                    ):
                         return StopPropagate
-                    return await handler(event)
+                    return await maybe_await(handler(event))
 
                 handlers[event] = merged_handler
             else:
 
                 async def transform_handler(_, event, handler=handler):
-                    return await handler(event)
+                    return await maybe_await(handler(event))
 
                 handlers[event] = transform_handler
         self.event_capturers = capturers
@@ -410,13 +411,13 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
         if not unref(self.component.disabled):
             for event_type in type(event).mro():
                 if (capturer := self.event_capturers.get(event_type)) is not None:
-                    return await capturer(self, event)
+                    return await maybe_await(capturer(self, event))
 
     async def dispatch(self, event: Event):
         if not unref(self.component.disabled):
             for event_type in type(event).mro():
                 if (handler := self.event_handlers.get(event_type)) is not None:
-                    return await handler(self, event)
+                    return await maybe_await(handler(self, event))
 
     def get_child_at(self, p: Positional) -> Iterator["ComponentInstance"]:
         for child in reversed(unref(use_children(self))):
@@ -751,7 +752,7 @@ class ComponentMeta(type):
     def register(mcs, name: str):
         "register component for rendering with XML"
 
-        def wrapper(func: Callable[..., "Component"]):
+        def wrapper(func: Callable[P, "Component"]):
             mcs._components[name] = func
             return func
 

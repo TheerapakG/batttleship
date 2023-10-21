@@ -54,7 +54,7 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
                 ship_setup(window, client, replace(room, players=unref(player_infos)))
             )
 
-    async def on_mounted(event: ComponentMountedEvent):
+    def on_mounted(event: ComponentMountedEvent):
         # TODO: async component
         event.instance.bound_tasks.update(
             [
