@@ -1,3 +1,6 @@
+import math
+from typing import Literal
+
 from tgraphics.color import colors
 from tgraphics.component import Component, use_hover
 from tgraphics.event import Event, ComponentMountedEvent, MousePressEvent, StopPropagate
@@ -22,17 +25,36 @@ def rounded_rect_label_button(
     radius_top_left: int | float | None | ReadRef[int | float | None] = None,
     radius_top_right: int | float | None | ReadRef[int | float | None] = None,
     font_name: str | None | ReadRef[str | None] = None,
-    font_size: int | float | None | ReadRef[int | float | None] = None,
+    font_size: int
+    | float
+    | Literal["full"]
+    | None
+    | ReadRef[int | float | Literal["full"] | None] = None,
     bold: bool | ReadRef[bool] = False,
     italic: bool | ReadRef[bool] = False,
     disable: bool | ReadRef[bool] = False,
-    **kwargs
+    **kwargs,
 ):
     hover = Ref(False)
     bg_color = computed(
         lambda: unref(disable_color)
         if unref(disable)
         else (unref(hover_color) if unref(hover) else unref(color))
+    )
+
+    label_multiline = computed(lambda: any(c in unref(text) for c in "\n\u2028\u2029"))
+
+    label_diff = computed(
+        lambda: min(unref(width), unref(height)) * (1 - math.sqrt(1 / 2))
+    )
+
+    label_width = computed(lambda: unref(width) - unref(label_diff))
+    calc_label_height = computed(lambda: unref(height) - unref(label_diff))
+    label_height = computed(
+        lambda: unref(calc_label_height) if unref(label_multiline) else None
+    )
+    label_font_size = computed(
+        lambda: f_s if (f_s := unref(font_size)) != "full" else unref(calc_label_height)
     )
 
     async def on_mounted(event: ComponentMountedEvent):
@@ -60,7 +82,16 @@ def rounded_rect_label_button(
                 radius_top_left="radius_top_left"
                 radius_top_right="radius_top_right"
             />
-            <Label text="text" text_color="text_color" font_name="font_name" font_size="font_size" bold="bold" italic="italic" />
+            <Label 
+                text="text" 
+                text_color="text_color" 
+                font_name="font_name" 
+                font_size="label_font_size" 
+                bold="bold" 
+                italic="italic" 
+                width="label_width" 
+                height="label_height" 
+            />
         </Layer>
         """,
         **kwargs,

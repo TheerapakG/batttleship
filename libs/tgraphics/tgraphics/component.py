@@ -1943,11 +1943,12 @@ class LabelInstance(ComponentInstance["Label"]):
         self._label.value.italic = italic
         self._label.trigger()
 
-    def _update_width(self, width: int | float):
+    def _update_width(self, width: int | float | None):
         self._label.value.width = width
+        self._label.value.multiline = width is None
         self._label.trigger()
 
-    def _update_height(self, height: int | float):
+    def _update_height(self, height: int | float | None):
         self._label.value.height = height
         self._label.trigger()
 
@@ -1965,16 +1966,23 @@ class LabelInstance(ComponentInstance["Label"]):
             if (height := unref(self.component.height)) is not None
             else None
         )
+        font_size_px = computed(
+            lambda: font_size * 0.75
+            if (font_size := unref(self.component.font_size)) is not None
+            else None
+        )
         self._label = Ref(
             _Label(
                 unref(self.component.text),
                 font_name=unref(self.component.font_name),
-                font_size=unref(self.component.font_size),
+                font_size=unref(font_size_px),
                 bold=unref(self.component.bold),
                 italic=unref(self.component.italic),
                 color=unref(self.component.text_color),
                 width=unref(draw_width),
                 height=unref(draw_height),
+                multiline=unref(draw_width) is not None,
+                align="center",
             )
         )
         self._label.value.x = unref(x)
@@ -1988,7 +1996,7 @@ class LabelInstance(ComponentInstance["Label"]):
                     Watcher.ifref(y, self._update_y),
                     Watcher.ifref(self.component.text, self._update_text),
                     Watcher.ifref(self.component.font_name, self._update_font_name),
-                    Watcher.ifref(self.component.font_size, self._update_font_size),
+                    Watcher.ifref(font_size_px, self._update_font_size),
                     Watcher.ifref(self.component.bold, self._update_bold),
                     Watcher.ifref(self.component.italic, self._update_italic),
                     Watcher.ifref(self.component.text_color, self._update_text_color),
