@@ -29,6 +29,9 @@ def games(
                 | models.ShipTile
                 | models.ObstacleTile
                 | models.MineTile
+                | models.ChoosenTile
+                | models.MissTile
+                | models.HitTile,
 
             ](models.EmptyTile())
             for _ in range(8)
@@ -40,13 +43,17 @@ def games(
             shot_type.TWOBYTWO_SHOT_VARIANT.id :Ref(models.ShotType(shot_type.TWOBYTWO_SHOT_VARIANT, [], 0)),
             shot_type.THREEROW_SHOT_VARIANT.id :Ref(models.ShotType(shot_type.THREEROW_SHOT_VARIANT, [], 0)),
         }
+    print(shots)
+    print("-------")
+    print(len(shots))
+    print("-------")
+    print(shots[shot_type.THREEROW_SHOT_VARIANT.id])
     # Assume we pull normal shot type
-    current_shot_id = Ref[UUID| None](shot_type.NORMAL_SHOT_VARIANT.id)
+    current_shot_id = Ref[UUID| None](shot_type.THREEROW_SHOT_VARIANT.id)
     hover_index = Ref[tuple[int, int]]((0, 0))
     submit = Ref(False)
     not_submitable = computed(
         lambda: unref(submit)
-        or not all(unref(shot).tile_position for shot in shots.values())
     )
     # player_submits = Ref(set())
 
@@ -60,15 +67,12 @@ def games(
                         offset,
                     ),
                 ): sprite
-                for offset, sprite in shot_type.SHOT_VARIANTS[
-                    unref(shots[shot_id]).shot_variant.id
-                ].placement_offsets.items()
+                for offset, sprite in shot_type.SHOT_VARIANTS[shot_id].placement_offsets.items()
             }
             if (shot_id := unref(current_shot_id)) is not None
             else {}
         )
     )
-
     def check_placement():
         for col, row in unref(current_placement).keys():
             if col < 0 or col >= len(board):
@@ -162,14 +166,13 @@ def games(
                 and unref(current_placement_legal)
             ):
                 for col, row in placement.keys():
-                    board[col][row].value = models.ChoosenTile
+                    board[col][row].value = models.ChoosenTile()
                 current_shot_ref = shots[shot_id]
                 current_shot_ref.value = replace(
                     unref(current_shot_ref),
                     tile_position=[position for position in placement.keys()],
                 )
                 current_shot_ref.trigger()
-
     async def on_tile_mounted(col: int, row: int, event: ComponentMountedEvent):
         event.instance.bound_watchers.update(
             [

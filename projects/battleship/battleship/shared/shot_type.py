@@ -20,7 +20,7 @@ class ShotTypeVariant(models.ShotTypeVariantId):
 
 
 NORMAL_SHOT_VARIANT = ShotTypeVariant(
-    UUID("e4d85882-6ea9-11ee-b962-0242ac120002"),
+    UUID("618489a5-4a90-43de-9471-505e9f25d819"),
     {
         (0, 0): ["", "", "", ""],
     },
@@ -30,7 +30,7 @@ NORMAL_SHOT_VARIANT = ShotTypeVariant(
 )
 
 TWOBYTWO_SHOT_VARIANT = ShotTypeVariant(
-    UUID("f0d39692-6ea9-11ee-b962-0242ac120002"),
+    UUID("c40445f1-da33-4b7b-aa92-9d20d8b254c8"),
     {
         (0, 0): ["", "", "", ""],
         (1, 0): ["", "", "", ""],
@@ -43,7 +43,7 @@ TWOBYTWO_SHOT_VARIANT = ShotTypeVariant(
 )
 
 THREEROW_SHOT_VARIANT = ShotTypeVariant(
-    UUID("f0d39692-6ea9-11ee-b962-0242ac120002"),
+    UUID("2437ef52-4f01-40ea-8ea5-822b92327414"),
     {
         (0, 0): ["", "", "", ""],
         (1, 0): ["", "", "", ""],
