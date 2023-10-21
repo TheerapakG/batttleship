@@ -65,11 +65,27 @@ def main_menu(
 
             await window.set_scene(lobby(window, client, room))
 
+    async def on_profile_button(_e):
+        from .profile import profile
+        await window.set_scene(profile(window,client))
+
     return Component.render_xml(
         """
         <Layer handle-ComponentMountedEvent="on_mounted">
+            <Layer>
+                <Pad pad_right="800">
+                    <Pad pad_bottom="440">
+                        <RoundedRectLabelButton 
+                            text="'Profile'"
+                            font_size="20"
+                            t-style="c['teal'][300] | hover_c['teal'][400] | disable_c['slate'][500] | text_c['white'] | w[24] | h[10]"
+                            handle-ClickEvent="on_profile_button"
+                        />
+                    </Pad>
+                </Pad>
+            </Layer>
             <Column 
-                t-style="w['full'](window) | h['full'](window) | g[0]"
+                t-style="w['full'](window) | h['full'](window) | g[12]"
             >
                 <Column t-style="g[2]">
                     <Pad pad_top="90">
@@ -96,7 +112,7 @@ def main_menu(
                                 <RoundedRect t-style="c['teal'][100] | w[48] | h[12] | r_r[0]"/>
                             </Pad>
                         </Pad>
-                        <Row t-style="g[4]">
+                        <Row t-style="g[5]">
                             <Pad pad_left="11">
                                 <Input
                                     t-model-text="code"
@@ -124,14 +140,10 @@ def main_menu(
                         </Pad>
                     </Layer>
                 </Column>
-                <Pad pad_bottom="10">
                     <Label text="'BATTLESHIP'" bold="True" text_color="colors['white']" font_size="88" />
-                </Pad>
-                <Column t-style="g[0]">
-                    <Pad pad_bottom="60">   
-                        <Label text="f'Your current rating is {unref(store.user.rating)}'" text_color="colors['white']" />
-                    </Pad>
-                    <Label text="f'Welcome, {unref(store.user.name)}'" /> 
+                <Column t-style="g[1]">
+                    <Label text="f'Your current rating is {unref(store.user.rating)}'" text_color="colors['white']" />
+                    <Label text="f'Welcome, {unref(store.user.name)}'" />
                 </Column>
             </Column>
             <CreatePlayerModal t-if="unref(store.user.store) is None" window="window" client="client" />
