@@ -2,7 +2,7 @@ from tgraphics.color import colors
 from tgraphics.component import Component, Window
 from tgraphics.style import w, h
 
-from .lobby import lobby
+from . import lobby
 from ..client import BattleshipClient
 from ...shared import models
 
@@ -15,8 +15,6 @@ def private_lobby(
     room: models.RoomInfo,
     **kwargs
 ):
-    lobby_component = lobby(window, client, room)
-
     return Component.render_xml(
         """
         <Layer>
@@ -25,7 +23,7 @@ def private_lobby(
                     <Label text="join_code" text_color="colors['white']" />
                 </Pad>
             </Column>
-            <Slot component="lobby_component" />
+            <Lobby window="window" client="client" room="room" />
         </Layer>
         """,
         **kwargs,

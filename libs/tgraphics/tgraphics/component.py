@@ -196,17 +196,44 @@ class ElementComponentData:
             init_vars["event_handlers"] = event_handlers
 
         if len(self.element) > 0:
-            render_results = [
-                Component.render_element(children, frame, init_locals)
-                for children in self.element
-            ]
-            init_vars["children"] = computed(
-                lambda: [
-                    component
-                    for render_result in render_results
-                    for component in unref(render_result)
-                ]
-            )
+            render_results: dict[
+                str, list[list[Component] | ReadRef[list[Component]]]
+            ] = {}
+            for children in self.element:
+                match children.tag:
+                    case "Template":
+                        template_key = children.get("name", "children")
+                        render_list = render_results.get(template_key, [])
+                        render_list.extend(
+                            Component.render_element(c, frame, init_locals)
+                            for c in children
+                        )
+                        render_results[template_key] = render_list
+                    case "Slot":
+                        render_list = render_results.get("children", [])
+                        render_list.append(
+                            eval(components, frame.frame.f_globals | init_locals, {})
+                            if (components := children.get("components", None))
+                            is not None
+                            else []
+                        )
+                        render_results["children"] = render_list
+                    case _:
+                        render_list = render_results.get("children", [])
+                        render_list.append(
+                            Component.render_element(children, frame, init_locals)
+                        )
+                        render_results["children"] = render_list
+            init_vars |= {
+                k: computed(
+                    lambda render_list=render_list: [
+                        component
+                        for render_result in render_list
+                        for component in unref(render_result)
+                    ]
+                )
+                for k, render_list in render_results.items()
+            }
 
         return init_vars
 
@@ -1429,83 +1456,6 @@ class Column(Component):
 
     def get_instance(self):
         return ColumnInstance(component=self)
-
-
-@dataclass
-class SlotInstance(ComponentInstance["Slot"]):
-    _instance: Ref[ComponentInstance | None] = field(init=False)
-
-    def __hash__(self) -> int:
-        return id(self)
-
-    def _draw(self, dt: float):
-        if (instance := self._instance.value) is not None:
-            instance.draw(dt)
-
-    @event_handler(ComponentMountedEvent)
-    async def component_mounted_handler(self, _: ComponentMountedEvent):
-        self._instance = Ref(None)
-
-        width = computed(
-            lambda: unref(use_width(instance)) * unref(use_acc_scale_x(self))
-            if (instance := unref(self._instance)) is not None
-            else 0
-        )
-        height = computed(
-            lambda: unref(use_height(instance)) * unref(use_acc_scale_y(self))
-            if (instance := unref(self._instance)) is not None
-            else 0
-        )
-
-        async def mount_slot():
-            if (instance := unref(self._instance)) is not None:
-                await instance.capture(ComponentUnmountedEvent(instance))
-            instance = self.component.component.get_instance()
-            self._instance.value = instance
-
-            instance.before_mounted_data.value = BeforeMountedComponentInstanceData(
-                0,
-                0,
-                use_acc_offset_x(self),
-                use_acc_offset_y(self),
-                1,
-                1,
-                use_acc_scale_x(self),
-                use_acc_scale_y(self),
-            )
-            await instance.capture(ComponentMountedEvent(instance))
-
-        self.bound_watchers.update(
-            [
-                w
-                for w in [
-                    Watcher.ifref(
-                        self.component.component,
-                        lambda cs: asyncio.create_task(mount_slot()),
-                        trigger_init=True,
-                    ),
-                ]
-                if w is not None
-            ]
-        )
-
-        self.after_mounted_data.value = AfterMountedComponentInstanceData(
-            width,
-            height,
-            computed(
-                lambda: [instance]
-                if (instance := unref(self._instance)) is not None
-                else []
-            ),
-        )
-
-
-@dataclass
-class Slot(Component):
-    component: Component | ReadRef[Component]
-
-    def get_instance(self):
-        return SlotInstance(component=self)
 
 
 @dataclass

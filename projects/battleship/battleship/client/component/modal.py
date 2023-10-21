@@ -13,7 +13,7 @@ class PlayerCreatedEvent(Event):
 def modal(
     window: Window,
     name: str | ReadRef[str],
-    inner_component: Component | ReadRef[Component],
+    inner_component: list[Component] | ReadRef[list[Component]],
     **kwargs
 ):
     return Component.render_xml(
@@ -23,7 +23,7 @@ def modal(
             <Column>
                 <Layer>
                     <RoundedRect t-style="c['white'] | w[128] | h[64] | r_b[4] | r_t[0]" />
-                    <Slot component="inner_component" />
+                    <Slot components="inner_component" />
                 </Layer>
                 <Layer>
                     <RoundedRect t-style="c['teal'][400] | w[128] | h[12] | r_b[0] | r_t[4]" />
