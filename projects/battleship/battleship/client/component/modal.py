@@ -13,7 +13,7 @@ class PlayerCreatedEvent(Event):
 def modal(
     window: Window,
     name: str | ReadRef[str],
-    inner_component: list[Component] | ReadRef[list[Component]],
+    children: list[Component] | ReadRef[list[Component]],
     **kwargs
 ):
     return Component.render_xml(

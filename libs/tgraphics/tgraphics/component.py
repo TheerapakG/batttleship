@@ -1061,7 +1061,7 @@ class PadInstance(ComponentInstance["Pad"]):
         async def mount_child(child: ComponentInstance):
             nonlocal previous_child
             if previous_child is not None:
-                previous_child.capture(ComponentUnmountedEvent(previous_child))
+                await previous_child.capture(ComponentUnmountedEvent(previous_child))
             previous_child = child
             if child is not None:
                 off_x = computed(
