@@ -521,7 +521,7 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
         return await self.dispatch(event)
 
     @event_handler(MouseEnterEvent)
-    async def mouse_enter_handler(self, event: MouseEnterEvent):
+    async def mouse_enter_handler(self, _event: MouseEnterEvent):
         return StopPropagate
 
     @event_capturer(MouseMotionEvent)
@@ -560,7 +560,7 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
         return await self.dispatch(event)
 
     @event_handler(MouseMotionEvent)
-    async def mouse_motion_handler(self, event: MouseMotionEvent):
+    async def mouse_motion_handler(self, _event: MouseMotionEvent):
         return StopPropagate
 
     @event_capturer(MouseLeaveEvent)
@@ -1127,6 +1127,95 @@ class Pad(Component):
 
     def get_instance(self):
         return PadInstance(component=self)
+
+
+@dataclass
+class OffsetInstance(ComponentInstance["Offset"]):
+    def __hash__(self) -> int:
+        return id(self)
+
+    @event_handler(ComponentMountedEvent)
+    async def component_mounted_handler(self, _: ComponentMountedEvent):
+        child = computed(
+            lambda: unref(unref(self.component.children)[0]).get_instance()
+            if unref(self.component.children)
+            else None
+        )
+        previous_child: ComponentInstance | None = None
+
+        async def mount_child(child: ComponentInstance):
+            nonlocal previous_child
+            if previous_child is not None:
+                await previous_child.capture(ComponentUnmountedEvent(previous_child))
+            previous_child = child
+            if child is not None:
+                off_x = computed(
+                    lambda: unref(self.component.offset_x)
+                    * unref(use_acc_scale_x(self))
+                )
+                off_y = computed(
+                    lambda: unref(self.component.offset_y)
+                    * unref(use_acc_scale_y(self))
+                )
+                child.before_mounted_data.value = BeforeMountedComponentInstanceData(
+                    off_x,
+                    off_y,
+                    computed(lambda: unref(use_acc_offset_x(self)) + unref(off_x)),
+                    computed(lambda: unref(use_acc_offset_y(self)) + unref(off_y)),
+                    1,
+                    1,
+                    use_acc_scale_x(self),
+                    use_acc_scale_y(self),
+                )
+                await child.capture(ComponentMountedEvent(child))
+
+        self.bound_watchers.update(
+            [
+                w
+                for w in [
+                    Watcher.ifref(
+                        child,
+                        lambda c: asyncio.create_task(mount_child(c)),
+                        trigger_init=True,
+                    ),
+                ]
+                if w is not None
+            ]
+        )
+
+        self.after_mounted_data.value = AfterMountedComponentInstanceData(
+            computed(
+                lambda: (
+                    unref(use_width(unref(child))) if unref(child) is not None else 0
+                )
+            ),
+            computed(
+                lambda: (
+                    unref(use_height(unref(child))) if unref(child) is not None else 0
+                )
+            ),
+            computed(lambda: [unref(child)] if unref(child) is not None else []),
+        )
+
+    @event_handler(MouseEnterEvent)
+    async def mouse_enter_handler(self, _e: MouseEnterEvent):
+        return None
+
+    @event_handler(MouseMotionEvent)
+    async def mouse_motion_handler(self, _e: MouseMotionEvent):
+        return None
+
+
+@dataclass
+class Offset(Component):
+    children: list["Component" | ReadRef["Component"]] | ReadRef[
+        list["Component" | ReadRef["Component"]]
+    ] = field(default_factory=list["Component" | ReadRef["Component"]])
+    offset_x: int | float | ReadRef[int | float] = field(default=0, kw_only=True)
+    offset_y: int | float | ReadRef[int | float] = field(default=0, kw_only=True)
+
+    def get_instance(self):
+        return OffsetInstance(component=self)
 
 
 @dataclass
@@ -2439,11 +2528,11 @@ class Input(Component):
 loop = asyncio.get_event_loop()
 pyglet.clock.schedule(lambda dt: loop.run_until_complete(asyncio.sleep(0)))
 
-_current_keys = Ref(dict())
+_current_keys = Ref[dict[int, bool]](dict())
 
 
-def use_key_pressed(key):
-    return computed(lambda: unref(_current_keys).get(key, False))
+def use_key_pressed(key_press: int):
+    return computed(lambda: unref(_current_keys).get(key_press, False))
 
 
 @dataclass
