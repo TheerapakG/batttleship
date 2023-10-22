@@ -23,7 +23,7 @@ def modal(
             <Column>
                 <Layer>
                     <RoundedRect t-style="c['white'] | w[128] | h[64] | r_b[4] | r_t[0]" />
-                    <Slot components="inner_component" />
+                    <Slot components="children" />
                 </Layer>
                 <Layer>
                     <RoundedRect t-style="c['teal'][400] | w[128] | h[12] | r_b[0] | r_t[4]" />

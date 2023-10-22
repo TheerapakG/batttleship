@@ -435,34 +435,24 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
                 unref(children).draw(dt)
 
     async def capture(self, event: Event):
-        if not unref(self.component.disabled):
-            for event_type in type(event).mro():
-                if (capturer := self.event_capturers.get(event_type)) is not None:
-                    return await maybe_await(capturer(self, event))
+        for event_type in type(event).mro():
+            if (capturer := self.event_capturers.get(event_type)) is not None:
+                return await maybe_await(capturer(self, event))
 
     async def dispatch(self, event: Event):
-        if not unref(self.component.disabled):
-            for event_type in type(event).mro():
-                if (handler := self.event_handlers.get(event_type)) is not None:
-                    return await maybe_await(handler(self, event))
+        for event_type in type(event).mro():
+            if (handler := self.event_handlers.get(event_type)) is not None:
+                return await maybe_await(handler(self, event))
 
     def get_child_at(self, p: Positional) -> Iterator["ComponentInstance"]:
         for child in reversed(unref(use_children(self))):
             unref_child = unref(child)
-            if (
-                not unref(unref_child.component.disabled)
-                and unref(use_offset_x(unref_child))
-                < p.x
-                < (
-                    unref(use_offset_x(unref_child))
-                    + unref(use_width(unref_child)) * unref(use_scale_x(self))
-                )
-                and unref(use_offset_y(unref_child))
-                < p.y
-                < (
-                    unref(use_offset_y(unref_child))
-                    + unref(use_height(unref_child)) * unref(use_scale_y(self))
-                )
+            if unref(use_offset_x(unref_child)) < p.x < (
+                unref(use_offset_x(unref_child))
+                + unref(use_width(unref_child)) * unref(use_scale_x(self))
+            ) and unref(use_offset_y(unref_child)) < p.y < (
+                unref(use_offset_y(unref_child))
+                + unref(use_height(unref_child)) * unref(use_scale_y(self))
             ):
                 yield unref_child
 
@@ -1542,6 +1532,7 @@ class RoundedRectInstance(ComponentInstance["RoundedRect"]):
     vert: ClassVar[Shader] = Shader(
         """
         #version 330 core
+        #extension GL_ARB_gpu_shader5 : require
         in vec2 translation;
         in vec2 size;
         in float radius;
@@ -1552,9 +1543,9 @@ class RoundedRectInstance(ComponentInstance["RoundedRect"]):
 
         out vec2 vertex_size;
         out float vertex_radius;
-        out vec2 vertex_tex_coord;
+        sample out vec2 vertex_tex_coord;
         out float vertex_round;
-        out vec2 vertex_radius_direction;
+        sample out vec2 vertex_radius_direction;
         out vec4 vertex_color;
 
         uniform WindowBlock
@@ -1580,11 +1571,12 @@ class RoundedRectInstance(ComponentInstance["RoundedRect"]):
     frag: ClassVar[Shader] = Shader(
         """
         #version 330 core
+        #extension GL_ARB_gpu_shader5 : require
         in vec2 vertex_size;
         in float vertex_radius;
-        in vec2 vertex_tex_coord;
+        sample in vec2 vertex_tex_coord;
         in float vertex_round;
-        in vec2 vertex_radius_direction;
+        sample in vec2 vertex_radius_direction;
         in vec4 vertex_color;
 
         out vec4 fragColor;

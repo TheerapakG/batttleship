@@ -6,7 +6,7 @@ from tgraphics.color import colors
 from tgraphics.component import Component, Window
 from tgraphics.event import ComponentMountedEvent
 from tgraphics.reactivity import Ref, computed, unref
-from tgraphics.style import c, text_c, hover_c, disable_c, w, h, r_b, r_t, r_l, r_r, g
+from tgraphics.style import c, text_c, hover_c, disabled_c, w, h, r_b, r_t, r_l, r_r, g
 
 from .. import store
 from ..client import BattleshipClient
@@ -83,27 +83,27 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
                     <RoundedRectLabelButton
                         t-if="store.user.is_player(models.PlayerId.from_player_info(player_info))"
                         text="'Ready'"
-                        disable="not(unref(ready)^unref(class_ready))"
-                        t-style="c['teal'][400] | hover_c['teal'][500] | disable_c['slate'][500] | text_c['white'] | w[48] | h[12]"
+                        disabled="not(unref(ready)^unref(class_ready))"
+                        t-style="c['teal'][400] | hover_c['teal'][500] | disabled_c['slate'][500] | text_c['white'] | w[48] | h[12]"
                         handle-ClickEvent="on_ready_button"
                     />
                     <Row t-if="store.user.is_player(models.PlayerId.from_player_info(player_info))" t-style="g[4]">
                         <RoundedRectLabelButton 
                             text="'NAVY'"
-                            disable="class_ready"
-                            t-style="c['teal'][300] | hover_c['teal'][400] | disable_c['slate'][500] | text_c['white'] | w[12] | h[12]"
+                            disabled="class_ready"
+                            t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[12] | h[12]"
                             handle-ClickEvent="class_select"
                         />
                         <RoundedRectLabelButton 
                             text="'Scout'"
-                            disable="class_ready"
-                            t-style="c['teal'][300] | hover_c['teal'][400] | disable_c['slate'][500] | text_c['white'] | w[12] | h[12]"
+                            disabled="class_ready"
+                            t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[12] | h[12]"
                             handle-ClickEvent="class_select"
                         />
                         <RoundedRectLabelButton 
                             text="'Pirate'"
-                            disable="class_ready"
-                            t-style="c['teal'][300] | hover_c['teal'][400] | disable_c['slate'][500] | text_c['white'] | w[12] | h[12]"
+                            disabled="class_ready"
+                            t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[12] | h[12]"
                             handle-ClickEvent="class_select"
                         />
                     </Row>

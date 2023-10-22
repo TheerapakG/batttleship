@@ -9,7 +9,7 @@ from tgraphics.color import colors
 from tgraphics.event import ComponentMountedEvent
 from tgraphics.component import Component, Window, use_key_pressed
 from tgraphics.reactivity import computed, unref, Ref, Watcher
-from tgraphics.style import c, text_c, hover_c, disable_c, w, h
+from tgraphics.style import c, text_c, hover_c, disabled_c, w, h
 
 from .. import store
 from ..client import BattleshipClient
@@ -19,9 +19,7 @@ from ...shared.utils import add, mat_mul_vec
 
 
 @Component.register("games")
-def games(
-    window: Window, client: BattleshipClient, **kwargs
-):
+def games(window: Window, client: BattleshipClient, **kwargs):
     board = [
         [
             Ref[
@@ -32,29 +30,32 @@ def games(
                 | models.ChoosenTile
                 | models.MissTile
                 | models.HitTile,
-
             ](models.EmptyTile())
             for _ in range(8)
         ]
         for _ in range(8)
     ]
     shots = {
-            shot_type.NORMAL_SHOT_VARIANT.id :Ref(models.ShotType(shot_type.NORMAL_SHOT_VARIANT, [], 0)),
-            shot_type.TWOBYTWO_SHOT_VARIANT.id :Ref(models.ShotType(shot_type.TWOBYTWO_SHOT_VARIANT, [], 0)),
-            shot_type.THREEROW_SHOT_VARIANT.id :Ref(models.ShotType(shot_type.THREEROW_SHOT_VARIANT, [], 0)),
-        }
+        shot_type.NORMAL_SHOT_VARIANT.id: Ref(
+            models.ShotType(shot_type.NORMAL_SHOT_VARIANT, [], 0)
+        ),
+        shot_type.TWOBYTWO_SHOT_VARIANT.id: Ref(
+            models.ShotType(shot_type.TWOBYTWO_SHOT_VARIANT, [], 0)
+        ),
+        shot_type.THREEROW_SHOT_VARIANT.id: Ref(
+            models.ShotType(shot_type.THREEROW_SHOT_VARIANT, [], 0)
+        ),
+    }
     print(shots)
     print("-------")
     print(len(shots))
     print("-------")
     print(shots[shot_type.THREEROW_SHOT_VARIANT.id])
     # Assume we pull normal shot type
-    current_shot_id = Ref[UUID| None](shot_type.THREEROW_SHOT_VARIANT.id)
+    current_shot_id = Ref[UUID | None](shot_type.THREEROW_SHOT_VARIANT.id)
     hover_index = Ref[tuple[int, int]]((0, 0))
     submit = Ref(False)
-    not_submitable = computed(
-        lambda: unref(submit)
-    )
+    not_submitable = computed(lambda: unref(submit))
     # player_submits = Ref(set())
 
     current_placement = computed(
@@ -67,12 +68,15 @@ def games(
                         offset,
                     ),
                 ): sprite
-                for offset, sprite in shot_type.SHOT_VARIANTS[shot_id].placement_offsets.items()
+                for offset, sprite in shot_type.SHOT_VARIANTS[
+                    shot_id
+                ].placement_offsets.items()
             }
             if (shot_id := unref(current_shot_id)) is not None
             else {}
         )
     )
+
     def check_placement():
         for col, row in unref(current_placement).keys():
             if col < 0 or col >= len(board):
@@ -84,12 +88,19 @@ def games(
         return True
 
     current_placement_legal = computed(check_placement)
-    # Tile models is subject to change 
+
+    # Tile models is subject to change
     def get_tile_color(
         col: int,
         row: int,
         tile: Ref[
-            models.EmptyTile | models.ShipTile | models.ObstacleTile | models.MineTile | models.ChoosenTile | models.MissTile | models.HitTile
+            models.EmptyTile
+            | models.ShipTile
+            | models.ObstacleTile
+            | models.MineTile
+            | models.ChoosenTile
+            | models.MissTile
+            | models.HitTile
         ],
     ):
         def _get_tile_color(
@@ -173,6 +184,7 @@ def games(
                     tile_position=[position for position in placement.keys()],
                 )
                 current_shot_ref.trigger()
+
     async def on_tile_mounted(col: int, row: int, event: ComponentMountedEvent):
         event.instance.bound_watchers.update(
             [
@@ -195,8 +207,8 @@ def games(
         <Column gap="16" width="window.width" height="window.height" handle-ComponentMountedEvent="on_mounted">
             <RoundedRectLabelButton
                 text="'Submit'"
-                disable="not_submitable"
-                t-style="c['teal'][400] | hover_c['teal'][500] | disable_c['slate'][500] | text_c['white'] | w[48] | h[12]"
+                disabled="not_submitable"
+                t-style="c['teal'][400] | hover_c['teal'][500] | disabled_c['slate'][500] | text_c['white'] | w[48] | h[12]"
                 handle-ClickEvent="on_submit_button"
             />
             <Column gap="4">
@@ -207,7 +219,7 @@ def games(
                         text_color="colors['white']"
                         color="get_tile_color(col, row, tile)"
                         hover_color="get_tile_color(col, row, tile)"
-                        disable_color="colors['white']"
+                        disabled_color="colors['white']"
                         width="32"
                         height="32"
                         handle-ClickEvent="partial(on_tile_click, col, row)"

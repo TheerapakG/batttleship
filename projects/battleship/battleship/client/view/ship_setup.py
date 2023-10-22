@@ -9,7 +9,7 @@ from tgraphics.color import colors
 from tgraphics.event import ComponentMountedEvent
 from tgraphics.component import Component, Window, use_key_pressed
 from tgraphics.reactivity import computed, unref, Ref, Watcher
-from tgraphics.style import c, text_c, hover_c, disable_c, w, h, g
+from tgraphics.style import c, text_c, hover_c, disabled_c, w, h, g
 
 from .. import store
 from ..client import BattleshipClient
@@ -231,8 +231,8 @@ def ship_setup(
         <Column t-style="w['full'](window) | h['full'](window) | g[4]" handle-ComponentMountedEvent="on_mounted">
             <RoundedRectLabelButton
                 text="'Submit'"
-                disable="not_submitable"
-                t-style="c['teal'][400] | hover_c['teal'][500] | disable_c['slate'][500] | text_c['white'] | w[48] | h[12]"
+                disabled="not_submitable"
+                t-style="c['teal'][400] | hover_c['teal'][500] | disabled_c['slate'][500] | text_c['white'] | w[48] | h[12]"
                 handle-ClickEvent="on_submit_button"
             />
             <Row t-style="g[1]">
@@ -242,7 +242,7 @@ def ship_setup(
                     text_color="colors['white']"
                     color="get_ship_color(ship)"
                     hover_color="colors['white']"
-                    disable_color="colors['white']"
+                    disabled_color="colors['white']"
                     width="32"
                     height="32"
                     handle-ClickEvent="partial(on_ship_click, ship_id)"
@@ -256,7 +256,7 @@ def ship_setup(
                         text_color="colors['white']"
                         color="get_tile_color(col, row, tile)"
                         hover_color="get_tile_color(col, row, tile)"
-                        disable_color="colors['white']"
+                        disabled_color="colors['white']"
                         width="32"
                         height="32"
                         handle-ClickEvent="partial(on_tile_click, col, row)"

@@ -5,7 +5,7 @@ from tgraphics.component import Component, Window
 from tgraphics.event import ComponentMountedEvent
 from tgraphics.reactivity import Ref, computed, unref
 from tsocket.shared import Empty
-from tgraphics.style import c, text_c, hover_c, disable_c, w, h, r_b, r_t, r_l, r_r, g
+from tgraphics.style import c, text_c, hover_c, disabled_c, w, h, r_b, r_t, r_l, r_r, g
 
 from .. import store
 from ..client import BattleshipClient
@@ -67,7 +67,8 @@ def main_menu(
 
     async def on_profile_button(_e):
         from .profile import profile
-        await window.set_scene(profile(window,client))
+
+        await window.set_scene(profile(window, client))
 
     return Component.render_xml(
         """
@@ -78,7 +79,7 @@ def main_menu(
                         <RoundedRectLabelButton 
                             text="'Profile'"
                             font_size="20"
-                            t-style="c['teal'][300] | hover_c['teal'][400] | disable_c['slate'][500] | text_c['white'] | w[24] | h[10]"
+                            t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[24] | h[10]"
                             handle-ClickEvent="on_profile_button"
                         />
                     </Pad>
@@ -97,7 +98,7 @@ def main_menu(
                                 <RoundedRectLabelButton 
                                     text="'+'"
                                     font_size="20"
-                                    t-style="c['teal'][300] | hover_c['teal'][400] | disable_c['slate'][500] | text_c['white'] | w[10] | h[10]"
+                                    t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[10] | h[10]"
                                     handle-ClickEvent="on_private_room_create_button"
                                 />
                             </Pad>
@@ -124,7 +125,7 @@ def main_menu(
                             <Pad pad_bottom="20"> 
                                 <RoundedRectLabelButton 
                                     text="'Join'"
-                                    t-style="c['teal'][300] | hover_c['teal'][400] | disable_c['slate'][500] | text_c['white'] | w[16] | h[12] | r_l[0]"
+                                    t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[16] | h[12] | r_l[0]"
                                     handle-ClickEvent="on_private_room_join_button"
                                 />
                             </Pad>
@@ -134,7 +135,7 @@ def main_menu(
                         <Pad pad_top="25">
                             <RoundedRectLabelButton 
                                 text="'Public Match'"
-                                t-style="c['teal'][400] | hover_c['teal'][500] | disable_c['slate'][500] | text_c['white'] | w[64] | h[12]"
+                                t-style="c['teal'][400] | hover_c['teal'][500] | disabled_c['slate'][500] | text_c['white'] | w[64] | h[12]"
                                 handle-ClickEvent="on_public_room_match_button"
                             />
                         </Pad>

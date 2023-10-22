@@ -17,7 +17,7 @@ def rounded_rect_label_button(
     text_color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]],
     color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]],
     hover_color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]],
-    disable_color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]],
+    disabled_color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]],
     width: float | ReadRef[float],
     height: float | ReadRef[float],
     radius_bottom_left: int | float | None | ReadRef[int | float | None] = None,
@@ -32,13 +32,13 @@ def rounded_rect_label_button(
     | ReadRef[int | float | Literal["full"] | None] = None,
     bold: bool | ReadRef[bool] = False,
     italic: bool | ReadRef[bool] = False,
-    disable: bool | ReadRef[bool] = False,
+    disabled: bool | ReadRef[bool] = False,
     **kwargs,
 ):
     hover = Ref(False)
     bg_color = computed(
-        lambda: unref(disable_color)
-        if unref(disable)
+        lambda: unref(disabled_color)
+        if unref(disabled)
         else (unref(hover_color) if unref(hover) else unref(color))
     )
 
@@ -67,12 +67,13 @@ def rounded_rect_label_button(
         )
 
     async def on_click(event: MousePressEvent):
-        await event.instance.capture(ClickEvent(event.instance))
+        if not (unref(event.instance.component.disabled)):
+            await event.instance.capture(ClickEvent(event.instance))
         return StopPropagate
 
     return Component.render_xml(
         """
-        <Layer handle-ComponentMountedEvent="on_mounted" handle-MousePressEvent="on_click">
+        <Layer handle-ComponentMountedEvent="on_mounted" handle-MousePressEvent="on_click" disabled="disabled">
             <RoundedRect 
                 width="width" 
                 height="height" 
