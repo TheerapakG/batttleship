@@ -14,7 +14,7 @@ def main_menu(
 ):
     duration = Ref(0)
     duration_clamped_ratio = computed(lambda: min(unref(duration), 3) / 3)
-    duration_ratio = computed(lambda: (unref(duration) % 1) / 1)
+    duration_ratio = computed(lambda: (max(unref(duration) - 3, 0) % 1) / 1)
 
     async def on_mounted(event: ComponentMountedEvent):
         event.instance.bound_watchers.update(
@@ -26,16 +26,18 @@ def main_menu(
     return Component.render_xml(
         """
         <Layer handle-ComponentMountedEvent="on_mounted">
-            <Offset offset_y="-360 + 360 * unref(ease_out(duration_clamped_ratio))">
-                <Column t-style="w['full'](window) | h['full'](window) | g[0]">
-                    <Label 
-                        text="'test'" 
-                        text_color="use_interpolate(with_alpha(colors['cyan'][300], 127), with_alpha(colors['cyan'][300], 255), duration_ratio)"
-                        font_size="50"
-                        bold="True"
-                    />
-                </Column>
-            </Offset>
+            <Column t-style="w['full'](window) | h['full'](window) | g[0]">
+                <Offset offset_y="-360 + 360 * unref(ease_out(duration_clamped_ratio))">
+                    <Scale scale_x="ease_out(duration_clamped_ratio)" scale_y="ease_out(duration_clamped_ratio)">
+                            <Label 
+                                text="'test'" 
+                                text_color="use_interpolate(with_alpha(colors['cyan'][300], 127), with_alpha(colors['cyan'][300], 255), duration_ratio)"
+                                font_size="50"
+                                bold="True"
+                            />
+                    </Scale>
+                </Offset>
+            </Column>
         </Layer>
         """,
         **kwargs,

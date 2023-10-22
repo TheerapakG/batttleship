@@ -1219,6 +1219,97 @@ class Offset(Component):
 
 
 @dataclass
+class ScaleInstance(ComponentInstance["Scale"]):
+    def __hash__(self) -> int:
+        return id(self)
+
+    @event_handler(ComponentMountedEvent)
+    async def component_mounted_handler(self, _: ComponentMountedEvent):
+        child = computed(
+            lambda: unref(unref(self.component.children)[0]).get_instance()
+            if unref(self.component.children)
+            else None
+        )
+        previous_child: ComponentInstance | None = None
+
+        async def mount_child(child: ComponentInstance):
+            nonlocal previous_child
+            if previous_child is not None:
+                await previous_child.capture(ComponentUnmountedEvent(previous_child))
+            previous_child = child
+            if child is not None:
+                child.before_mounted_data.value = BeforeMountedComponentInstanceData(
+                    0,
+                    0,
+                    use_acc_offset_x(self),
+                    use_acc_offset_y(self),
+                    self.component.scale_x,
+                    self.component.scale_y,
+                    computed(
+                        lambda: unref(self.component.scale_x)
+                        * unref(use_acc_scale_x(self))
+                    ),
+                    computed(
+                        lambda: unref(self.component.scale_y)
+                        * unref(use_acc_scale_y(self))
+                    ),
+                )
+                await child.capture(ComponentMountedEvent(child))
+
+        self.bound_watchers.update(
+            [
+                w
+                for w in [
+                    Watcher.ifref(
+                        child,
+                        lambda c: asyncio.create_task(mount_child(c)),
+                        trigger_init=True,
+                    ),
+                ]
+                if w is not None
+            ]
+        )
+
+        self.after_mounted_data.value = AfterMountedComponentInstanceData(
+            computed(
+                lambda: (
+                    unref(use_width(unref(child))) * unref(self.component.scale_x)
+                    if unref(child) is not None
+                    else 0
+                )
+            ),
+            computed(
+                lambda: (
+                    unref(use_height(unref(child))) * unref(self.component.scale_y)
+                    if unref(child) is not None
+                    else 0
+                )
+            ),
+            computed(lambda: [unref(child)] if unref(child) is not None else []),
+        )
+
+    @event_handler(MouseEnterEvent)
+    async def mouse_enter_handler(self, _e: MouseEnterEvent):
+        return None
+
+    @event_handler(MouseMotionEvent)
+    async def mouse_motion_handler(self, _e: MouseMotionEvent):
+        return None
+
+
+@dataclass
+class Scale(Component):
+    children: list["Component" | ReadRef["Component"]] | ReadRef[
+        list["Component" | ReadRef["Component"]]
+    ] = field(default_factory=list["Component" | ReadRef["Component"]])
+    scale_x: int | float | ReadRef[int | float] = field(default=1, kw_only=True)
+    scale_y: int | float | ReadRef[int | float] = field(default=1, kw_only=True)
+
+    def get_instance(self):
+        return ScaleInstance(component=self)
+
+
+@dataclass
 class LayerInstance(ComponentInstance["Layer"]):
     def __hash__(self) -> int:
         return id(self)
@@ -1728,23 +1819,26 @@ class RoundedRectInstance(ComponentInstance["RoundedRect"]):
         height = computed(
             lambda: unref(self.component.height) * unref(use_acc_scale_y(self))
         )
+        min_scale = computed(
+            lambda: min(unref(use_acc_scale_x(self)), unref(use_acc_scale_y(self)))
+        )
         radius_bottom_left = computed(
-            lambda: r
+            lambda: r * unref(min_scale)
             if (r := unref(self.component.radius_bottom_left)) is not None
             else min(unref(width), unref(height)) / 2
         )
         radius_bottom_right = computed(
-            lambda: r
+            lambda: r * unref(min_scale)
             if (r := unref(self.component.radius_bottom_right)) is not None
             else min(unref(width), unref(height)) / 2
         )
         radius_top_left = computed(
-            lambda: r
+            lambda: r * unref(min_scale)
             if (r := unref(self.component.radius_top_left)) is not None
             else min(unref(width), unref(height)) / 2
         )
         radius_top_right = computed(
-            lambda: r
+            lambda: r * unref(min_scale)
             if (r := unref(self.component.radius_top_right)) is not None
             else min(unref(width), unref(height)) / 2
         )
@@ -1998,8 +2092,11 @@ class LabelInstance(ComponentInstance["Label"]):
             if (height := unref(self.component.height)) is not None
             else None
         )
+        min_scale = computed(
+            lambda: min(unref(use_acc_scale_x(self)), unref(use_acc_scale_y(self)))
+        )
         font_size_px = computed(
-            lambda: font_size * 0.75
+            lambda: font_size * 0.75 * unref(min_scale)
             if (font_size := unref(self.component.font_size)) is not None
             else None
         )
@@ -2159,6 +2256,14 @@ class InputInstance(ComponentInstance["Input"]):
             if (height := unref(self.component.height)) is not None
             else None
         )
+        min_scale = computed(
+            lambda: min(unref(use_acc_scale_x(self)), unref(use_acc_scale_y(self)))
+        )
+        font_size_px = computed(
+            lambda: font_size * 0.75 * unref(min_scale)
+            if (font_size := unref(self.component.font_size)) is not None
+            else None
+        )
 
         self._batch = Batch()
 
@@ -2169,7 +2274,7 @@ class InputInstance(ComponentInstance["Input"]):
             {
                 "color": unref(self.component.text_color),
                 "font_name": unref(self.component.font_name),
-                "font_size": unref(self.component.font_size),
+                "font_size": unref(font_size_px),
                 "bold": unref(self.component.bold),
                 "italic": unref(self.component.italic),
             },
@@ -2258,7 +2363,7 @@ class InputInstance(ComponentInstance["Input"]):
                         self.component.selection_color, self._update_selection_color
                     ),
                     Watcher.ifref(self.component.font_name, self._update_font_name),
-                    Watcher.ifref(self.component.font_size, self._update_font_size),
+                    Watcher.ifref(font_size_px, self._update_font_size),
                     Watcher.ifref(self.component.bold, self._update_bold),
                     Watcher.ifref(self.component.italic, self._update_italic),
                     Watcher.ifref(draw_width, self._update_width),
