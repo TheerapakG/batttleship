@@ -12,7 +12,7 @@ from ..client import BattleshipClient
 def main_menu(
     window: Window, client: BattleshipClient, name: str | None = None, **kwargs
 ):
-    duration = Ref(0)
+    duration = Ref[float](0)
     duration_clamped_ratio = computed(lambda: min(unref(duration), 3) / 3)
     duration_ratio = computed(lambda: (max(unref(duration) - 3, 0) % 1) / 1)
 
