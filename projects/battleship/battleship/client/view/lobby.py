@@ -90,13 +90,13 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
                     <Row t-if="store.user.is_player(models.PlayerId.from_player_info(player_info))" t-style="g[4]">
                         <RoundedRectLabelButton 
                             text="'NAVY'"
-                            disabled="class_ready"
+                            disabled="unref(chosen)"
                             t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[12] | h[12]"
                             handle-ClickEvent="class_select"
                         />
                         <RoundedRectLabelButton 
                             text="'Scout'"
-                            disabled="class_ready"
+                            disabled="unref(chosen)"
                             t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[12] | h[12]"
                             handle-ClickEvent="class_select"
                         />

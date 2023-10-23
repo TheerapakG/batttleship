@@ -144,7 +144,7 @@ class MissTile:
     pass
 
 @dataclass
-class ChoosenTile:
+class ChosenTile:
     pass
 
 # API args below
