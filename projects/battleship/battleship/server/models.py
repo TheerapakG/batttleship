@@ -16,8 +16,10 @@ if TYPE_CHECKING:
 class Room:
     id: UUID  # pylint: disable=C0103
     server: "BattleshipServer"
+    start_private: bool
+    last_round_placement: list[models.PlayerInfo]
     lock: asyncio.Lock = field(init=False, default_factory=asyncio.Lock)
-    players: set[models.PlayerInfo] = field(init=False, default_factory=set)
+    players: list[models.PlayerInfo] = field(init=False, default_factory=list)
     readies: set[models.PlayerId] = field(init=False, default_factory=set)
     boards: dict[models.PlayerId, models.Board] = field(
         init=False, default_factory=dict
@@ -44,7 +46,7 @@ class Room:
                             player_info,
                         )
                     )
-            self.players.add(player_info)
+            self.players.append(player_info)
 
     async def remove_player(self, player_id: models.PlayerId):
         async with self.lock:
@@ -106,7 +108,7 @@ class Room:
                             )
                         )
 
-    async def add_submit(self, board: models.Board):
+    async def add_board_submit(self, board: models.Board):
         async with self.lock:
             self.boards[board.player] = board
             # TODO: board check??
@@ -131,16 +133,22 @@ class Room:
                             )
                         )
 
+    async def display_board(self, player: models.PlayerId, board: models.BoardId):
+        pass
+
+    async def do_shot_submit(self, player: models.PlayerId, shot: models.Shot):
+        pass
+
     def to_room_id(self):
         return models.RoomId(self.id)
 
     def to_room_info(self):
         return models.RoomInfo(
             self.id,
-            [*self.players],
+            self.players,
             [*self.readies],
             {
-                player_id: models.BoardId.from_board(board_id)
+                player_id: models.BoardId.from_board(board)
                 for player_id, board in self.boards.items()
             },
         )

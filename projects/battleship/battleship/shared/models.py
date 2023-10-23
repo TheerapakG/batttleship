@@ -124,28 +124,29 @@ class RoomInfo(RoomId):
     readies: list[PlayerId] = field(compare=False, default_factory=list)
     boards: dict[PlayerId, BoardId] = field(compare=False, default_factory=dict)
 
+
 @dataclass
 class ShotTypeVariantId:
     id: UUID  # pylint: disable=C0103
 
 
 @dataclass(eq=True, frozen=True)
-class ShotType:
+class Shot:
     shot_variant: ShotTypeVariantId
-    tile_position: list[tuple[int, int]]
+    tile_position: tuple[int, int]
     orientation: int
+    board: BoardId
 
-@dataclass
-class HitTile:
-    pass
 
-@dataclass
-class MissTile:
-    pass
+@dataclass(eq=True, frozen=True)
+class ShotResult:
+    reveal: dict[
+        tuple[int, int], EmptyTile | ShipTile | ObstacleTile | MineTile
+    ] = field(compare=False)
+    reveal_ship: list[Ship] = field(compare=False)
+    hit: list[tuple[int, int]] = field(compare=False)
+    miss: list[tuple[int, int]] = field(compare=False)
 
-@dataclass
-class ChosenTile:
-    pass
 
 # API args below
 
@@ -173,3 +174,15 @@ class PrivateRoomCreateResults:
 @dataclass
 class PrivateRoomJoinArgs(BearingPlayerAuth):
     join_code: str
+
+
+@dataclass
+class DisplayBoardArgs:
+    room: RoomId
+    board: BoardId
+
+
+@dataclass
+class ShotSubmitArgs:
+    room: RoomId
+    shot: Shot

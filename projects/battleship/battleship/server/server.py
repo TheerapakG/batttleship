@@ -163,6 +163,18 @@ class BattleshipServer(Server):
     async def on_room_submit(self, _session: Session, args: Empty):
         raise NotImplementedError()
 
+    @emit
+    async def on_board_display(self, _session: Session, args: models.BoardId):
+        raise NotImplementedError()
+
+    @emit
+    async def on_turn_start(self, _session: Session, args: Empty):
+        raise NotImplementedError()
+
+    @emit
+    async def on_turn_end(self, _session: Session, args: Empty):
+        raise NotImplementedError()
+
     @Route.simple
     @ensure_session_player
     async def room_match(
@@ -243,8 +255,28 @@ class BattleshipServer(Server):
             and ((player_id := self.known_player_session_rev[session]) == args.player)
             and player_id in room
         ):
-            await room.add_submit(args)
+            await room.add_board_submit(args)
             return Empty()
+        raise ResponseError("not_found", b"")
+
+    @Route.simple
+    async def display_board(
+        self, session: Session, args: models.DisplayBoardArgs
+    ) -> models.ShotResult:
+        if (room := self.rooms.get(args.room, None)) and (
+            (player_id := self.known_player_session_rev[session]) in room
+        ):
+            return await room.display_board(player_id, args.board)
+        raise ResponseError("not_found", b"")
+
+    @Route.simple
+    async def shot_submit(
+        self, session: Session, args: models.ShotSubmitArgs
+    ) -> models.ShotResult:
+        if (room := self.rooms.get(args.room, None)) and (
+            (player_id := self.known_player_session_rev[session]) in room
+        ):
+            return await room.do_shot_submit(player_id, args.shot)
         raise ResponseError("not_found", b"")
 
 
