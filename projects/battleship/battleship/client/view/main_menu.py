@@ -12,6 +12,8 @@ from ..client import BattleshipClient
 from ..component import create_player_modal
 from ...shared import models
 
+Component.default_debug = True
+
 
 @Component.register("MainMenu")
 def main_menu(

@@ -11,7 +11,7 @@ from tgraphics.component import Window, loop
 
 
 from .client import BattleshipClient
-from .view.test_anim import main_menu
+from .view.main_menu import main_menu
 from ..shared.logging import setup_logging
 
 

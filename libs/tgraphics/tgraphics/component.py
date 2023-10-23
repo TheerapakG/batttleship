@@ -262,6 +262,141 @@ class AfterMountedComponentInstanceData:
 C = TypeVar("C", bound="Component")
 
 
+class _BlendShaderGroup(ShaderGroup):
+    def set_state(self):
+        super().set_state()
+        gl.glEnable(gl.GL_BLEND)
+        gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
+        gl.glProvokingVertex(gl.GL_FIRST_VERTEX_CONVENTION)
+
+    def unset_state(self):
+        gl.glDisable(gl.GL_BLEND)
+        super().unset_state()
+
+
+@dataclass
+class _BorderedRect:
+    vert: ClassVar[Shader] = Shader(
+        """
+        #version 330 core
+        in vec2 translation;
+        in vec2 offset;
+        in vec4 color;
+
+        flat out vec4 vertex_color;
+
+        uniform WindowBlock
+        {
+            mat4 projection;
+            mat4 view;
+        } window;
+
+        void main()
+        {
+            gl_Position = window.projection * window.view * vec4(translation + offset, 0.0, 1.0);
+            vertex_color = color;
+        }
+        """,
+        "vertex",
+    )
+    frag: ClassVar[Shader] = Shader(
+        """
+        #version 330 core
+        flat in vec4 vertex_color;
+
+        out vec4 fragColor;
+
+        void main() 
+        {
+            fragColor = vertex_color;
+        }
+        """,
+        "fragment",
+    )
+    program: ClassVar[ShaderProgram] = ShaderProgram(vert, frag)
+    x: float
+    y: float
+    width: float
+    height: float
+    border: float
+    color: tuple[int, int, int, int]
+    border_color: tuple[int, int, int, int]
+    _batch: Batch = field(init=False)
+    _group: _BlendShaderGroup = field(init=False)
+    _vertex_list: VertexList = field(init=False)
+
+    def __post_init__(self):
+        self._batch = Batch()
+        self._group = _BlendShaderGroup(self.program)
+        self._vertex_list = self.program.vertex_list_indexed(
+            12,
+            gl.GL_TRIANGLES,
+            [
+                *[*[0, 1, 2, 0, 2, 3], *[4, 5, 6, 4, 6, 7]],
+                *[2, 9, 10, 2, 10, 5],
+                *[3, 8, 11, 3, 11, 4],
+                *[8, 9, 10, 8, 10, 11],
+            ],
+            self._batch,
+            self._group,
+            translation=("f", (self.x, self.y) * 12),
+            offset=(
+                "f",
+                (
+                    *(0, 0, self.width, 0, self.width, self.border, 0, self.border),
+                    *(
+                        0,
+                        self.height - self.border,
+                        self.width,
+                        self.height - self.border,
+                        self.width,
+                        self.height,
+                        0,
+                        self.height,
+                    ),
+                    *(
+                        self.border,
+                        self.border,
+                        self.width - self.border,
+                        self.border,
+                        self.width - self.border,
+                        self.height - self.border,
+                        self.border,
+                        self.height - self.border,
+                    ),
+                ),
+            ),
+            color=("Bn", (self.border_color) * 8 + (self.color) * 4),
+        )
+
+    def draw(self):
+        self._batch.draw()
+
+    def set_x(self, x):
+        self.x = x
+        self._vertex_list.translation[::2] = (x,) * 6
+
+    def set_y(self, y):
+        self.y = y
+        self._vertex_list.translation[1::2] = (y,) * 6
+
+    def set_width(self, width):
+        # TODO:
+        pass
+
+    def set_height(self, height):
+        # TODO:
+        pass
+
+    def set_color(self, color):
+        # TODO:
+        pass
+
+    def set_border_color(self, border_color):
+        # TODO:
+        pass
+
+
 class ComponentInstanceMeta(type):
     _cls_event_capturers: dict[type[Event], Callable[["ComponentInstance", Event], Any]]
     _cls_event_handlers: dict[type[Event], Callable[["ComponentInstance", Event], Any]]
@@ -430,9 +565,27 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
 
     def draw(self, dt: float):
         if unref(is_mounted(self)):
+            if unref(self.component.debug):
+                _BorderedRect(
+                    unref(use_acc_offset_x(self)),
+                    unref(use_acc_offset_y(self)),
+                    unref(use_width(self)) * unref(use_acc_scale_x(self)),
+                    unref(use_height(self)) * unref(use_acc_scale_y(self)),
+                    1,
+                    (0, 0, 0, 0),
+                    (255, 0, 0, 255),
+                ).draw()
             self._draw(dt)
             for children in unref(use_children(self)):
                 unref(children).draw(dt)
+            if unref(self.component.debug):
+                _Label(
+                    f"{round(unref(use_width(self)) * unref(use_acc_scale_x(self)), 2)}, {round(unref(use_height(self)) * unref(use_acc_scale_y(self)), 2)}",
+                    font_size=8,
+                    x=unref(use_acc_offset_x(self)),
+                    y=unref(use_acc_offset_y(self)),
+                    color=(255, 0, 0, 255),
+                ).draw()
 
     async def capture(self, event: Event):
         for event_type in type(event).mro():
@@ -1017,6 +1170,8 @@ class ComponentMeta(type):
 
 @dataclass(kw_only=True)
 class Component(metaclass=ComponentMeta):
+    default_debug: ClassVar[bool] = False
+    debug: bool | ReadRef[bool] = field(default_factory=lambda: Component.default_debug)
     disabled: bool | ReadRef[bool] = field(default=False)
     event_capturers: dict[type[Event], Callable[[Event], Awaitable[Any]]] = field(
         default_factory=dict, repr=False
@@ -1694,17 +1849,6 @@ class Rect(Component):
 
     def get_instance(self):
         return RectInstance(component=self)
-
-
-class _BlendShaderGroup(ShaderGroup):
-    def set_state(self):
-        super().set_state()
-        gl.glEnable(gl.GL_BLEND)
-        gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
-
-    def unset_state(self):
-        gl.glDisable(gl.GL_BLEND)
-        super().unset_state()
 
 
 @dataclass
