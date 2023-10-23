@@ -17,7 +17,9 @@ class Room:
     id: UUID  # pylint: disable=C0103
     server: "BattleshipServer"
     start_private: bool
-    last_round_placement: list[models.PlayerInfo]
+    last_round_placement: list[models.PlayerInfo] = field(
+        init=False, default_factory=list
+    )
     lock: asyncio.Lock = field(init=False, default_factory=asyncio.Lock)
     players: list[models.PlayerInfo] = field(init=False, default_factory=list)
     readies: set[models.PlayerId] = field(init=False, default_factory=set)

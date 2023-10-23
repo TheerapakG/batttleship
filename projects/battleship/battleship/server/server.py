@@ -186,7 +186,7 @@ class BattleshipServer(Server):
             room_id = self.match_rooms.pop()
             room = self.rooms[room_id]
         except KeyError:
-            room = server_models.Room(uuid4(), self)
+            room = server_models.Room(uuid4(), self, start_private=False)
             room_id = room.to_room_id()
             self.rooms[room_id] = room
         await room.add_player(player_id)
@@ -218,7 +218,7 @@ class BattleshipServer(Server):
     ) -> models.PrivateRoomCreateResults:
         player = await self._player_get(args)
         player_id = models.PlayerId.from_player(player)
-        room = server_models.Room(uuid4(), self)
+        room = server_models.Room(uuid4(), self, start_private=True)
         room_id = room.to_room_id()
         self.rooms[room_id] = room
         join_code = "".join(random.choice(string.ascii_lowercase) for _ in range(6))
