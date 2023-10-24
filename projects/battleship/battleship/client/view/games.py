@@ -45,30 +45,24 @@ def games(window: Window, client: BattleshipClient, **kwargs):
         shot_type.THREEROW_SHOT_VARIANT.id: Ref(
             models.ShotType(shot_type.THREEROW_SHOT_VARIANT, [], 0)
         ),
-        shot_type.MINE.id: Ref(
-            models.ShotType(shot_type.MINE, [], 0)
-        ),
-        shot_type.SCAN.id: Ref(
-            models.ShotType(shot_type.SCAN, [], 0)
-        ),
+        shot_type.MINE.id: Ref(models.ShotType(shot_type.MINE, [], 0)),
+        shot_type.SCAN.id: Ref(models.ShotType(shot_type.SCAN, [], 0)),
     }
     skills = {
-        shot_type.MINE.id: Ref(
-            models.ShotType(shot_type.MINE, [], 0)
-        ),
-        shot_type.SCAN.id: Ref(
-            models.ShotType(shot_type.SCAN, [], 0)
-        ),
+        shot_type.MINE.id: Ref(models.ShotType(shot_type.MINE, [], 0)),
+        shot_type.SCAN.id: Ref(models.ShotType(shot_type.SCAN, [], 0)),
     }
     # Assume we pull normal shot type
     receive_shot_id = Ref[UUID | None](shot_type.THREEROW_SHOT_VARIANT.id)
-    # Introduce receive_shot_id to restore id from skill 
+    # Introduce receive_shot_id to restore id from skill
     current_shot_id = Ref[UUID | None](unref(receive_shot_id))
     hover_index = Ref[tuple[int, int]]((0, 0))
     submit = Ref(False)
     skill_chosen = Ref(False)
     chosen = Ref(False)
-    not_submitable = computed(lambda: unref(submit) or not unref(shots[unref(current_shot_id)]).tile_position)
+    not_submitable = computed(
+        lambda: unref(submit) or not unref(shots[unref(current_shot_id)]).tile_position
+    )
     # player_submits = Ref(set())
 
     current_placement = computed(
@@ -188,7 +182,8 @@ def games(window: Window, client: BattleshipClient, **kwargs):
         if not unref(submit):
             if (placement := unref(current_placement)) is not None and (
                 (shot_id := unref(current_shot_id)) is not None
-                and unref(current_placement_legal) and not unref(chosen)
+                and unref(current_placement_legal)
+                and not unref(chosen)
             ):
                 for col, row in placement.keys():
                     board[col][row].value = models.ChosenTile()
@@ -208,7 +203,8 @@ def games(window: Window, client: BattleshipClient, **kwargs):
                 )
                 current_shot_ref.trigger()
                 chosen.value = False
-    async def skill_select(skill_id: UUID , event: ClickEvent):
+
+    async def skill_select(skill_id: UUID, event: ClickEvent):
         if not unref(submit):
             if not unref(skill_chosen):
                 skill_chosen.value = True
@@ -216,8 +212,7 @@ def games(window: Window, client: BattleshipClient, **kwargs):
             elif unref(skill_chosen):
                 skill_chosen.value = False
                 current_shot_id.value = unref(receive_shot_id)
-            
-                
+
     async def on_tile_mounted(col: int, row: int, event: ComponentMountedEvent):
         event.instance.bound_watchers.update(
             [
@@ -234,15 +229,19 @@ def games(window: Window, client: BattleshipClient, **kwargs):
 
     async def on_submit_button(_e):
         submit.value = True
+
         async def submit_data():
             pass
+
         async def update(data_received):
             pass
+
         data_received = await submit_data()
         update(data_received)
         if unref(skill_chosen):
             skill_chosen.value = False
             current_shot_id.value = unref(receive_shot_id)
+
     return Component.render_xml(
         """
         <Row gap="16" width="window.width" height="window.height" handle-ComponentMountedEvent="on_mounted">
