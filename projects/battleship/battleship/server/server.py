@@ -164,15 +164,27 @@ class BattleshipServer(Server):
         raise NotImplementedError()
 
     @emit
-    async def on_board_display(self, _session: Session, args: models.BoardId):
+    async def on_game_board_display(self, _session: Session, args: models.BoardId):
         raise NotImplementedError()
 
     @emit
-    async def on_turn_start(self, _session: Session, args: Empty):
+    async def on_game_board_shot(self, _session: Session, args: models.ShotResult):
         raise NotImplementedError()
 
     @emit
-    async def on_turn_end(self, _session: Session, args: Empty):
+    async def on_game_turn_start(self, _session: Session, args: models.PlayerInfo):
+        raise NotImplementedError()
+
+    @emit
+    async def on_game_turn_end(self, _session: Session, args: models.PlayerInfo):
+        raise NotImplementedError()
+
+    @emit
+    async def on_game_player_lost(self, _session: Session, args: models.PlayerInfo):
+        raise NotImplementedError()
+
+    @emit
+    async def on_game_end(self, _session: Session, args: list[models.PlayerInfo]):
         raise NotImplementedError()
 
     @Route.simple

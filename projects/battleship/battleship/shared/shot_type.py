@@ -3,7 +3,7 @@ from uuid import UUID
 
 from . import models
 
-ORINTATIONS = [
+ORIENTATIONS = [
     ((1, 0), (0, 1)),
     ((0, -1), (1, 0)),
     ((-1, 0), (0, -1)),
@@ -15,9 +15,8 @@ ORINTATIONS = [
 class ShotTypeVariant(models.ShotTypeVariantId):
     text: str
     placement_offsets: dict[tuple[int, int], list[str]]
-    random: bool
     number_of_shot: int
-    skill: bool
+    reveal: bool
 
 
 NORMAL_SHOT_VARIANT = ShotTypeVariant(
@@ -26,9 +25,8 @@ NORMAL_SHOT_VARIANT = ShotTypeVariant(
     {
         (0, 0): ["", "", "", ""],
     },
-    False,
     1,
-    False
+    False,
 )
 
 TWOBYTWO_SHOT_VARIANT = ShotTypeVariant(
@@ -40,9 +38,8 @@ TWOBYTWO_SHOT_VARIANT = ShotTypeVariant(
         (0, 1): ["", "", "", ""],
         (1, 1): ["", "", "", ""],
     },
-    True,
     2,
-    False
+    False,
 )
 
 THREEROW_SHOT_VARIANT = ShotTypeVariant(
@@ -53,9 +50,8 @@ THREEROW_SHOT_VARIANT = ShotTypeVariant(
         (1, 0): ["", "", "", ""],
         (2, 0): ["", "", "", ""],
     },
-    True,
     2,
-    False
+    False,
 )
 
 MINE = ShotTypeVariant(
@@ -64,9 +60,8 @@ MINE = ShotTypeVariant(
     {
         (0, 0): ["", "", "", ""],
     },
-    False,
     1,
-    True
+    False,
 )
 
 SCAN = ShotTypeVariant(
@@ -78,9 +73,8 @@ SCAN = ShotTypeVariant(
         (0, 1): ["", "", "", ""],
         (1, 1): ["", "", "", ""],
     },
-    False,
     4,
-    True
+    True,
 )
 
 SHOT_VARIANTS = {

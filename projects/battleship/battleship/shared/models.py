@@ -1,4 +1,4 @@
-from attrs import define
+from attrs import define, field as a_field
 from dataclasses import dataclass, field
 from uuid import UUID
 
@@ -39,7 +39,12 @@ class Player(PlayerInfo):
 
 
 @define
-class EmptyTile:
+class Tile:
+    hit: bool = a_field(False)
+
+
+@define
+class EmptyTile(Tile):
     pass
 
 
@@ -65,7 +70,7 @@ class Ship(ShipId):
 
 
 @define
-class ShipTile:
+class ShipTile(Tile):
     ship: ShipId
 
 
@@ -75,7 +80,7 @@ class ObstacleVariantId:
 
 
 @define
-class ObstacleTile:
+class ObstacleTile(Tile):
     obstacle_variant: ObstacleVariantId
 
 
@@ -85,7 +90,7 @@ class MineVariantId:
 
 
 @define
-class MineTile:
+class MineTile(Tile):
     mine_variant: MineVariantId
 
 
@@ -144,8 +149,9 @@ class ShotResult:
         tuple[int, int], EmptyTile | ShipTile | ObstacleTile | MineTile
     ] = field(compare=False)
     reveal_ship: list[Ship] = field(compare=False)
-    hit: list[tuple[int, int]] = field(compare=False)
-    miss: list[tuple[int, int]] = field(compare=False)
+    hit: dict[tuple[int, int], EmptyTile | ShipTile | ObstacleTile | MineTile] = field(
+        compare=False
+    )
 
 
 # API args below

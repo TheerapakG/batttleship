@@ -71,7 +71,7 @@ def games(window: Window, client: BattleshipClient, **kwargs):
                 add(
                     unref(hover_index),
                     mat_mul_vec(
-                        shot_type.ORINTATIONS[unref(shots[shot_id]).orientation],
+                        shot_type.ORIENTATIONS[unref(shots[shot_id]).orientation],
                         offset,
                     ),
                 ): sprite

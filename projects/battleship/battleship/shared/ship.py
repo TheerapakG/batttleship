@@ -3,7 +3,7 @@ from uuid import UUID
 
 from . import models
 
-ORINTATIONS = [
+ORIENTATIONS = [
     ((1, 0), (0, 1)),
     ((0, -1), (1, 0)),
     ((-1, 0), (0, -1)),

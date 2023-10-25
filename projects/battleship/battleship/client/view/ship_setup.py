@@ -58,7 +58,7 @@ def ship_setup(
                 add(
                     unref(hover_index),
                     mat_mul_vec(
-                        ship.ORINTATIONS[unref(ships[ship_id]).orientation],
+                        ship.ORIENTATIONS[unref(ships[ship_id]).orientation],
                         offset,
                     ),
                 ): sprite
@@ -172,7 +172,7 @@ def ship_setup(
                 and unref(current_placement_legal)
             ):
                 for col, row in placement.keys():
-                    board[col][row].value = models.ShipTile(ship_id)
+                    board[col][row].value = models.ShipTile(False, ship_id)
                 current_ship_ref = ships[ship_id]
                 current_ship_ref.value = replace(
                     unref(current_ship_ref),
@@ -183,7 +183,7 @@ def ship_setup(
             elif isinstance((ship_tile := unref(board[col][row])), models.ShipTile):
                 current_ship_ref = ships[ship_tile.ship]
                 for col, row in unref(current_ship_ref).tile_position:
-                    board[col][row].value = models.EmptyTile()
+                    board[col][row].value = models.EmptyTile(False)
                 current_ship_ref.value = replace(
                     unref(current_ship_ref), tile_position=[]
                 )
@@ -208,7 +208,7 @@ def ship_setup(
         if not unref(submit):
             current_ship_ref = ships[ship_id]
             for col, row in unref(current_ship_ref).tile_position:
-                board[col][row].value = models.EmptyTile()
+                board[col][row].value = models.EmptyTile(False)
             current_ship_ref.value = replace(unref(current_ship_ref), tile_position=[])
             current_ship_ref.trigger()
             current_ship_id.value = ship_id
