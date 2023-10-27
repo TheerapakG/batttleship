@@ -1,6 +1,7 @@
+from attrs import evolve
 import asyncio
 import contextlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import random
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -60,9 +61,10 @@ class Room:
             self.players[player_id] = player_info
 
     async def do_cancel_next_player_task(self):
-        self.next_player_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await self.next_player_task
+        if (n_task := self.next_player_task) is not None:
+            n_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await n_task
         self.next_player_task = None
 
     async def do_room_reset(self, hard=False):
@@ -171,11 +173,13 @@ class Room:
 
     async def to_next_player_timeout(self):
         await asyncio.sleep(10)
-        await self.to_next_player(is_timeout=True)
+        await self.to_next_player(is_task=True)
 
-    async def to_next_player(self, is_timeout=False):
+    async def to_next_player(self, end_turn=True, is_task=False):
         async with self.lock:
-            if is_timeout:
+            if not is_task and self.next_player_task is not None:
+                self.next_player_task.cancel()
+            if end_turn:
                 async with asyncio.TaskGroup() as tg:
                     for player_info in self.players.values():
                         tg.create_task(
@@ -186,15 +190,15 @@ class Room:
                                 self.alive_players[0],
                             )
                         )
-            elif self.next_player_task is not None:
-                await self.next_player_task.cancel()
+
+                await asyncio.sleep(3)
 
             player = self.alive_players.pop()
             self.alive_players.insert(0, player)
             async with asyncio.TaskGroup() as tg:
                 for player_info in self.players.values():
                     tg.create_task(
-                        self.server.on_game_turn_end(
+                        self.server.on_game_turn_start(
                             self.server.known_player_session[
                                 models.PlayerId.from_player_info(player_info)
                             ],
@@ -204,8 +208,9 @@ class Room:
             self.next_player_task = asyncio.create_task(self.to_next_player_timeout())
 
     async def add_board_submit(self, board: models.Board):
+        board_id = models.BoardId.from_board(board)
         async with self.lock:
-            self.boards[models.BoardId.from_board(board)] = board
+            self.boards[board_id] = board
             # TODO: board check??
             async with asyncio.TaskGroup() as tg:
                 for player_info in self.players.values():
@@ -214,7 +219,7 @@ class Room:
                             self.server.known_player_session[
                                 models.PlayerId.from_player_info(player_info)
                             ],
-                            board.player,
+                            models.RoomPlayerSubmitData(board.player, board_id),
                         )
                     )
                 if len(self.boards) == len(self.players):
@@ -227,23 +232,26 @@ class Room:
                                 Empty(),
                             )
                         )
-                    await self.to_next_player()
+                    self.next_player_task = asyncio.create_task(
+                        self.to_next_player(end_turn=False, is_task=True)
+                    )
 
     async def display_board(self, player: models.PlayerId, board: models.BoardId):
-        if player == models.PlayerId.from_player_info(self.alive_players[0]):
-            async with asyncio.TaskGroup() as tg:
-                for player_info in self.players.values():
-                    tg.create_task(
-                        self.server.on_game_board_display(
-                            self.server.known_player_session[
-                                models.PlayerId.from_player_info(player_info)
-                            ],
-                            board,
+        async with self.lock:
+            if player == models.PlayerId.from_player_info(self.alive_players[0]):
+                async with asyncio.TaskGroup() as tg:
+                    for player_info in self.players.values():
+                        tg.create_task(
+                            self.server.on_game_board_display(
+                                self.server.known_player_session[
+                                    models.PlayerId.from_player_info(player_info)
+                                ],
+                                board,
+                            )
                         )
-                    )
-        else:
-            # TODO:
-            raise Exception()
+            else:
+                # TODO:
+                raise Exception()
 
     async def do_shot_submit(self, player: models.PlayerId, shot: models.Shot):
         if player == models.PlayerId.from_player_info(self.alive_players[0]):
@@ -260,14 +268,15 @@ class Room:
             ]
             pick_locations = random.sample(shot_locations, shot_variant.number_of_shot)
             board = self.boards[shot.board]
-            location_result = {
-                (col, row): board.grid[col][row] for col, row in pick_locations
-            }
+            location_result = [
+                models.Reveal((col, row), board.grid[col][row])
+                for col, row in pick_locations
+            ]
             if shot_variant.reveal:
                 reveal_ship_tile = [
-                    t
-                    for t in location_result.values()
-                    if isinstance(t, models.ShipTile)
+                    r.tile
+                    for r in location_result
+                    if isinstance(r.tile, models.ShipTile)
                 ]
                 reveal_ship_id = set(st.ship for st in reveal_ship_tile)
                 reveal_ship = [
@@ -275,20 +284,34 @@ class Room:
                     for s in board.ship
                     if models.ShipId.from_ship(s) in reveal_ship_id
                 ]
-                res = models.ShotResult(location_result, reveal_ship, [])
-            else:
-                for tile in location_result.values():
-                    tile.hit = True
-                res = models.ShotResult({}, [], location_result)
-                other_res = models.ShotResult(
-                    {},
-                    [],
-                    {
-                        loc: tile
-                        for loc, tile in location_result.items()
-                        if isinstance(tile, models.ShipTile)
-                    },
+                res = models.ShotResult(
+                    models.BoardId.from_board(board), location_result, reveal_ship
                 )
+            else:
+                for r in location_result:
+                    r.tile.hit = True
+                res = models.ShotResult(
+                    models.BoardId.from_board(board),
+                    [
+                        (
+                            replace(r, tile=evolve(r.tile, ship=None))
+                            if isinstance(r.tile, models.ShipTile)
+                            else r
+                        )
+                        for r in location_result
+                    ],
+                    [],
+                )
+                other_res = models.ShotResult(
+                    models.BoardId.from_board(board),
+                    [
+                        replace(r, tile=evolve(r.tile, ship=None))
+                        for r in location_result
+                        if isinstance(r.tile, models.ShipTile)
+                    ],
+                    [],
+                )
+
                 async with asyncio.TaskGroup() as tg:
                     for player_info in self.players.values():
                         tg.create_task(
@@ -305,6 +328,7 @@ class Room:
                     for t in c
                 ):
                     await self.do_player_lost(board.player)
+            asyncio.create_task(self.to_next_player())
             return res
 
         else:

@@ -50,11 +50,35 @@ class BattleshipClient(Client):
         raise NotImplementedError()
 
     @subscribe
-    def on_room_player_submit(self) -> AsyncIterator[models.PlayerId]:
+    def on_room_player_submit(self) -> AsyncIterator[models.RoomPlayerSubmitData]:
         raise NotImplementedError()
 
     @subscribe
     def on_room_submit(self) -> AsyncIterator[Empty]:
+        raise NotImplementedError()
+
+    @subscribe
+    def on_game_board_display(self) -> AsyncIterator[models.BoardId]:
+        raise NotImplementedError()
+
+    @subscribe
+    def on_game_board_shot(self) -> AsyncIterator[models.ShotResult]:
+        raise NotImplementedError()
+
+    @subscribe
+    def on_game_turn_start(self) -> AsyncIterator[models.PlayerInfo]:
+        raise NotImplementedError()
+
+    @subscribe
+    def on_game_turn_end(self) -> AsyncIterator[models.PlayerInfo]:
+        raise NotImplementedError()
+
+    @subscribe
+    def on_game_player_lost(self) -> AsyncIterator[models.PlayerInfo]:
+        raise NotImplementedError()
+
+    @subscribe
+    def on_game_end(self) -> AsyncIterator[list[models.PlayerInfo]]:
         raise NotImplementedError()
 
     @Route.simple
@@ -87,4 +111,12 @@ class BattleshipClient(Client):
 
     @Route.simple
     async def board_submit(self, args: models.Board) -> Empty:
+        raise NotImplementedError()
+
+    @Route.simple
+    async def display_board(self, args: models.DisplayBoardArgs) -> Empty:
+        raise NotImplementedError()
+
+    @Route.simple
+    async def shot_submit(self, args: models.ShotSubmitArgs) -> models.ShotResult:
         raise NotImplementedError()

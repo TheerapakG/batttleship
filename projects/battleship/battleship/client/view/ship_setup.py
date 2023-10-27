@@ -86,29 +86,21 @@ def ship_setup(
     def get_tile_color(
         col: int,
         row: int,
-        tile: Ref[
-            models.EmptyTile | models.ShipTile | models.ObstacleTile | models.MineTile
-        ],
     ):
-        def _get_tile_color(
-            inner_tile: models.EmptyTile
-            | models.ShipTile
-            | models.ObstacleTile
-            | models.MineTile,
-        ):
+        def _get_tile_color():
             if (col, row) in unref(current_placement):
                 if unref(current_placement_legal):
                     return colors["emerald"][300]
                 else:
                     return colors["red"][300]
             else:
-                match inner_tile:
+                match unref(board[col][row]):
                     case models.EmptyTile():
                         return colors["white"]
                     case models.ShipTile():
-                        return colors["cyan"][300]
+                        return colors["emerald"][500]
 
-        return computed(lambda: _get_tile_color(unref(tile)))
+        return computed(_get_tile_color)
 
     def get_ship_color(ship: Ref[models.Ship]):
         def _get_ship_color(
@@ -128,15 +120,16 @@ def ship_setup(
             await window.set_scene(main_menu(window=window, client=client))
 
     async def subscribe_room_player_submit():
-        async for player_id in client.on_room_player_submit():
-            player_submits.value.add(player_id)
+        async for data in client.on_room_player_submit():
+            player_submits.value.add(data.player)
+            room.boards[data.player] = data.board
             player_submits.trigger()
 
     async def subscribe_room_submit():
         async for _ in client.on_room_submit():
-            from .games import games
+            from .game import game
 
-            await window.set_scene(games(window, client))
+            await window.set_scene(game(window, client, room, board))
 
     def on_key_r_change(state: bool):
         if state and ((ship_id := unref(current_ship_id)) is not None):
@@ -172,7 +165,7 @@ def ship_setup(
                 and unref(current_placement_legal)
             ):
                 for col, row in placement.keys():
-                    board[col][row].value = models.ShipTile(False, ship_id)
+                    board[col][row].value = models.ShipTile(ship_id)
                 current_ship_ref = ships[ship_id]
                 current_ship_ref.value = replace(
                     unref(current_ship_ref),
@@ -183,7 +176,7 @@ def ship_setup(
             elif isinstance((ship_tile := unref(board[col][row])), models.ShipTile):
                 current_ship_ref = ships[ship_tile.ship]
                 for col, row in unref(current_ship_ref).tile_position:
-                    board[col][row].value = models.EmptyTile(False)
+                    board[col][row].value = models.EmptyTile()
                 current_ship_ref.value = replace(
                     unref(current_ship_ref), tile_position=[]
                 )
@@ -208,7 +201,7 @@ def ship_setup(
         if not unref(submit):
             current_ship_ref = ships[ship_id]
             for col, row in unref(current_ship_ref).tile_position:
-                board[col][row].value = models.EmptyTile(False)
+                board[col][row].value = models.EmptyTile()
             current_ship_ref.value = replace(unref(current_ship_ref), tile_position=[])
             current_ship_ref.trigger()
             current_ship_id.value = ship_id
@@ -254,8 +247,8 @@ def ship_setup(
                         t-for="row, tile in enumerate(board_col)"
                         text="''" 
                         text_color="colors['white']"
-                        color="get_tile_color(col, row, tile)"
-                        hover_color="get_tile_color(col, row, tile)"
+                        color="get_tile_color(col, row)"
+                        hover_color="get_tile_color(col, row)"
                         disabled_color="colors['white']"
                         width="32"
                         height="32"

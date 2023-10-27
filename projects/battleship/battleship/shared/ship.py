@@ -11,7 +11,7 @@ ORIENTATIONS = [
 ]
 
 
-@dataclass
+@dataclass(eq=True, frozen=True)
 class ShipVariant(models.ShipVariantId):
     placement_offsets: dict[tuple[int, int], list[str]]
 

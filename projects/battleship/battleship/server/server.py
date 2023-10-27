@@ -156,7 +156,9 @@ class BattleshipServer(Server):
         raise NotImplementedError()
 
     @emit
-    async def on_room_player_submit(self, _session: Session, args: models.PlayerId):
+    async def on_room_player_submit(
+        self, _session: Session, args: models.RoomPlayerSubmitData
+    ):
         raise NotImplementedError()
 
     @emit
@@ -274,11 +276,12 @@ class BattleshipServer(Server):
     @Route.simple
     async def display_board(
         self, session: Session, args: models.DisplayBoardArgs
-    ) -> models.ShotResult:
+    ) -> Empty:
         if (room := self.rooms.get(args.room, None)) and (
             (player_id := self.known_player_session_rev[session]) in room
         ):
-            return await room.display_board(player_id, args.board)
+            await room.display_board(player_id, args.board)
+            return Empty()
         raise ResponseError("not_found", b"")
 
     @Route.simple

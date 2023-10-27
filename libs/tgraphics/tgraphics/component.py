@@ -2,7 +2,7 @@ import asyncio
 from collections.abc import Callable, Iterator
 import contextlib
 from dataclasses import dataclass, field, replace, InitVar
-from functools import partial
+from functools import partial, wraps
 import inspect
 import re
 import time
@@ -54,6 +54,7 @@ from .utils import maybe_await
 loader = Loader(["./resources"])
 loader.reindex()
 
+T = TypeVar("T")
 P = ParamSpec("P")
 
 
@@ -95,6 +96,20 @@ def _get_merged_locals(frame: inspect.FrameInfo, **additional_locals):
     new_locals = frame.frame.f_locals.copy()
     new_locals.update(additional_locals)
     return new_locals
+
+
+def _try_raise_render_error(where: str):
+    def wrapper(func: Callable[[], T]):
+        @wraps(func)
+        def wrapped():
+            try:
+                return func()
+            except Exception as exc:
+                raise RenderError(f"{str(exc)} in {where}") from exc
+
+        return wrapped
+
+    return wrapper
 
 
 @dataclass
@@ -143,12 +158,18 @@ class ElementComponentData:
         init_locals = _get_merged_locals(frame, **additional_locals)
 
         init_vars = {
-            k: computed(lambda v=v: eval(v, frame.frame.f_globals | init_locals, {}))
+            k: computed(
+                _try_raise_render_error(k)(
+                    lambda v=v: eval(v, frame.frame.f_globals | init_locals, {})
+                )
+            )
             for k, v in self.props.items()
         } | override_vars
 
         event_capturers = {
-            Event.from_name(k): eval(v, frame.frame.f_globals | init_locals, {})
+            Event.from_name(k): _try_raise_render_error(k)(
+                lambda v=v: eval(v, frame.frame.f_globals | init_locals, {})
+            )()
             for k, v in self.capturers.items()
         }
 
@@ -172,7 +193,9 @@ class ElementComponentData:
             init_vars["event_capturers"] = event_capturers
 
         event_handlers = {
-            Event.from_name(k): eval(v, frame.frame.f_globals | init_locals, {})
+            Event.from_name(k): _try_raise_render_error(k)(
+                lambda v=v: eval(v, frame.frame.f_globals | init_locals, {})
+            )()
             for k, v in self.handlers.items()
         }
 
@@ -974,9 +997,12 @@ class ComponentMeta(type):
                             for_var, for_values = [
                                 s.strip() for s in directive_value.split(" in ")
                             ]
+
                             eval_for_values = computed(
-                                lambda: eval(
-                                    for_values, frame.frame.f_globals, frame_locals
+                                _try_raise_render_error("t-for")(
+                                    lambda: eval(
+                                        for_values, frame.frame.f_globals, frame_locals
+                                    )
                                 )
                             )
 
@@ -1026,8 +1052,12 @@ class ComponentMeta(type):
                             directive_value: str,
                         ):
                             eval_val = computed(
-                                lambda: eval(
-                                    directive_value, frame.frame.f_globals, frame_locals
+                                _try_raise_render_error("t-if")(
+                                    lambda: eval(
+                                        directive_value,
+                                        frame.frame.f_globals,
+                                        frame_locals,
+                                    )
                                 )
                             )
 
@@ -1057,8 +1087,12 @@ class ComponentMeta(type):
                             directive_value: str,
                         ):
                             eval_val = computed(
-                                lambda: eval(
-                                    directive_value, frame.frame.f_globals, frame_locals
+                                _try_raise_render_error("t-style")(
+                                    lambda: eval(
+                                        directive_value,
+                                        frame.frame.f_globals,
+                                        frame_locals,
+                                    )
                                 )
                             )
 
@@ -1093,9 +1127,13 @@ class ComponentMeta(type):
                                 models.append(model)
                                 override_values["models"] = models
 
-                                model_ref = eval(
-                                    directive_value, frame.frame.f_globals, frame_locals
-                                )
+                                model_ref = _try_raise_render_error(f"t-model-{model}")(
+                                    lambda: eval(
+                                        directive_value,
+                                        frame.frame.f_globals,
+                                        frame_locals,
+                                    )
+                                )()
                                 override_values[model] = model_ref
 
                                 _ref_list = override_values.get("_ref_list", [])
@@ -1133,10 +1171,13 @@ class ComponentMeta(type):
                         models = kwargs.get("models", [])
                         models.append(model)
                         kwargs["models"] = models
-
-                        model_ref = eval(
-                            directive_value, frame.frame.f_globals, frame.frame.f_locals
-                        )
+                        model_ref = _try_raise_render_error(f"t-model-{model}")(
+                            lambda: eval(
+                                directive_value,
+                                frame.frame.f_globals,
+                                frame.frame.f_locals,
+                            )
+                        )()
                         kwargs[model] = model_ref
                     case "style":
                         style = unref(
@@ -1533,9 +1574,15 @@ class LayerInstance(ComponentInstance["Layer"]):
         )
 
         self.after_mounted_data.value = AfterMountedComponentInstanceData(
-            computed(lambda: max(unref(use_width(child)) for child in unref(children))),
             computed(
-                lambda: max(unref(use_height(child)) for child in unref(children))
+                lambda: max(
+                    (unref(use_width(child)) for child in unref(children)), default=0
+                )
+            ),
+            computed(
+                lambda: max(
+                    (unref(use_height(child)) for child in unref(children)), default=0
+                )
             ),
             children,
         )
@@ -1590,7 +1637,7 @@ class RowInstance(ComponentInstance["Row"]):
         height = computed(
             lambda: unref(self.component.height)
             if unref(self.component.height) is not None
-            else max(unref(use_height(child)) for child in unref(children))
+            else max((unref(use_height(child)) for child in unref(children)), default=0)
         )
 
         async def mount_child(index: int):
@@ -1696,7 +1743,7 @@ class ColumnInstance(ComponentInstance["Column"]):
         width = computed(
             lambda: unref(self.component.width)
             if unref(self.component.width) is not None
-            else max(unref(use_width(child)) for child in unref(children))
+            else max((unref(use_width(child)) for child in unref(children)), default=0)
         )
 
         height = computed(

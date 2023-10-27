@@ -18,8 +18,8 @@ class PlayerId:
 
 @dataclass(eq=True, frozen=True)
 class PlayerInfo(PlayerId):
-    name: str = field(compare=False)
-    rating: int = field(compare=False)
+    name: str = field(hash=False, compare=False)
+    rating: int = field(hash=False, compare=False)
 
     @classmethod
     def from_player(cls, player: "Player"):
@@ -28,9 +28,9 @@ class PlayerInfo(PlayerId):
 
 @dataclass(eq=True, frozen=True)
 class Player(PlayerInfo):
-    admin: bool = field(compare=False)
-    auth_token: UUID = field(compare=False)
-    transfer_code: UUID | None = field(compare=False)
+    admin: bool = field(hash=False, compare=False)
+    auth_token: UUID = field(hash=False, compare=False)
+    transfer_code: UUID | None = field(hash=False, compare=False)
 
     def expected_win(self, other: "Player"):
         self_q = 10 ** (self.rating / 400)
@@ -40,7 +40,7 @@ class Player(PlayerInfo):
 
 @define
 class Tile:
-    hit: bool = a_field(False)
+    hit: bool = a_field(default=False)
 
 
 @define
@@ -48,7 +48,7 @@ class EmptyTile(Tile):
     pass
 
 
-@dataclass
+@dataclass(eq=True, frozen=True)
 class ShipVariantId:
     id: UUID  # pylint: disable=C0103
 
@@ -64,14 +64,15 @@ class ShipId:
 
 @dataclass(eq=True, frozen=True)
 class Ship(ShipId):
-    ship_variant: ShipVariantId
-    tile_position: list[tuple[int, int]]
-    orientation: int
+    ship_variant: ShipVariantId = field(hash=False)
+    tile_position: list[tuple[int, int]] = field(hash=False)
+    orientation: int = field(hash=False)
 
 
 @define
 class ShipTile(Tile):
-    ship: ShipId
+    ship: ShipId | None
+    hit: bool = a_field(default=False)
 
 
 @dataclass(eq=True, frozen=True)
@@ -82,6 +83,7 @@ class ObstacleVariantId:
 @define
 class ObstacleTile(Tile):
     obstacle_variant: ObstacleVariantId
+    hit: bool = a_field(default=False)
 
 
 @dataclass(eq=True, frozen=True)
@@ -92,6 +94,7 @@ class MineVariantId:
 @define
 class MineTile(Tile):
     mine_variant: MineVariantId
+    hit: bool = a_field(default=False)
 
 
 @dataclass(eq=True, frozen=True)
@@ -106,12 +109,12 @@ class BoardId:
 @dataclass(eq=True, frozen=True)
 class Board(BoardId):
     id: UUID  # pylint: disable=C0103
-    player: PlayerId = field(compare=False)
-    room: "RoomId" = field(compare=False)
+    player: PlayerId = field(hash=False, compare=False)
+    room: "RoomId" = field(hash=False, compare=False)
     grid: list[list[EmptyTile | ShipTile | ObstacleTile | MineTile]] = field(
-        compare=False
+        hash=False, compare=False
     )
-    ship: list[Ship] = field(compare=False)
+    ship: list[Ship] = field(hash=False, compare=False)
 
 
 @dataclass(eq=True, frozen=True)
@@ -125,9 +128,11 @@ class RoomId:
 
 @dataclass(eq=True, frozen=True)
 class RoomInfo(RoomId):
-    players: list[PlayerInfo] = field(compare=False, default_factory=list)
-    readies: list[PlayerId] = field(compare=False, default_factory=list)
-    boards: dict[PlayerId, BoardId] = field(compare=False, default_factory=dict)
+    players: list[PlayerInfo] = field(hash=False, compare=False, default_factory=list)
+    readies: list[PlayerId] = field(hash=False, compare=False, default_factory=list)
+    boards: dict[PlayerId, BoardId] = field(
+        hash=False, compare=False, default_factory=dict
+    )
 
 
 @dataclass
@@ -144,14 +149,16 @@ class Shot:
 
 
 @dataclass(eq=True, frozen=True)
+class Reveal:
+    loc: tuple[int, int]
+    tile: EmptyTile | ShipTile | ObstacleTile | MineTile
+
+
+@dataclass(eq=True, frozen=True)
 class ShotResult:
-    reveal: dict[
-        tuple[int, int], EmptyTile | ShipTile | ObstacleTile | MineTile
-    ] = field(compare=False)
-    reveal_ship: list[Ship] = field(compare=False)
-    hit: dict[tuple[int, int], EmptyTile | ShipTile | ObstacleTile | MineTile] = field(
-        compare=False
-    )
+    board: BoardId
+    reveal: list[Reveal] = field(hash=False, compare=False)
+    reveal_ship: list[Ship] = field(hash=False, compare=False)
 
 
 # API args below
@@ -169,6 +176,12 @@ class BearingPlayerAuth:
 @dataclass
 class PlayerCreateArgs:
     name: str
+
+
+@dataclass
+class RoomPlayerSubmitData:
+    player: PlayerId
+    board: BoardId
 
 
 @dataclass
