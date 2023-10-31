@@ -293,21 +293,3 @@ class BattleshipServer(Server):
         ):
             return await room.do_shot_submit(player_id, args.shot)
         raise ResponseError("not_found", b"")
-
-
-if __name__ == "__main__":
-    load_dotenv()
-    setup_logging()
-    ssl_context = ssl.create_default_context(purpose=ssl.Purpose.CLIENT_AUTH)
-    ssl_context.load_cert_chain(os.environ["SSL_CERT"], os.environ["SSL_KEY"])
-
-    async def amain():
-        engine = await db.create_dev_engine()
-        server = BattleshipServer(async_sessionmaker(engine, expire_on_commit=False))
-        await server.run(
-            "0.0.0.0",
-            60000,
-            ssl=ssl_context,
-        )
-
-    asyncio.run(amain())

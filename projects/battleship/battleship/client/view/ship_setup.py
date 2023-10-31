@@ -14,7 +14,7 @@ from tgraphics.style import c, text_c, hover_c, disabled_c, w, h, g
 from .. import store
 from ..client import BattleshipClient
 from ..component.button import ClickEvent
-from ...shared import models, ship
+from ...shared import models, ship_type
 from ...shared.utils import add, mat_mul_vec
 
 
@@ -37,10 +37,10 @@ def ship_setup(
     ships = {
         models.ShipId.from_ship(s): Ref(s)
         for s in [
-            models.Ship(uuid4(), ship.NORMAL_SHIP_VARIANT, [], 0),
-            models.Ship(uuid4(), ship.NORMAL_SHIP_VARIANT, [], 0),
-            models.Ship(uuid4(), ship.T_SHIP_VARIANT, [], 0),
-            models.Ship(uuid4(), ship.T_SHIP_VARIANT, [], 0),
+            models.Ship(uuid4(), ship_type.NORMAL_SHIP_VARIANT, [], 0),
+            models.Ship(uuid4(), ship_type.NORMAL_SHIP_VARIANT, [], 0),
+            models.Ship(uuid4(), ship_type.T_SHIP_VARIANT, [], 0),
+            models.Ship(uuid4(), ship_type.T_SHIP_VARIANT, [], 0),
         ]
     }
     current_ship_id = Ref[models.ShipId | None](None)
@@ -58,11 +58,11 @@ def ship_setup(
                 add(
                     unref(hover_index),
                     mat_mul_vec(
-                        ship.ORIENTATIONS[unref(ships[ship_id]).orientation],
+                        ship_type.ORIENTATIONS[unref(ships[ship_id]).orientation],
                         offset,
                     ),
                 ): sprite
-                for offset, sprite in ship.SHIP_VARIANTS[
+                for offset, sprite in ship_type.SHIP_VARIANTS[
                     unref(ships[ship_id]).ship_variant.id
                 ].placement_offsets.items()
             }
