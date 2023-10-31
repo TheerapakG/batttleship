@@ -64,6 +64,9 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
                 asyncio.create_task(subscribe_room_ready()),
             ]
         )
+    async def return_button(_e):
+        from .main_menu import main_menu
+        #await window.set_scene(main_menu(window, client))
 
     async def on_ready_button(_e):
         ready.value = True
@@ -75,52 +78,64 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
 
     return Component.render_xml(
         """
-        <Row 
-            t-style="w['full'](window) | h['full'](window) | g[4]"
-            handle-ComponentMountedEvent="on_mounted"
-        >
-            <Column t-for="player_info in player_infos" t-style="g[3]">
-                    <RoundedRectLabelButton
-                        t-if="store.user.is_player(models.PlayerId.from_player_info(player_info))"
-                        text="'Ready'"
-                        disabled="not(unref(ready)^unref(class_ready))"
-                        t-style="c['teal'][400] | hover_c['teal'][500] | disabled_c['slate'][500] | text_c['white'] | w[48] | h[12]"
-                        handle-ClickEvent="on_ready_button"
+        <Layer handle-ComponentMountedEvent="on_mounted">
+            <Pad pad_right="800">
+                <Pad pad_bottom="440">
+                    <RoundedRectLabelButton 
+                        text="'Return'"
+                        font_size="20"
+                        t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[24] | h[10]"
+                        handle-ClickEvent="return_button"
                     />
-                    <Row t-if="store.user.is_player(models.PlayerId.from_player_info(player_info))" t-style="g[4]">
-                        <RoundedRectLabelButton 
-                            text="'NAVY'"
-                            disabled="class_ready"
-                            t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[12] | h[12]"
-                            handle-ClickEvent="class_select"
+                </Pad>
+            </Pad>
+            <Row 
+                t-style="w['full'](window) | h['full'](window) | g[4]"
+                handle-ComponentMountedEvent="on_mounted"
+            >
+                <Column t-for="player_info in player_infos" t-style="g[3]">
+                        <RoundedRectLabelButton
+                            t-if="store.user.is_player(models.PlayerId.from_player_info(player_info))"
+                            text="'Ready'"
+                            disabled="not(unref(ready)^unref(class_ready))"
+                            t-style="c['teal'][400] | hover_c['teal'][500] | disabled_c['slate'][500] | text_c['white'] | w[48] | h[12]"
+                            handle-ClickEvent="on_ready_button"
                         />
-                        <RoundedRectLabelButton 
-                            text="'Scout'"
-                            disabled="class_ready"
-                            t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[12] | h[12]"
-                            handle-ClickEvent="class_select"
-                        />
-                        <RoundedRectLabelButton 
-                            text="'Pirate'"
-                            disabled="class_ready"
-                            t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[12] | h[12]"
-                            handle-ClickEvent="class_select"
-                        />
-                    </Row>
-                <Label
-                    text="get_player_ready_text(models.PlayerId.from_player_info(player_info))" 
-                    text_color="colors['white']" 
-                />
-                <Label
-                    text="f'rating: {str(player_info.rating)}'" 
-                    text_color="colors['white']" 
-                />
-                <Label
-                    text="player_info.name" 
-                    text_color="colors['white']" 
-                />
-            </Column>
-        </Row>
+                        <Row t-if="store.user.is_player(models.PlayerId.from_player_info(player_info))" t-style="g[4]">
+                            <RoundedRectLabelButton 
+                                text="'NAVY'"
+                                disabled="class_ready"
+                                t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[12] | h[12]"
+                                handle-ClickEvent="class_select"
+                            />
+                            <RoundedRectLabelButton 
+                                text="'Scout'"
+                                disabled="class_ready"
+                                t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[12] | h[12]"
+                                handle-ClickEvent="class_select"
+                            />
+                            <RoundedRectLabelButton 
+                                text="'Pirate'"
+                                disabled="class_ready"
+                                t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[12] | h[12]"
+                                handle-ClickEvent="class_select"
+                            />
+                        </Row>
+                    <Label
+                        text="get_player_ready_text(models.PlayerId.from_player_info(player_info))" 
+                        text_color="colors['white']" 
+                    />
+                    <Label
+                        text="f'rating: {str(player_info.rating)}'" 
+                        text_color="colors['white']" 
+                    />
+                    <Label
+                        text="player_info.name" 
+                        text_color="colors['white']" 
+                    />
+                </Column>
+            </Row>
+        </Layer>
         """,
         **kwargs,
     )

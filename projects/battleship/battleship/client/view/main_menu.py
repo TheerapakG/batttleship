@@ -143,7 +143,6 @@ def main_menu(
                 </Column>
                     <Label text="'BATTLESHIP'" bold="True" text_color="colors['white']" font_size="88" />
                 <Column t-style="g[1]">
-                    <Label text="f'Your current rating is {unref(store.user.rating)}'" text_color="colors['white']" />
                     <Label text="f'Welcome, {unref(store.user.name)}'" />
                 </Column>
             </Column>
