@@ -5,18 +5,16 @@ from tgraphics.reactivity import Ref, computed, unref
 from ..utils import platform_app_directory, converter
 from ...shared import models
 
-store = Ref[models.Player | None](None)
+player = Ref[models.Player | None](None)
 
-name = computed(lambda: player.name if (player := unref(store)) is not None else None)
-rating = computed(
-    lambda: player.rating if (player := unref(store)) is not None else None
-)
+name = computed(lambda: user.name if (user := unref(player)) is not None else None)
+rating = computed(lambda: user.rating if (user := unref(player)) is not None else None)
 
 
-def is_player(player: models.PlayerId):
+def is_player(_player: models.PlayerId):
     return computed(
-        lambda: player == models.PlayerId.from_player(user)
-        if (user := unref(store)) is not None
+        lambda: _player == models.PlayerId.from_player(user)
+        if (user := unref(player)) is not None
         else False
     )
 
@@ -24,11 +22,11 @@ def is_player(player: models.PlayerId):
 def load():
     Path("./.data").mkdir(parents=True, exist_ok=True)
     with open("./.data/user.json", encoding="utf-8") as f:
-        store.value = converter.loads(f.read(), models.Player)
+        player.value = converter.loads(f.read(), models.Player)
 
 
-def save(player: models.Player):
+def save(_player: models.Player):
     Path("./.data").mkdir(parents=True, exist_ok=True)
     with open("./.data/user.json", "w+", encoding="utf-8") as f:
-        f.write(converter.dumps(player))
-    store.value = player
+        f.write(converter.dumps(_player))
+    player.value = _player

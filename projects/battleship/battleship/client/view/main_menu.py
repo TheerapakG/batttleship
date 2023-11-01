@@ -38,7 +38,7 @@ def main_menu(
         event.instance.bound_tasks.update([asyncio.create_task(set_online_count())])
 
     async def on_public_room_match_button(_e):
-        if (user := unref(store.user.store)) is not None:
+        if (user := unref(store.user.player)) is not None:
             room = await client.room_match(models.BearingPlayerAuth.from_player(user))
 
             from .lobby import lobby
@@ -46,7 +46,7 @@ def main_menu(
             await window.set_scene(lobby(window, client, room))
 
     async def on_private_room_create_button(_e):
-        if (user := unref(store.user.store)) is not None:
+        if (user := unref(store.user.player)) is not None:
             room = await client.private_room_create(
                 models.BearingPlayerAuth.from_player(user)
             )
@@ -57,7 +57,7 @@ def main_menu(
             )
 
     async def on_private_room_join_button(_e):
-        if (user := unref(store.user.store)) is not None:
+        if (user := unref(store.user.player)) is not None:
             room = await client.private_room_join(
                 models.PrivateRoomJoinArgs(user.auth_token, unref(code))
             )
@@ -146,7 +146,7 @@ def main_menu(
                     <Label text="f'Welcome, {unref(store.user.name)}'" />
                 </Column>
             </Column>
-            <CreatePlayerModal t-if="unref(store.user.store) is None" window="window" client="client" />
+            <CreatePlayerModal t-if="unref(store.user.player) is None" window="window" client="client" />
         </Layer>
         """,
         **kwargs,

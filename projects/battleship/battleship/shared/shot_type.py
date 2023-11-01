@@ -11,15 +11,15 @@ ORIENTATIONS = [
 ]
 
 
-@dataclass
-class ShotTypeVariant(models.ShotTypeVariantId):
+@dataclass(eq=True, frozen=True)
+class ShotVariant(models.ShotVariantId):
     text: str
     placement_offsets: dict[tuple[int, int], list[str]]
     number_of_shot: int
     reveal: bool
 
 
-NORMAL_SHOT_VARIANT = ShotTypeVariant(
+NORMAL_SHOT_VARIANT = ShotVariant(
     UUID("618489a5-4a90-43de-9471-505e9f25d819"),
     "Normal",
     {
@@ -29,7 +29,7 @@ NORMAL_SHOT_VARIANT = ShotTypeVariant(
     False,
 )
 
-TWOBYTWO_SHOT_VARIANT = ShotTypeVariant(
+TWOBYTWO_SHOT_VARIANT = ShotVariant(
     UUID("c40445f1-da33-4b7b-aa92-9d20d8b254c8"),
     "TWOBYTWO",
     {
@@ -42,7 +42,7 @@ TWOBYTWO_SHOT_VARIANT = ShotTypeVariant(
     False,
 )
 
-THREEROW_SHOT_VARIANT = ShotTypeVariant(
+THREEROW_SHOT_VARIANT = ShotVariant(
     UUID("2437ef52-4f01-40ea-8ea5-822b92327414"),
     "THREEROW",
     {
@@ -54,7 +54,7 @@ THREEROW_SHOT_VARIANT = ShotTypeVariant(
     False,
 )
 
-MINE = ShotTypeVariant(
+MINE = ShotVariant(
     UUID("27842c74-234a-4715-81f3-084a6f8aed16"),
     "MINE",
     {
@@ -64,7 +64,7 @@ MINE = ShotTypeVariant(
     False,
 )
 
-SCAN = ShotTypeVariant(
+SCAN = ShotVariant(
     UUID("5b956aa8-c9b6-40d2-8b0f-3cbe47aeb50b"),
     "SCAN",
     {

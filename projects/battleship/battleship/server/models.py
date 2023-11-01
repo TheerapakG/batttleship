@@ -2,6 +2,7 @@ from attrs import evolve
 import asyncio
 import contextlib
 from dataclasses import dataclass, field, replace
+from enum import Enum, auto
 import random
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -15,20 +16,27 @@ if TYPE_CHECKING:
     from .server import BattleshipServer
 
 
+class RoomPhase(Enum):
+    LOBBY = auto()
+    SHIPSETUP = auto()
+    PLAYING = auto()
+
+
 @dataclass
 class Room:
     id: UUID  # pylint: disable=C0103
     server: "BattleshipServer"
     start_private: bool
-    last_round_placement: list[models.PlayerInfo] = field(
-        init=False, default_factory=list
-    )
     lock: asyncio.Lock = field(init=False, default_factory=asyncio.Lock)
+    phase: RoomPhase = field(init=False, default=RoomPhase.LOBBY)
     players: dict[models.PlayerId, models.PlayerInfo] = field(
         init=False, default_factory=dict
     )
     alive_players: list[models.PlayerInfo] = field(init=False, default_factory=list)
     lost_players: list[models.PlayerInfo] = field(init=False, default_factory=list)
+    last_round_placement: list[models.PlayerInfo] = field(
+        init=False, default_factory=list
+    )
     readies: set[models.PlayerId] = field(init=False, default_factory=set)
     boards: dict[models.BoardId, models.Board] = field(init=False, default_factory=dict)
     next_player_task: asyncio.Task | None = field(init=False, default=None)
@@ -68,6 +76,7 @@ class Room:
         self.next_player_task = None
 
     async def do_room_reset(self, hard=False):
+        self.phase = RoomPhase.SHIPSETUP
         if not self.lost_players or hard:
             self.alive_players = [*self.players.values()]
             random.shuffle(self.alive_players)
@@ -111,32 +120,37 @@ class Room:
         async with self.lock:
             session = self.server.known_player_session[player_id]
             player_info = await self.server.player_info_get(session, player_id)
-            if self.boards:
-                await self.do_player_lost(player_id)
-                del self.players[player_id]
-            else:
-                if len(self.players) < 1:
-                    room_id = self.to_room_id()
+            should_delete = False
+            match self.phase:
+                case RoomPhase.LOBBY:
                     with contextlib.suppress(KeyError):
-                        del self.server.rooms[room_id]
-                    with contextlib.suppress(KeyError):
-                        self.server.match_rooms.remove(room_id)
-                    with contextlib.suppress(KeyError):
-                        join_code = self.server.private_room_codes_rev[room_id]
-                        del self.server.private_room_codes[join_code]
-                        del self.server.private_room_codes_rev[room_id]
+                        self.readies.remove(player_id)
+                    should_delete = len(self.players) < 1
+                case RoomPhase.SHIPSETUP | RoomPhase.PLAYING:
+                    await self.do_player_lost(player_id)
+                    should_delete = len(self.players) < 2
+
+            if should_delete:
+                room_id = self.to_room_id()
                 with contextlib.suppress(KeyError):
-                    self.readies.remove(player_id)
-                async with asyncio.TaskGroup() as tg:
-                    for other_player_info in self.players.values():
-                        tg.create_task(
-                            self.server.on_room_leave(
-                                self.server.known_player_session[
-                                    models.PlayerId.from_player_info(other_player_info)
-                                ],
-                                player_info,
-                            )
+                    del self.server.rooms[room_id]
+                with contextlib.suppress(KeyError):
+                    self.server.match_rooms.remove(room_id)
+                with contextlib.suppress(KeyError):
+                    join_code = self.server.private_room_codes_rev[room_id]
+                    del self.server.private_room_codes[join_code]
+                    del self.server.private_room_codes_rev[room_id]
+
+            async with asyncio.TaskGroup() as tg:
+                for other_player_info in self.players.values():
+                    tg.create_task(
+                        self.server.on_room_leave(
+                            self.server.known_player_session[
+                                models.PlayerId.from_player_info(other_player_info)
+                            ],
+                            player_info,
                         )
+                    )
 
     async def add_ready(self, player_id: models.PlayerId):
         async with self.lock:
@@ -223,6 +237,7 @@ class Room:
                         )
                     )
                 if len(self.boards) == len(self.players):
+                    self.phase = RoomPhase.PLAYING
                     for player_info in self.players.values():
                         tg.create_task(
                             self.server.on_room_submit(
@@ -339,12 +354,4 @@ class Room:
         return models.RoomId(self.id)
 
     def to_room_info(self):
-        return models.RoomInfo(
-            self.id,
-            [*self.players.values()],
-            [*self.readies],
-            {
-                board.player: models.BoardId.from_board(board)
-                for board in self.boards.values()
-            },
-        )
+        return models.RoomInfo(self.id, [*self.players.values()], [*self.readies])

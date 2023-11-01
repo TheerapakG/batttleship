@@ -1,7 +1,6 @@
-import asyncio
+from copy import deepcopy
 from dataclasses import replace
 from functools import partial
-from uuid import UUID, uuid4
 
 from pyglet.window import key
 
@@ -19,38 +18,68 @@ from ...shared.utils import add, mat_mul_vec
 
 
 @Component.register("ShipSetup")
-def ship_setup(
-    window: Window, client: BattleshipClient, room: models.RoomInfo, **kwargs
-):
-    board = [
-        [
-            Ref[
-                models.EmptyTile
-                | models.ShipTile
-                | models.ObstacleTile
-                | models.MineTile
-            ](models.EmptyTile())
-            for _ in range(8)
-        ]
-        for _ in range(8)
-    ]
-    ships = {
-        models.ShipId.from_ship(s): Ref(s)
-        for s in [
-            models.Ship(uuid4(), ship_type.NORMAL_SHIP_VARIANT, [], 0),
-            models.Ship(uuid4(), ship_type.NORMAL_SHIP_VARIANT, [], 0),
-            models.Ship(uuid4(), ship_type.T_SHIP_VARIANT, [], 0),
-            models.Ship(uuid4(), ship_type.T_SHIP_VARIANT, [], 0),
-        ]
-    }
-    current_ship_id = Ref[models.ShipId | None](None)
+def ship_setup(window: Window, client: BattleshipClient, **kwargs):
+    player_board = store.game.player_board
+
+    player_grid = computed(
+        lambda: (
+            _player_board.grid
+            if (_player_board := unref(player_board)) is not None
+            else None
+        )
+    )
+    player_grid_col = computed(
+        lambda: len(_player_grid)
+        if (_player_grid := unref(player_grid)) is not None
+        else 0
+    )
+    player_grid_rows = computed(
+        lambda: (
+            [len(col) for col in _player_grid]
+            if (_player_grid := unref(player_grid)) is not None
+            else []
+        )
+    )
+
+    player_ship = computed(
+        lambda: (
+            _player_board.ship
+            if (_player_board := unref(player_board)) is not None
+            else None
+        )
+    )
+    player_ship_indices = computed(
+        lambda: (
+            {models.ShipId.from_ship(ship): i for i, ship in enumerate(_player_ship)}
+            if (_player_ship := unref(player_ship)) is not None
+            else {}
+        )
+    )
+
+    current_ship_index = Ref[int | None](None)
+    current_ship = computed(
+        lambda: (
+            _player_ship[_current_ship_index]
+            if (_player_ship := unref(player_ship)) is not None
+            and (_current_ship_index := unref(current_ship_index)) is not None
+            else None
+        )
+    )
+
     hover_index = Ref[tuple[int, int]]((0, 0))
     submit = Ref(False)
     not_submitable = computed(
-        lambda: unref(submit)
-        or not all(unref(ship).tile_position for ship in ships.values())
+        lambda: (
+            unref(submit) or not all(ship.tile_position for ship in unref(player_ship))
+        )
     )
-    player_submits = Ref(set[models.PlayerId]())
+    player_submits = computed(lambda: [*unref(store.game.board_lookup).keys()])
+
+    def check_submit(player: models.PlayerId):
+        if not unref(store.user.is_player(player)):
+            return computed(lambda: player in unref(player_submits))
+        else:
+            return submit
 
     current_placement = computed(
         lambda: (
@@ -58,26 +87,28 @@ def ship_setup(
                 add(
                     unref(hover_index),
                     mat_mul_vec(
-                        ship_type.ORIENTATIONS[unref(ships[ship_id]).orientation],
+                        ship_type.ORIENTATIONS[_current_ship.orientation],
                         offset,
                     ),
                 ): sprite
                 for offset, sprite in ship_type.SHIP_VARIANTS[
-                    unref(ships[ship_id]).ship_variant.id
+                    _current_ship.ship_variant.id
                 ].placement_offsets.items()
             }
-            if (ship_id := unref(current_ship_id)) is not None
+            if (_current_ship := unref(current_ship)) is not None
             else {}
         )
     )
 
     def check_placement():
-        for col, row in unref(current_placement).keys():
-            if col < 0 or col >= len(board):
+        if (_player_grid := unref(player_grid)) is None:
+            return False
+        for col, row in unref(current_placement):
+            if col < 0 or col >= len(_player_grid):
                 return False
-            if row < 0 or row >= len(board[col]):
+            if row < 0 or row >= len(_player_grid[col]):
                 return False
-            if not isinstance(unref(board[col][row]), models.EmptyTile):
+            if not isinstance(unref(_player_grid[col][row]), models.EmptyTile):
                 return False
         return True
 
@@ -88,13 +119,15 @@ def ship_setup(
         row: int,
     ):
         def _get_tile_color():
+            if (_player_grid := unref(player_grid)) is None:
+                return colors["red"][300]
             if (col, row) in unref(current_placement):
                 if unref(current_placement_legal):
                     return colors["emerald"][300]
                 else:
                     return colors["red"][300]
             else:
-                match unref(board[col][row]):
+                match unref(_player_grid[col][row]):
                     case models.EmptyTile():
                         return colors["white"]
                     case models.ShipTile():
@@ -102,52 +135,26 @@ def ship_setup(
 
         return computed(_get_tile_color)
 
-    def get_ship_color(ship: Ref[models.Ship]):
-        def _get_ship_color(
-            inner_ship: models.Ship,
-        ):
-            if inner_ship.tile_position:
+    def get_ship_color(index: int):
+        def _get_ship_color():
+            if unref(player_board).ship[index].tile_position:
                 return colors["red"][300]
             else:
                 return colors["emerald"][300]
 
-        return computed(lambda: _get_ship_color(unref(ship)))
-
-    async def subscribe_player_leave():
-        async for _ in client.on_room_leave():
-            from .main_menu import main_menu
-
-            await window.set_scene(main_menu(window=window, client=client))
-
-    async def subscribe_room_player_submit():
-        async for data in client.on_room_player_submit():
-            player_submits.value.add(data.player)
-            room.boards[data.player] = data.board
-            player_submits.trigger()
-
-    async def subscribe_room_submit():
-        async for _ in client.on_room_submit():
-            from .game import game
-
-            await window.set_scene(game(window, client, room, board))
+        return computed(_get_ship_color)
 
     def on_key_r_change(state: bool):
-        if state and ((ship_id := unref(current_ship_id)) is not None):
-            current_ship_ref = ships[ship_id]
-            current_ship_ref.value = replace(
-                unref(current_ship_ref),
-                orientation=(unref(current_ship_ref).orientation + 1) % 4,
+        if state and ((ship_index := unref(current_ship_index)) is not None):
+            _current_ship = unref(current_ship)
+            unref(player_board).ship[ship_index] = replace(
+                _current_ship,
+                orientation=(_current_ship.orientation + 1) % 4,
             )
-            current_ship_ref.trigger()
+            current_ship.trigger()
 
     def on_mounted(event: ComponentMountedEvent):
-        event.instance.bound_tasks.update(
-            [
-                asyncio.create_task(subscribe_player_leave()),
-                asyncio.create_task(subscribe_room_player_submit()),
-                asyncio.create_task(subscribe_room_submit()),
-            ]
-        )
+        event.instance.bound_tasks.update(store.game.get_tasks())
         event.instance.bound_watchers.update(
             [
                 w
@@ -159,29 +166,42 @@ def ship_setup(
         )
 
     def on_tile_click(col: int, row: int, event: ClickEvent):
-        if not unref(submit):
-            if (placement := unref(current_placement)) is not None and (
-                (ship_id := unref(current_ship_id)) is not None
+        if (
+            not unref(submit)
+            and (_player_board := store.game.get_player_board_ref()) is not None
+        ):
+            if (
+                (ship_index := unref(current_ship_index)) is not None
+                and (placement := unref(current_placement)) is not None
                 and unref(current_placement_legal)
             ):
+                grid = deepcopy(unref(_player_board).grid)
+                ship = deepcopy(unref(_player_board).ship)
                 for col, row in placement.keys():
-                    board[col][row].value = models.ShipTile(ship_id)
-                current_ship_ref = ships[ship_id]
-                current_ship_ref.value = replace(
-                    unref(current_ship_ref),
+                    grid[col][row] = models.ShipTile(
+                        models.ShipId.from_ship(unref(player_board).ship[ship_index])
+                    )
+                ship[ship_index] = replace(
+                    ship[ship_index],
                     tile_position=[position for position in placement.keys()],
                 )
-                current_ship_ref.trigger()
-                current_ship_id.value = None
-            elif isinstance((ship_tile := unref(board[col][row])), models.ShipTile):
-                current_ship_ref = ships[ship_tile.ship]
-                for col, row in unref(current_ship_ref).tile_position:
-                    board[col][row].value = models.EmptyTile()
-                current_ship_ref.value = replace(
-                    unref(current_ship_ref), tile_position=[]
-                )
-                current_ship_ref.trigger()
-                current_ship_id.value = models.ShipId.from_ship(unref(current_ship_ref))
+                _player_board.value = replace(_player_board.value, grid=grid, ship=ship)
+                current_ship_index.value = None
+            elif isinstance(
+                (ship_tile := unref(_player_board).grid[col][row]), models.ShipTile
+            ):
+                grid = deepcopy(unref(_player_board).grid)
+                ship = deepcopy(unref(_player_board).ship)
+                for i, s in enumerate(ship):
+                    if models.ShipId.from_ship(s) == ship_tile.ship:
+                        for col, row in s.tile_position:
+                            grid[col][row] = models.EmptyTile()
+                        ship[i] = replace(
+                            ship[i],
+                            tile_position=[],
+                        )
+                        current_ship_index.value = i
+                _player_board.value = replace(_player_board.value, grid=grid, ship=ship)
 
     def on_tile_mounted(col: int, row: int, event: ComponentMountedEvent):
         event.instance.bound_watchers.update(
@@ -197,27 +217,21 @@ def ship_setup(
             ]
         )
 
-    def on_ship_click(ship_id: int, _event: ClickEvent):
-        if not unref(submit):
-            current_ship_ref = ships[ship_id]
-            for col, row in unref(current_ship_ref).tile_position:
-                board[col][row].value = models.EmptyTile()
-            current_ship_ref.value = replace(unref(current_ship_ref), tile_position=[])
-            current_ship_ref.trigger()
-            current_ship_id.value = ship_id
+    def on_ship_click(index: int, _event: ClickEvent):
+        if not unref(submit) and (_player_grid := unref(player_grid)) is not None:
+            unref(player_board).ship[index] = replace(
+                unref(player_board).ship[index],
+                tile_position=[],
+            )
+            current_ship_index.value = index
+            for col, row in unref(current_ship).tile_position:
+                _player_grid[col][row] = models.EmptyTile()
+            player_ship.update()
+            player_board.update()
 
     async def on_submit_button(_e):
-        if (user := unref(store.user.store)) is not None:
-            submit.value = True
-            await client.board_submit(
-                models.Board(
-                    uuid4(),
-                    models.PlayerId.from_player(user),
-                    models.RoomId.from_room_info(room),
-                    [[unref(tile) for tile in row] for row in board],
-                    [unref(ship) for ship in ships.values()],
-                )
-            )
+        submit.value = True
+        await store.game.board_submit()
 
     return Component.render_xml(
         """
@@ -230,21 +244,21 @@ def ship_setup(
             />
             <Row t-style="g[1]">
                 <RoundedRectLabelButton 
-                    t-for="ship_id, ship in ships.items()"
+                    t-for="ship_index in range(len(unref(player_ship)))"
                     text="''" 
                     text_color="colors['white']"
-                    color="get_ship_color(ship)"
+                    color="get_ship_color(ship_index)"
                     hover_color="colors['white']"
                     disabled_color="colors['white']"
                     width="32"
                     height="32"
-                    handle-ClickEvent="partial(on_ship_click, ship_id)"
+                    handle-ClickEvent="partial(on_ship_click, ship_index)"
                 />
             </Row>
             <Column t-style="g[1]">
-                <Row t-for="col, board_col in enumerate(board)" t-style="g[1]">
+                <Row t-for="col in range(unref(player_grid_col))" t-style="g[1]">
                     <RoundedRectLabelButton 
-                        t-for="row, tile in enumerate(board_col)"
+                        t-for="row in range(unref(player_grid_rows)[col])"
                         text="''" 
                         text_color="colors['white']"
                         color="get_tile_color(col, row)"
@@ -258,9 +272,9 @@ def ship_setup(
                 </Row>
             </Column>
             <Row t-style="g[4]">
-                <Column t-for="player_info in room.players">
+                <Column t-for="player_id, player_info in unref(store.game.players).items()">
                     <Label
-                        text="'Submitted' if models.PlayerId.from_player_info(player_info) in unref(player_submits) else 'Not Submitted'"
+                        text="'Submitted' if unref(check_submit(player_id)) else 'Not Submitted'"
                         text_color="colors['white']" 
                     />
                     <Label

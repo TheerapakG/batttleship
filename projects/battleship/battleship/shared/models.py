@@ -52,6 +52,10 @@ class EmptyTile(Tile):
 class ShipVariantId:
     id: UUID  # pylint: disable=C0103
 
+    @classmethod
+    def from_ship_variant(cls, ship_variant: "ShipVariantId"):
+        return cls(ship_variant.id)
+
 
 @dataclass(eq=True, frozen=True)
 class ShipId:
@@ -109,12 +113,10 @@ class BoardId:
 @dataclass(eq=True, frozen=True)
 class Board(BoardId):
     id: UUID  # pylint: disable=C0103
-    player: PlayerId = field(hash=False, compare=False)
-    room: "RoomId" = field(hash=False, compare=False)
-    grid: list[list[EmptyTile | ShipTile | ObstacleTile | MineTile]] = field(
-        hash=False, compare=False
-    )
-    ship: list[Ship] = field(hash=False, compare=False)
+    player: PlayerId = field(hash=False)
+    room: "RoomId" = field(hash=False)
+    grid: list[list[EmptyTile | ShipTile | ObstacleTile | MineTile]] = field(hash=False)
+    ship: list[Ship] = field(hash=False)
 
 
 @dataclass(eq=True, frozen=True)
@@ -130,19 +132,20 @@ class RoomId:
 class RoomInfo(RoomId):
     players: list[PlayerInfo] = field(hash=False, compare=False, default_factory=list)
     readies: list[PlayerId] = field(hash=False, compare=False, default_factory=list)
-    boards: dict[PlayerId, BoardId] = field(
-        hash=False, compare=False, default_factory=dict
-    )
 
 
-@dataclass
-class ShotTypeVariantId:
+@dataclass(eq=True, frozen=True)
+class ShotVariantId:
     id: UUID  # pylint: disable=C0103
+
+    @classmethod
+    def from_shot_variant(cls, ship_variant: "ShotVariantId"):
+        return cls(ship_variant.id)
 
 
 @dataclass(eq=True, frozen=True)
 class Shot:
-    shot_variant: ShotTypeVariantId
+    shot_variant: ShotVariantId
     tile_position: tuple[int, int]
     orientation: int
     board: BoardId

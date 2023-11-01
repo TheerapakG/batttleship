@@ -2861,16 +2861,18 @@ class Window:
     _scene: Component | None = field(default=None)
     _scene_instance: ComponentInstance | None = field(default=None)
     resizable: InitVar[bool] = field(default=False, kw_only=True)
+    full_screen: InitVar[bool] = field(default=False, kw_only=True)
     width: ReadRef[int] = field(init=False)
     height: ReadRef[int] = field(init=False)
     _window: _Window = field(init=False)
     _last_draw_time: float | None = field(init=False, default=None)
 
-    def __post_init__(self, _width, _height, resizable):
+    def __post_init__(self, _width, _height, resizable, full_screen):
         self._window = _Window(
             unref(_width),
             unref(_height),
             resizable=resizable,
+            fullscreen=full_screen,
             config=gl.Config(sample_buffers=1, samples=4, double_buffer=True),
         )
 
