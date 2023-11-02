@@ -57,8 +57,7 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
                 models.PlayerId.from_player_info(player_info): player_info
                 for player_info in unref(player_infos)
             }
-            store.game.room_reset()
-            await store.game.generate_board()
+            await store.game.room_reset()
 
             await window.set_scene(ship_setup(window, client))
 
@@ -72,9 +71,11 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
                 asyncio.create_task(subscribe_room_ready()),
             ]
         )
+
     async def return_button(_e):
         from .main_menu import main_menu
-        #await window.set_scene(main_menu(window, client))
+
+        # await window.set_scene(main_menu(window, client))
 
     async def on_ready_button(_e):
         ready.value = True

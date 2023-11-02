@@ -6,13 +6,12 @@ from pyglet.window import key
 
 from tgraphics.color import colors
 from tgraphics.event import ComponentMountedEvent
-from tgraphics.component import Component, Window, use_key_pressed
+from tgraphics.component import Component, Window, ClickEvent, use_key_pressed
 from tgraphics.reactivity import computed, unref, Ref, Watcher
 from tgraphics.style import c, text_c, hover_c, disabled_c, w, h, g
 
 from .. import store
 from ..client import BattleshipClient
-from ..component.button import ClickEvent
 from ...shared import models, ship_type
 from ...shared.utils import add, mat_mul_vec
 
@@ -25,7 +24,7 @@ def ship_setup(window: Window, client: BattleshipClient, **kwargs):
         lambda: (
             _player_board.grid
             if (_player_board := unref(player_board)) is not None
-            else None
+            else []
         )
     )
     player_grid_col = computed(
@@ -45,7 +44,7 @@ def ship_setup(window: Window, client: BattleshipClient, **kwargs):
         lambda: (
             _player_board.ship
             if (_player_board := unref(player_board)) is not None
-            else None
+            else []
         )
     )
     player_ship_indices = computed(
@@ -137,7 +136,7 @@ def ship_setup(window: Window, client: BattleshipClient, **kwargs):
 
     def get_ship_color(index: int):
         def _get_ship_color():
-            if unref(player_board).ship[index].tile_position:
+            if unref(player_ship)[index].tile_position:
                 return colors["red"][300]
             else:
                 return colors["emerald"][300]

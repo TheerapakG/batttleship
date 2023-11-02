@@ -2,12 +2,19 @@ import asyncio
 from contextlib import suppress
 from copy import deepcopy
 from dataclasses import replace
+from pyglet.media import Player
 from uuid import uuid4
-from tgraphics.component import Window
+from tgraphics.component import Window, loader
 from tgraphics.reactivity import Ref, computed, unref
+
 from . import user
 from ..client import BattleshipClient
 from ...shared import models, ship_type, shot_type
+
+media_player = Player()
+
+hit_sound = loader.media("hit.wav", False)
+miss_sound = loader.media("miss.wav", False)
 
 window: Ref[Window | None] = Ref(None)
 client: Ref[BattleshipClient | None] = Ref(None)
@@ -19,9 +26,22 @@ alive_players = Ref(list[models.PlayerInfo]())
 dead_players = Ref(list[models.PlayerInfo]())
 
 
-def room_reset():
+async def room_reset():
     alive_players.value = [*unref(players).values()]
     dead_players.value = []
+    current_board_id.value = None
+    board_lookup.value = {}
+    board_lookup.trigger()
+    boards.value = {}
+    boards.trigger()
+    shots.value = {
+        models.ShotVariantId.from_shot_variant(shot_type.NORMAL_SHOT_VARIANT): Ref(-1),
+        models.ShotVariantId.from_shot_variant(shot_type.TWOBYTWO_SHOT_VARIANT): Ref(2),
+        models.ShotVariantId.from_shot_variant(shot_type.SCAN): Ref(2),
+    }
+    shots.trigger()
+    turn.value = False
+    await generate_board()
 
 
 alive_players_not_user = computed(
@@ -125,15 +145,15 @@ async def generate_board():
         )
         board_id = models.BoardId.from_board(board)
         boards.value[board_id] = Ref(board)
-        boards.trigger()
         board_lookup.value[board.player] = board_id
+        boards.trigger()
         board_lookup.trigger()
         return board
     else:
         raise Exception()
 
 
-def process_shot_result(shot_result: models.ShotResult):
+def process_shot_result(shot_result: models.ShotResult, play_audio: bool = True):
     board = unref(boards)[shot_result.board]
     new_grid = deepcopy(board.value.grid)
     for r in shot_result.reveal:
@@ -143,6 +163,12 @@ def process_shot_result(shot_result: models.ShotResult):
         grid=new_grid,
         ship=[*set([*board.value.ship, *shot_result.reveal_ship])],
     )
+    if play_audio:
+        if any(isinstance(r.tile, models.ShipTile) for r in shot_result.reveal):
+            media_player.queue(hit_sound)
+        else:
+            media_player.queue(miss_sound)
+        media_player.play()
 
 
 async def board_submit():
@@ -162,7 +188,7 @@ async def shot_submit(
             ),
         )
 
-        process_shot_result(shot_result)
+        process_shot_result(shot_result, False)
 
 
 async def subscribe_player_leave():
@@ -172,7 +198,7 @@ async def subscribe_player_leave():
         alive_players.trigger()
         dead_players.trigger()
 
-        with suppress(KeyError, ValueError):
+        with suppress(KeyError, IndexError):
             player_id = models.PlayerId.from_player_info(player)
             del board_lookup.value[player_id]
             board_id = unref(board_lookup)[player_id]
@@ -210,12 +236,7 @@ async def subscribe_room_submit():
         await set_board_id(models.BoardId.from_board(unref(player_board)))
         from ..view.game import game
 
-        try:
-            await unref(window).set_scene(game(unref(window)))
-        except Exception:
-            import traceback
-
-            traceback.print_exc()
+        asyncio.create_task(unref(window).set_scene(game(unref(window))))
 
 
 async def subscribe_turn_start():
@@ -246,6 +267,19 @@ async def subscribe_shot_board():
         process_shot_result(shot_result)
 
 
+async def do_game_reset():
+    await room_reset()
+
+    from ..view.ship_setup import ship_setup
+
+    await unref(window).set_scene(ship_setup(unref(window), unref(client)))
+
+
+async def subscribe_game_reset():
+    async for _ in unref(client).on_game_reset():
+        asyncio.create_task(do_game_reset())
+
+
 async def subscribe_game_end():
     async for game_result in unref(client).on_game_end():
         # TODO:
@@ -261,4 +295,6 @@ def get_tasks():
         asyncio.create_task(subscribe_turn_end()),
         asyncio.create_task(subscribe_display_board()),
         asyncio.create_task(subscribe_shot_board()),
+        asyncio.create_task(subscribe_game_reset()),
+        asyncio.create_task(subscribe_game_end()),
     ]

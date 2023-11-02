@@ -81,6 +81,10 @@ class BattleshipClient(Client):
     def on_game_end(self) -> AsyncIterator[list[models.PlayerInfo]]:
         raise NotImplementedError()
 
+    @subscribe
+    def on_game_reset(self) -> AsyncIterator[Empty]:
+        raise NotImplementedError()
+
     @Route.simple
     async def room_match(self, args: models.BearingPlayerAuth) -> models.RoomInfo:
         raise NotImplementedError()

@@ -86,9 +86,22 @@ class Room:
             self.lost_players = []
         self.boards = dict()
         await self.do_cancel_next_player_task()
+        if hard:
+            async with asyncio.TaskGroup() as tg:
+                for player_info in self.players.values():
+                    tg.create_task(
+                        self.server.on_game_reset(
+                            self.server.known_player_session[
+                                models.PlayerId.from_player_info(player_info)
+                            ],
+                            Empty(),
+                        )
+                    )
 
-    async def do_player_lost(self, player_id: models.PlayerId):
+    async def do_player_lost(self, player_id: models.PlayerId, remove: bool = False):
         player = self.players[player_id]
+        if remove:
+            del self.players[models.PlayerId.from_player_info(player)]
         if player in self.alive_players:
             self.alive_players.remove(player)
             self.lost_players.append(player)
@@ -125,9 +138,10 @@ class Room:
                 case RoomPhase.LOBBY:
                     with contextlib.suppress(KeyError):
                         self.readies.remove(player_id)
+                    del self.players[models.PlayerId.from_player_info(player_info)]
                     should_delete = len(self.players) < 1
                 case RoomPhase.SHIPSETUP | RoomPhase.PLAYING:
-                    await self.do_player_lost(player_id)
+                    await self.do_player_lost(player_id, remove=True)
                     should_delete = len(self.players) < 2
 
             if should_delete:
@@ -205,7 +219,7 @@ class Room:
                             )
                         )
 
-                await asyncio.sleep(3)
+            await asyncio.sleep(3)
 
             player = self.alive_players.pop()
             self.alive_players.insert(0, player)

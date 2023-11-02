@@ -3,8 +3,11 @@ from collections import deque
 from collections.abc import Awaitable, Callable
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+import logging
 from typing import Any, ClassVar, Generic, Protocol, TypeGuard, TypeVar, overload
 import weakref
+
+log = logging.getLogger(__name__)
 
 T = TypeVar("T")
 T_co = TypeVar("T_co", covariant=True)
@@ -102,8 +105,8 @@ class Ref(ReadRef[T]):
         self.set_value(new_value)
 
     def set_value(self, new_value: T):
-        if self._value != new_value:
-            self._value = new_value
+        old_value, self._value = self._value, new_value
+        if old_value != new_value:
             self.update()
 
     def trigger(self):
@@ -117,14 +120,21 @@ class Computed(ReadRef[T_co]):
         self._func = func
         super().__init__(None)  # type: ignore
         with self.track():
-            self._value = self._func()
+            try:
+                self._value = self._func()
+            except Exception:
+                log.exception("exception in computed")
+                raise
 
     def trigger(self):
         with self.track():
-            new_value = self._func()
-        if self._value != new_value:
-            self._value = new_value
-            self.update()
+            try:
+                new_value = self._func()
+                old_value, self._value = self._value, new_value
+                if old_value != new_value:
+                    self.update()
+            except Exception:
+                log.exception("exception in computed")
 
 
 def computed(func: Callable[[], T]):

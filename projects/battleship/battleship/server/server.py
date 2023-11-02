@@ -189,6 +189,10 @@ class BattleshipServer(Server):
     async def on_game_end(self, _session: Session, args: list[models.PlayerInfo]):
         raise NotImplementedError()
 
+    @emit
+    async def on_game_reset(self, _session: Session, args: Empty):
+        raise NotImplementedError()
+
     @Route.simple
     @ensure_session_player
     async def room_match(

@@ -22,7 +22,7 @@ def profile(window: Window, client: BattleshipClient, **kwargs):
 
         await window.set_scene(main_menu(window, client))
 
-    #async def set_online_status():
+    # async def set_online_status():
     #    unref(online.replace(None,"Online")) if client.online(Empty()) else unref(online.replace(None,"Offline"))
 
     return Component.render_xml(

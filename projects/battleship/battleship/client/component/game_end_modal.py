@@ -1,11 +1,10 @@
 from tgraphics.color import colors, with_alpha
 from tgraphics.event import Event
 from tgraphics.style import c, text_c, hover_c, disabled_c, w, h, r_b, r_t, g
-from tgraphics.component import Component, Window
+from tgraphics.component import Component, Window, ClickEvent
 from tgraphics.reactivity import Ref, unref
 
 from . import modal
-from .button import ClickEvent
 from .. import store
 from ..client import BattleshipClient
 from ...shared import models

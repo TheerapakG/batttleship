@@ -1,22 +1,24 @@
-import asyncio
-from dataclasses import replace
+from contextlib import suppress
 from functools import partial
-from uuid import UUID, uuid4
 
 from pyglet.window import key
 
 from tgraphics.color import colors
 from tgraphics.event import ComponentMountedEvent
-from tgraphics.component import Component, Window, use_key_pressed
+from tgraphics.component import Component, Window, ClickEvent, use_key_pressed
 from tgraphics.reactivity import computed, unref, Ref, Watcher
 from tgraphics.composables import use_window
 from tgraphics.style import c, text_c, hover_c, disabled_c, w, h, g
 
 from .. import store
-from ..client import BattleshipClient
-from ..component.button import ClickEvent
 from ...shared import models, shot_type
 from ...shared.utils import add, mat_mul_vec
+
+
+def _expect_index_error(func, default):
+    with suppress(IndexError):
+        return func()
+    return default
 
 
 @Component.register("Game")
@@ -25,7 +27,7 @@ def game(window: Window, **kwargs):
         lambda: (
             _player_board.grid
             if (_player_board := unref(store.game.player_board)) is not None
-            else None
+            else []
         )
     )
     player_grid_col = computed(
@@ -45,7 +47,7 @@ def game(window: Window, **kwargs):
         lambda: (
             _player_board.ship
             if (_player_board := unref(store.game.player_board)) is not None
-            else None
+            else []
         )
     )
 
@@ -53,7 +55,7 @@ def game(window: Window, **kwargs):
         lambda: (
             _current_board.grid
             if (_current_board := unref(store.game.current_board)) is not None
-            else None
+            else []
         )
     )
 
@@ -74,7 +76,7 @@ def game(window: Window, **kwargs):
         lambda: (
             _current_board.ship
             if (_current_board := unref(store.game.current_board)) is not None
-            else None
+            else []
         )
     )
 
@@ -131,15 +133,18 @@ def game(window: Window, **kwargs):
 
     def get_player_tile_color(col: int, row: int):
         def _get_tile_color():
-            match unref(player_grid)[col][row]:
-                case models.EmptyTile(hit=False):
-                    return colors["slate"][300]
-                case models.EmptyTile(hit=True):
-                    return colors["cyan"][300]
-                case models.ShipTile(hit=False):
-                    return colors["emerald"][500]
-                case models.ShipTile(hit=True):
-                    return colors["red"][500]
+            try:
+                match unref(player_grid)[col][row]:
+                    case models.EmptyTile(hit=False):
+                        return colors["slate"][300]
+                    case models.EmptyTile(hit=True):
+                        return colors["cyan"][300]
+                    case models.ShipTile(hit=False):
+                        return colors["emerald"][500]
+                    case models.ShipTile(hit=True):
+                        return colors["red"][500]
+            except IndexError:
+                return colors["slate"][300]
 
         return computed(_get_tile_color)
 
@@ -151,19 +156,22 @@ def game(window: Window, **kwargs):
                 else:
                     return colors["red"][300]
             else:
-                match unref(current_grid)[col][row]:
-                    case models.EmptyTile(hit=False):
-                        return (
-                            colors["slate"][300]
-                            if unref(not_submitable)
-                            else colors["white"]
-                        )
-                    case models.EmptyTile(hit=True):
-                        return colors["cyan"][300]
-                    case models.ShipTile(hit=False):
-                        return colors["emerald"][500]
-                    case models.ShipTile(hit=True):
-                        return colors["red"][500]
+                try:
+                    match unref(current_grid)[col][row]:
+                        case models.EmptyTile(hit=False):
+                            return (
+                                colors["slate"][300]
+                                if unref(not_submitable)
+                                else colors["white"]
+                            )
+                        case models.EmptyTile(hit=True):
+                            return colors["cyan"][300]
+                        case models.ShipTile(hit=False):
+                            return colors["emerald"][500]
+                        case models.ShipTile(hit=True):
+                            return colors["red"][500]
+                except IndexError:
+                    return colors["slate"][300]
 
         return computed(_get_tile_color)
 
@@ -275,7 +283,7 @@ def game(window: Window, **kwargs):
                 <Column t-if="store.game.user_alive" t-style="g[1]">
                     <Row t-for="col in range(unref(player_grid_col))" t-style="g[1]">
                         <RoundedRect
-                            t-for="row in range(unref(player_grid_rows)[col])"
+                            t-for="row in range(_expect_index_error(lambda: unref(player_grid_rows)[col], 0))"
                             color="get_player_tile_color(col, row)"
                             width="32"
                             height="32"
@@ -285,7 +293,7 @@ def game(window: Window, **kwargs):
                 <Column t-style="g[1]">
                     <Row t-for="col in range(unref(current_grid_col))" t-style="g[1]">
                         <RoundedRectLabelButton 
-                            t-for="row in range(unref(current_grid_rows)[col])"
+                            t-for="row in range(_expect_index_error(lambda: unref(current_grid_rows)[col], 0))"
                             text="''" 
                             text_color="colors['white']"
                             color="get_current_tile_color(col, row)"

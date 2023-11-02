@@ -4,9 +4,11 @@ import contextlib
 from dataclasses import dataclass, field, replace, InitVar
 from functools import partial, wraps
 import inspect
+import logging
+import math
 import re
 import time
-from typing import Any, Awaitable, ClassVar, Generic, ParamSpec, TypeVar
+from typing import Any, Awaitable, ClassVar, Generic, Literal, ParamSpec, TypeVar
 from xml.etree import ElementTree
 
 import pyglet
@@ -50,6 +52,8 @@ from .event import (
 )
 from .reactivity import ReadRef, Ref, Watcher, computed, unref, isref
 from .utils import maybe_await
+
+log = logging.getLogger(__name__)
 
 loader = Loader(["./resources"])
 loader.reindex()
@@ -602,12 +606,22 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
     async def capture(self, event: Event):
         for event_type in type(event).mro():
             if (capturer := self.event_capturers.get(event_type)) is not None:
-                return await maybe_await(capturer(self, event))
+                try:
+                    return await maybe_await(capturer(self, event))
+                except Exception:
+                    log.exception(
+                        "error while capturing %s in %s", type(event), type(self)
+                    )
 
     async def dispatch(self, event: Event):
         for event_type in type(event).mro():
             if (handler := self.event_handlers.get(event_type)) is not None:
-                return await maybe_await(handler(self, event))
+                try:
+                    return await maybe_await(handler(self, event))
+                except Exception:
+                    log.exception(
+                        "error while handling %s in %s", type(event), type(self)
+                    )
 
     def get_child_at(self, p: Positional) -> Iterator["ComponentInstance"]:
         for child in reversed(unref(use_children(self))):
@@ -3027,3 +3041,95 @@ class Window:
     @property
     def scene_instance(self):
         return self._scene_instance
+
+
+class ClickEvent(Event):
+    pass
+
+
+@Component.register("RoundedRectLabelButton")
+def rounded_rect_label_button(
+    text: str | ReadRef[str],
+    text_color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]],
+    color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]],
+    hover_color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]],
+    disabled_color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]],
+    width: float | ReadRef[float],
+    height: float | ReadRef[float],
+    radius_bottom_left: int | float | None | ReadRef[int | float | None] = None,
+    radius_bottom_right: int | float | None | ReadRef[int | float | None] = None,
+    radius_top_left: int | float | None | ReadRef[int | float | None] = None,
+    radius_top_right: int | float | None | ReadRef[int | float | None] = None,
+    font_name: str | None | ReadRef[str | None] = None,
+    font_size: int
+    | float
+    | Literal["full"]
+    | None
+    | ReadRef[int | float | Literal["full"] | None] = None,
+    bold: bool | ReadRef[bool] = False,
+    italic: bool | ReadRef[bool] = False,
+    disabled: bool | ReadRef[bool] = False,
+    **kwargs,
+):
+    hover = Ref(False)
+    bg_color = computed(
+        lambda: unref(disabled_color)
+        if unref(disabled)
+        else (unref(hover_color) if unref(hover) else unref(color))
+    )
+
+    label_multiline = computed(lambda: any(c in unref(text) for c in "\n\u2028\u2029"))
+
+    label_diff = computed(
+        lambda: min(unref(width), unref(height)) * (1 - math.sqrt(1 / 2))
+    )
+
+    label_width = computed(lambda: unref(width) - unref(label_diff))
+    calc_label_height = computed(lambda: unref(height) - unref(label_diff))
+    label_height = computed(
+        lambda: unref(calc_label_height) if unref(label_multiline) else None
+    )
+    label_font_size = computed(
+        lambda: f_s if (f_s := unref(font_size)) != "full" else unref(calc_label_height)
+    )
+
+    def on_mounted(event: ComponentMountedEvent):
+        event.instance.bound_watchers.update(
+            [
+                w
+                for w in [Watcher.ifref(use_hover(event.instance), hover.set_value)]
+                if w is not None
+            ]
+        )
+
+    async def on_click(event: MousePressEvent):
+        if not (unref(event.instance.component.disabled)):
+            await event.instance.capture(ClickEvent(event.instance))
+        return StopPropagate
+
+    return Component.render_xml(
+        """
+        <Layer handle-ComponentMountedEvent="on_mounted" handle-MousePressEvent="on_click" disabled="disabled">
+            <RoundedRect 
+                width="width" 
+                height="height" 
+                color="bg_color" 
+                radius_bottom_left="radius_bottom_left" 
+                radius_bottom_right="radius_bottom_right"
+                radius_top_left="radius_top_left"
+                radius_top_right="radius_top_right"
+            />
+            <Label 
+                text="text" 
+                text_color="text_color" 
+                font_name="font_name" 
+                font_size="label_font_size" 
+                bold="bold" 
+                italic="italic" 
+                width="label_width" 
+                height="label_height" 
+            />
+        </Layer>
+        """,
+        **kwargs,
+    )
