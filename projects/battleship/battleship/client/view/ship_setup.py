@@ -216,17 +216,18 @@ def ship_setup(window: Window, client: BattleshipClient, **kwargs):
             ]
         )
 
-    def on_ship_click(index: int, _event: ClickEvent):
-        if not unref(submit) and (_player_grid := unref(player_grid)) is not None:
-            unref(player_board).ship[index] = replace(
-                unref(player_board).ship[index],
-                tile_position=[],
-            )
-            current_ship_index.value = index
-            for col, row in unref(current_ship).tile_position:
-                _player_grid[col][row] = models.EmptyTile()
-            player_ship.update()
-            player_board.update()
+    def on_ship_click(ship_index: int, _event: ClickEvent):
+        if (
+            not unref(submit)
+            and (_player_board := store.game.get_player_board_ref()) is not None
+        ):
+            grid = deepcopy(unref(_player_board).grid)
+            ship = deepcopy(unref(_player_board).ship)
+            for col, row in ship[ship_index].tile_position:
+                grid[col][row] = models.EmptyTile()
+            ship[ship_index] = replace(ship[ship_index], tile_position=[])
+            _player_board.value = replace(_player_board.value, grid=grid, ship=ship)
+            current_ship_index.value = ship_index
 
     async def on_submit_button(_e):
         submit.value = True

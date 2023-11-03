@@ -117,6 +117,9 @@ class Room:
                 )
         if len(self.alive_players) == 1:
             self.lost_players.append(self.alive_players.pop())
+            for player in self.lost_players:
+                for opponent in self.lost_players:
+                    pass
             await self.do_room_reset()
             async with asyncio.TaskGroup() as tg:
                 for player_info in self.players.values():
@@ -300,6 +303,7 @@ class Room:
             location_result = [
                 models.Reveal((col, row), board.grid[col][row])
                 for col, row in pick_locations
+                if not board.grid[col][row].hit
             ]
             if shot_variant.reveal:
                 reveal_ship_tile = [
@@ -314,12 +318,16 @@ class Room:
                     if models.ShipId.from_ship(s) in reveal_ship_id
                 ]
                 res = models.ShotResult(
-                    models.BoardId.from_board(board), location_result, reveal_ship
+                    player,
+                    models.BoardId.from_board(board),
+                    location_result,
+                    reveal_ship,
                 )
             else:
                 for r in location_result:
                     r.tile.hit = True
                 res = models.ShotResult(
+                    player,
                     models.BoardId.from_board(board),
                     [
                         (
@@ -332,6 +340,7 @@ class Room:
                     [],
                 )
                 other_res = models.ShotResult(
+                    player,
                     models.BoardId.from_board(board),
                     [
                         replace(r, tile=evolve(r.tile, ship=None))

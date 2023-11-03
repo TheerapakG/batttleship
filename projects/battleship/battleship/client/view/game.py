@@ -320,6 +320,13 @@ def game(window: Window, **kwargs):
             <Row>
                 <Label t-if="unref(store.game.turn)" text="str(round(unref(turn_timer)))" text_color="colors['white']"/>
             </Row>
+            <Row t-style="g[4]">
+                <Label
+                    t-for="player_id, player_info in unref(store.game.players).items()"
+                    t-style="text_c['white']"
+                    text="f'{player_info.name}: {unref(store.game.get_player_point(player_id))} ({unref(store.game.get_player_score(player_id))})'"
+                />
+            </Row>
         </Column>
         """,
         **kwargs,

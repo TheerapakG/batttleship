@@ -2,8 +2,11 @@ import asyncio
 from contextlib import suppress
 from copy import deepcopy
 from dataclasses import replace
-from pyglet.media import Player
+from functools import partial
 from uuid import uuid4
+
+from pyglet.media import Player
+
 from tgraphics.component import Window, loader
 from tgraphics.reactivity import Ref, computed, unref
 
@@ -25,10 +28,37 @@ players = Ref(dict[models.PlayerId, models.PlayerInfo]())
 alive_players = Ref(list[models.PlayerInfo]())
 dead_players = Ref(list[models.PlayerInfo]())
 
+player_scores = Ref(dict[models.PlayerId, Ref[int]]())
+player_points = Ref(dict[models.PlayerId, Ref[int]]())
+
+
+def _get_player_score(player: models.PlayerId):
+    if (player_ref := unref(player_scores).get(player)) is None:
+        return 0
+    return unref(player_ref)
+
+
+def get_player_score(player: models.PlayerId):
+    return computed(partial(_get_player_score, player))
+
+
+def _get_player_point(player: models.PlayerId):
+    if (player_ref := unref(player_points).get(player)) is None:
+        return 0
+    return unref(player_ref)
+
+
+def get_player_point(player: models.PlayerId):
+    return computed(partial(_get_player_point, player))
+
 
 async def room_reset():
     alive_players.value = [*unref(players).values()]
     dead_players.value = []
+    player_scores.value = {
+        models.PlayerId.from_player_info(player): Ref(0)
+        for player in unref(alive_players)
+    }
     current_board_id.value = None
     board_lookup.value = {}
     board_lookup.trigger()
@@ -156,6 +186,11 @@ async def generate_board():
 def process_shot_result(shot_result: models.ShotResult, play_audio: bool = True):
     board = unref(boards)[shot_result.board]
     new_grid = deepcopy(board.value.grid)
+    player_scores.value[shot_result.player].value += sum(
+        1
+        for r in shot_result.reveal
+        if isinstance(r.tile, models.ShipTile) and r.tile.hit
+    )
     for r in shot_result.reveal:
         new_grid[r.loc[0]][r.loc[1]] = r.tile
     board.value = replace(
@@ -264,7 +299,8 @@ async def subscribe_display_board():
 
 async def subscribe_shot_board():
     async for shot_result in unref(client).on_game_board_shot():
-        process_shot_result(shot_result)
+        if not unref(user.is_player(shot_result.player)):
+            process_shot_result(shot_result)
 
 
 async def do_game_reset():
@@ -282,6 +318,9 @@ async def subscribe_game_reset():
 
 async def subscribe_game_end():
     async for game_result in unref(client).on_game_end():
+        player_points.value[
+            models.PlayerId.from_player_info(game_result[-1])
+        ].value += 1
         # TODO:
         pass
 

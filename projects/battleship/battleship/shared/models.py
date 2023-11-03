@@ -37,6 +37,9 @@ class Player(PlayerInfo):
         other_q = 10 ** (other.rating / 400)
         return self_q / (self_q + other_q)
 
+    def rating_changes(self, other: "Player", win: bool):
+        return round(32 * ((1 if win else 0) - self.expected_win(other)))
+
 
 @define
 class Tile:
@@ -159,6 +162,7 @@ class Reveal:
 
 @dataclass(eq=True, frozen=True)
 class ShotResult:
+    player: PlayerId
     board: BoardId
     reveal: list[Reveal] = field(hash=False, compare=False)
     reveal_ship: list[Ship] = field(hash=False, compare=False)
