@@ -53,6 +53,8 @@ def get_player_point(player: models.PlayerId):
 
 
 async def room_reset():
+    room_delete.value = False
+    result.value = None
     alive_players.value = [*unref(players).values()]
     dead_players.value = []
     player_scores.value = {
@@ -94,6 +96,8 @@ board_lookup: Ref[dict[models.PlayerId, models.BoardId]] = Ref({})
 
 current_board_id: Ref[models.BoardId | None] = Ref(None)
 turn = Ref(False)
+
+room_delete = Ref(False)
 
 
 async def set_board_id(board_id: models.BoardId):
@@ -274,6 +278,11 @@ async def subscribe_room_submit():
         asyncio.create_task(unref(window).set_scene(game(unref(window))))
 
 
+async def subscribe_room_delete():
+    async for _ in unref(client).on_room_delete():
+        room_delete.value = True
+
+
 async def subscribe_turn_start():
     async for player in unref(client).on_game_turn_start():
         turn.value = unref(user.is_player(models.PlayerId.from_player_info(player)))
@@ -304,11 +313,10 @@ async def subscribe_shot_board():
 
 
 async def do_game_reset():
-    await room_reset()
-
     from ..view.ship_setup import ship_setup
 
     await unref(window).set_scene(ship_setup(unref(window), unref(client)))
+    await room_reset()
 
 
 async def subscribe_game_reset():
@@ -316,13 +324,14 @@ async def subscribe_game_reset():
         asyncio.create_task(do_game_reset())
 
 
+result: Ref[models.GameEndData | None] = Ref(None)
+
+
 async def subscribe_game_end():
     async for game_result in unref(client).on_game_end():
-        player_points.value[
-            models.PlayerId.from_player_info(game_result[-1])
-        ].value += 1
-        # TODO:
-        pass
+        player_points.value[game_result.win].value += 1
+        user.save_info(game_result.new_stat)
+        result.value = game_result
 
 
 def get_tasks():
@@ -330,6 +339,7 @@ def get_tasks():
         asyncio.create_task(subscribe_player_leave()),
         asyncio.create_task(subscribe_room_player_submit()),
         asyncio.create_task(subscribe_room_submit()),
+        asyncio.create_task(subscribe_room_delete()),
         asyncio.create_task(subscribe_turn_start()),
         asyncio.create_task(subscribe_turn_end()),
         asyncio.create_task(subscribe_display_board()),

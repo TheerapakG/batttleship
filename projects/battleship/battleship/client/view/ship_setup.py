@@ -12,6 +12,7 @@ from tgraphics.style import c, text_c, hover_c, disabled_c, w, h, g
 
 from .. import store
 from ..client import BattleshipClient
+from ..component import game_end_modal
 from ...shared import models, ship_type
 from ...shared.utils import add, mat_mul_vec
 
@@ -235,55 +236,58 @@ def ship_setup(window: Window, client: BattleshipClient, **kwargs):
 
     return Component.render_xml(
         """
-        <Column t-style="w['full'](window) | h['full'](window) | g[4]" handle-ComponentMountedEvent="on_mounted">
-            <RoundedRectLabelButton
-                text="'Submit'"
-                disabled="not_submitable"
-                t-style="c['teal'][400] | hover_c['teal'][500] | disabled_c['slate'][500] | text_c['white'] | w[48] | h[12]"
-                handle-ClickEvent="on_submit_button"
-            />
-            <Row t-style="g[1]">
-                <RoundedRectLabelButton 
-                    t-for="ship_index in range(len(unref(player_ship)))"
-                    text="''" 
-                    text_color="colors['white']"
-                    color="get_ship_color(ship_index)"
-                    hover_color="colors['white']"
-                    disabled_color="colors['white']"
-                    width="32"
-                    height="32"
-                    handle-ClickEvent="partial(on_ship_click, ship_index)"
+        <Layer>
+            <Column t-style="w['full'](window) | h['full'](window) | g[4]" handle-ComponentMountedEvent="on_mounted">
+                <RoundedRectLabelButton
+                    text="'Submit'"
+                    disabled="not_submitable"
+                    t-style="c['teal'][400] | hover_c['teal'][500] | disabled_c['slate'][500] | text_c['white'] | w[48] | h[12]"
+                    handle-ClickEvent="on_submit_button"
                 />
-            </Row>
-            <Column t-style="g[1]">
-                <Row t-for="col in range(unref(player_grid_col))" t-style="g[1]">
+                <Row t-style="g[1]">
                     <RoundedRectLabelButton 
-                        t-for="row in range(unref(player_grid_rows)[col])"
+                        t-for="ship_index in range(len(unref(player_ship)))"
                         text="''" 
                         text_color="colors['white']"
-                        color="get_tile_color(col, row)"
-                        hover_color="get_tile_color(col, row)"
+                        color="get_ship_color(ship_index)"
+                        hover_color="colors['white']"
                         disabled_color="colors['white']"
                         width="32"
                         height="32"
-                        handle-ClickEvent="partial(on_tile_click, col, row)"
-                        handle-ComponentMountedEvent="partial(on_tile_mounted, col, row)"
+                        handle-ClickEvent="partial(on_ship_click, ship_index)"
                     />
                 </Row>
-            </Column>
-            <Row t-style="g[4]">
-                <Column t-for="player_id, player_info in unref(store.game.players).items()">
-                    <Label
-                        text="'Submitted' if unref(check_submit(player_id)) else 'Not Submitted'"
-                        text_color="colors['white']" 
-                    />
-                    <Label
-                        text="player_info.name" 
-                        text_color="colors['white']" 
-                    />
+                <Column t-style="g[1]">
+                    <Row t-for="col in range(unref(player_grid_col))" t-style="g[1]">
+                        <RoundedRectLabelButton 
+                            t-for="row in range(unref(player_grid_rows)[col])"
+                            text="''" 
+                            text_color="colors['white']"
+                            color="get_tile_color(col, row)"
+                            hover_color="get_tile_color(col, row)"
+                            disabled_color="colors['white']"
+                            width="32"
+                            height="32"
+                            handle-ClickEvent="partial(on_tile_click, col, row)"
+                            handle-ComponentMountedEvent="partial(on_tile_mounted, col, row)"
+                        />
+                    </Row>
                 </Column>
-            </Row>
-        </Column>
+                <Row t-style="g[4]">
+                    <Column t-for="player_id, player_info in unref(store.game.players).items()">
+                        <Label
+                            text="'Submitted' if unref(check_submit(player_id)) else 'Not Submitted'"
+                            text_color="colors['white']" 
+                        />
+                        <Label
+                            text="player_info.name" 
+                            text_color="colors['white']" 
+                        />
+                    </Column>
+                </Row>
+            </Column>
+            <GameEndModal t-if="unref(store.game.result) is not None" window="window" client="client" />
+        </Layer>
         """,
         **kwargs,
     )

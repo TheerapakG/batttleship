@@ -11,6 +11,7 @@ from tgraphics.composables import use_window
 from tgraphics.style import c, text_c, hover_c, disabled_c, w, h, g
 
 from .. import store
+from ..component import game_end_modal
 from ...shared import models, shot_type
 from ...shared.utils import add, mat_mul_vec
 
@@ -264,70 +265,73 @@ def game(window: Window, **kwargs):
 
     return Component.render_xml(
         """
-        <Column t-style="w['full'](window) | h['full'](window) | g[4]" handle-ComponentMountedEvent="on_mounted">
-            <Row t-style="g[1]">
-                <RoundedRectLabelButton 
-                    t-for="shot_id, count in unref(store.game.shots).items()"
-                    text="shot_type.SHOT_VARIANTS[shot_id.id].text" 
-                    text_color="colors['white']"
-                    color="get_shot_color(shot_id)"
-                    hover_color="get_shot_hover_color(shot_id)"
-                    disabled_color="colors['slate'][300]"
-                    width="128"
-                    height="32"
-                    disabled="not unref(store.game.turn)"
-                    handle-ClickEvent="partial(on_shot_click, shot_id)"
-                />
-            </Row>
-            <Row t-style="g[4]">
-                <Column t-if="store.game.user_alive" t-style="g[1]">
-                    <Row t-for="col in range(unref(player_grid_col))" t-style="g[1]">
-                        <RoundedRect
-                            t-for="row in range(_expect_index_error(lambda: unref(player_grid_rows)[col], 0))"
-                            color="get_player_tile_color(col, row)"
-                            width="32"
-                            height="32"
-                        />
-                    </Row>
-                </Column>
-                <Column t-style="g[1]">
-                    <Row t-for="col in range(unref(current_grid_col))" t-style="g[1]">
-                        <RoundedRectLabelButton 
-                            t-for="row in range(_expect_index_error(lambda: unref(current_grid_rows)[col], 0))"
-                            text="''" 
-                            text_color="colors['white']"
-                            color="get_current_tile_color(col, row)"
-                            hover_color="get_current_tile_color(col, row)"
-                            disabled_color="get_current_tile_color(col, row)"
-                            width="32"
-                            height="32"
-                            handle-ClickEvent="partial(on_tile_click, col, row)"
-                            handle-ComponentMountedEvent="partial(on_tile_mounted, col, row)"
-                        />
-                    </Row>
-                </Column>
-            </Row>
-            <Row t-style="g[4]">
-                <RoundedRectLabelButton 
-                    t-for="player_info in unref(store.game.alive_players_not_user)"
-                    t-style="disabled_c['slate'][500] | text_c['white'] | w[48] | h[12]"
-                    color="colors['teal'][600] if unref(store.game.is_current_board_player(models.PlayerId.from_player_info(player_info))) else colors['teal'][400]"
-                    hover_color="colors['teal'][600] if unref(store.game.is_current_board_player(models.PlayerId.from_player_info(player_info))) else colors['teal'][500]"
-                    text="player_info.name"
-                    handle-ClickEvent="partial(on_player_click, player_info)"
-                />
-            </Row>
-            <Row>
-                <Label t-if="unref(store.game.turn)" text="str(round(unref(turn_timer)))" text_color="colors['white']"/>
-            </Row>
-            <Row t-style="g[4]">
-                <Label
-                    t-for="player_id, player_info in unref(store.game.players).items()"
-                    t-style="text_c['white']"
-                    text="f'{player_info.name}: {unref(store.game.get_player_point(player_id))} ({unref(store.game.get_player_score(player_id))})'"
-                />
-            </Row>
-        </Column>
+        <Layer>
+            <Column t-style="w['full'](window) | h['full'](window) | g[4]" handle-ComponentMountedEvent="on_mounted">
+                <Row t-style="g[1]">
+                    <RoundedRectLabelButton 
+                        t-for="shot_id, count in unref(store.game.shots).items()"
+                        text="shot_type.SHOT_VARIANTS[shot_id.id].text" 
+                        text_color="colors['white']"
+                        color="get_shot_color(shot_id)"
+                        hover_color="get_shot_hover_color(shot_id)"
+                        disabled_color="colors['slate'][300]"
+                        width="128"
+                        height="32"
+                        disabled="not unref(store.game.turn)"
+                        handle-ClickEvent="partial(on_shot_click, shot_id)"
+                    />
+                </Row>
+                <Row t-style="g[4]">
+                    <Column t-if="store.game.user_alive" t-style="g[1]">
+                        <Row t-for="col in range(unref(player_grid_col))" t-style="g[1]">
+                            <RoundedRect
+                                t-for="row in range(_expect_index_error(lambda: unref(player_grid_rows)[col], 0))"
+                                color="get_player_tile_color(col, row)"
+                                width="32"
+                                height="32"
+                            />
+                        </Row>
+                    </Column>
+                    <Column t-style="g[1]">
+                        <Row t-for="col in range(unref(current_grid_col))" t-style="g[1]">
+                            <RoundedRectLabelButton 
+                                t-for="row in range(_expect_index_error(lambda: unref(current_grid_rows)[col], 0))"
+                                text="''" 
+                                text_color="colors['white']"
+                                color="get_current_tile_color(col, row)"
+                                hover_color="get_current_tile_color(col, row)"
+                                disabled_color="get_current_tile_color(col, row)"
+                                width="32"
+                                height="32"
+                                handle-ClickEvent="partial(on_tile_click, col, row)"
+                                handle-ComponentMountedEvent="partial(on_tile_mounted, col, row)"
+                            />
+                        </Row>
+                    </Column>
+                </Row>
+                <Row t-style="g[4]">
+                    <RoundedRectLabelButton 
+                        t-for="player_info in unref(store.game.alive_players_not_user)"
+                        t-style="disabled_c['slate'][500] | text_c['white'] | w[48] | h[12]"
+                        color="colors['teal'][600] if unref(store.game.is_current_board_player(models.PlayerId.from_player_info(player_info))) else colors['teal'][400]"
+                        hover_color="colors['teal'][600] if unref(store.game.is_current_board_player(models.PlayerId.from_player_info(player_info))) else colors['teal'][500]"
+                        text="player_info.name"
+                        handle-ClickEvent="partial(on_player_click, player_info)"
+                    />
+                </Row>
+                <Row>
+                    <Label t-if="unref(store.game.turn)" text="str(round(unref(turn_timer)))" text_color="colors['white']"/>
+                </Row>
+                <Row t-style="g[4]">
+                    <Label
+                        t-for="player_id, player_info in unref(store.game.players).items()"
+                        t-style="text_c['white']"
+                        text="f'{player_info.name}: {unref(store.game.get_player_point(player_id))} ({unref(store.game.get_player_score(player_id))})'"
+                    />
+                </Row>
+            </Column>
+            <GameEndModal t-if="unref(store.game.result) is not None" window="window" client="client" />
+        </Layer>
         """,
         **kwargs,
     )

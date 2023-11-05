@@ -42,6 +42,10 @@ class BattleshipClient(Client):
         raise NotImplementedError()
 
     @subscribe
+    def on_room_delete(self) -> AsyncIterator[Empty]:
+        raise NotImplementedError()
+
+    @subscribe
     def on_room_player_ready(self) -> AsyncIterator[models.PlayerId]:
         raise NotImplementedError()
 
@@ -78,7 +82,7 @@ class BattleshipClient(Client):
         raise NotImplementedError()
 
     @subscribe
-    def on_game_end(self) -> AsyncIterator[list[models.PlayerInfo]]:
+    def on_game_end(self) -> AsyncIterator[models.GameEndData]:
         raise NotImplementedError()
 
     @subscribe

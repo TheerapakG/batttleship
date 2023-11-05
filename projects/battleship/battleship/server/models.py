@@ -78,11 +78,16 @@ class Room:
     async def do_room_reset(self, hard=False):
         self.phase = RoomPhase.SHIPSETUP
         if not self.lost_players or hard:
-            self.alive_players = [*self.players.values()]
+            self.alive_players = [p for p in self.players.values()]
             random.shuffle(self.alive_players)
             self.lost_players = []
         else:
-            self.alive_players = self.lost_players
+            self.alive_players = [
+                p_info
+                for p in self.lost_players
+                if (p_info := self.players.get(models.PlayerId.from_player_info(p)))
+                is not None
+            ]
             self.lost_players = []
         self.boards = dict()
         await self.do_cancel_next_player_task()
@@ -98,10 +103,17 @@ class Room:
                         )
                     )
 
+    async def _player_update_ranking(self, player_id: models.PlayerId, changes: int):
+        new_info = models.PlayerInfo.from_player(
+            await self.server._player_update_ranking(player_id, changes)
+        )
+        if player_id in self.players:
+            self.players[player_id] = new_info
+
     async def do_player_lost(self, player_id: models.PlayerId, remove: bool = False):
         player = self.players[player_id]
         if remove:
-            del self.players[models.PlayerId.from_player_info(player)]
+            del self.players[player_id]
         if player in self.alive_players:
             self.alive_players.remove(player)
             self.lost_players.append(player)
@@ -117,20 +129,42 @@ class Room:
                 )
         if len(self.alive_players) == 1:
             self.lost_players.append(self.alive_players.pop())
-            for player in self.lost_players:
-                for opponent in self.lost_players:
-                    pass
-            await self.do_room_reset()
+            changes = {}
+            if not self.start_private:
+                async with asyncio.TaskGroup() as tg:
+                    for i, player in enumerate(self.lost_players):
+                        change = sum(
+                            [
+                                player.rating_changes(p, win=True)
+                                for p in self.lost_players[:i]
+                            ]
+                        ) + sum(
+                            [
+                                player.rating_changes(p, win=False)
+                                for p in self.lost_players[i + 1 :]
+                            ]
+                        )
+                        changes[models.PlayerId.from_player_info(player)] = change
+                        tg.create_task(
+                            self._player_update_ranking(
+                                models.PlayerId.from_player_info(player), change
+                            )
+                        )
             async with asyncio.TaskGroup() as tg:
-                for player_info in self.players.values():
+                for player_id, player_info in self.players.items():
                     tg.create_task(
                         self.server.on_game_end(
                             self.server.known_player_session[
                                 models.PlayerId.from_player_info(player_info)
                             ],
-                            self.alive_players,
+                            models.GameEndData(
+                                models.PlayerId.from_player_info(self.lost_players[-1]),
+                                changes.get(player_id, 0),
+                                player_info,
+                            ),
                         )
                     )
+            await self.do_room_reset()
 
     async def remove_player(self, player_id: models.PlayerId):
         async with self.lock:
@@ -146,6 +180,8 @@ class Room:
                 case RoomPhase.SHIPSETUP | RoomPhase.PLAYING:
                     await self.do_player_lost(player_id, remove=True)
                     should_delete = len(self.players) < 2
+
+            self.server.off_session_leave(session, self.remove_session)
 
             if should_delete:
                 room_id = self.to_room_id()
@@ -168,6 +204,15 @@ class Room:
                             player_info,
                         )
                     )
+                    if should_delete:
+                        tg.create_task(
+                            self.server.on_room_delete(
+                                self.server.known_player_session[
+                                    models.PlayerId.from_player_info(other_player_info)
+                                ],
+                                Empty(),
+                            )
+                        )
 
     async def add_ready(self, player_id: models.PlayerId):
         async with self.lock:

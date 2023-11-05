@@ -1,3 +1,4 @@
+from dataclasses import replace, asdict
 from pathlib import Path
 
 from tgraphics.reactivity import Ref, computed, unref
@@ -30,3 +31,12 @@ def save(_player: models.Player):
     with open("./.data/user.json", "w+", encoding="utf-8") as f:
         f.write(converter.dumps(_player))
     player.value = _player
+
+
+def save_info(_player: models.PlayerInfo):
+    Path("./.data").mkdir(parents=True, exist_ok=True)
+    if (user := unref(player)) is not None:
+        new_user = replace(user, **asdict(_player))
+        with open("./.data/user.json", "w+", encoding="utf-8") as f:
+            f.write(converter.dumps(new_user))
+        player.value = new_user

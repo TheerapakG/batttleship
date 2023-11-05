@@ -12,7 +12,7 @@ from uuid import uuid4
 from dotenv import load_dotenv
 from tsocket.server import Server, Route, emit
 from tsocket.shared import Empty, ResponseError, Session
-from sqlalchemy import delete, insert, select
+from sqlalchemy import delete, insert, select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
 from . import db
@@ -42,6 +42,23 @@ class BattleshipServer(Server):
                 select(db.Player)
                 .where(db.Player.auth_token == args.auth_token)
                 .limit(1)
+            )
+            result = await db_session.execute(stmt)
+
+            if db_player := result.scalars().one_or_none():
+                return db_player.to_shared()
+            else:
+                raise ResponseError("not_found", b"")
+
+    async def _player_update_ranking(
+        self, player: models.PlayerId, changes: int
+    ) -> models.Player:
+        async with self.db_session_maker() as db_session:
+            stmt = (
+                update(db.Player)
+                .where(db.Player.id == player.id)
+                .values(rating=db.Player.rating + changes)
+                .returning(db.Player)
             )
             result = await db_session.execute(stmt)
 
@@ -148,6 +165,10 @@ class BattleshipServer(Server):
         raise NotImplementedError()
 
     @emit
+    async def on_room_delete(self, _session: Session, args: Empty):
+        raise NotImplementedError()
+
+    @emit
     async def on_room_player_ready(self, _session: Session, args: models.PlayerId):
         raise NotImplementedError()
 
@@ -186,7 +207,7 @@ class BattleshipServer(Server):
         raise NotImplementedError()
 
     @emit
-    async def on_game_end(self, _session: Session, args: list[models.PlayerInfo]):
+    async def on_game_end(self, _session: Session, args: models.GameEndData):
         raise NotImplementedError()
 
     @emit

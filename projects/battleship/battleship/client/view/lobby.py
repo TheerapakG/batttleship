@@ -57,13 +57,13 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
                 models.PlayerId.from_player_info(player_info): player_info
                 for player_info in unref(player_infos)
             }
+
+            await window.set_scene(ship_setup(window, client))
             await store.game.room_reset()
             store.game.player_points.value = {
                 models.PlayerId.from_player_info(player): Ref(0)
                 for player in unref(store.game.alive_players)
             }
-
-            await window.set_scene(ship_setup(window, client))
 
     def on_mounted(event: ComponentMountedEvent):
         # TODO: async component

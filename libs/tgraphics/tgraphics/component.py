@@ -155,7 +155,9 @@ class ElementComponentData:
     def get_init_vars(self, init_locals: dict[str, Any], override_vars: dict[str, Any]):
         init_vars = {
             k: computed(
-                _try_raise_render_error(k)(lambda v=v: eval(v, init_locals, {}))
+                lambda k=k, v=v: unref(
+                    _try_raise_render_error(k)(lambda v=v: eval(v, init_locals, {}))()
+                )
             )
             for k, v in self.props.items()
         } | override_vars

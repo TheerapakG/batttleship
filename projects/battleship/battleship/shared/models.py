@@ -25,20 +25,20 @@ class PlayerInfo(PlayerId):
     def from_player(cls, player: "Player"):
         return cls(player.id, player.name, player.rating)
 
+    def expected_win(self, other: "PlayerInfo"):
+        self_q = 10 ** (self.rating / 400)
+        other_q = 10 ** (other.rating / 400)
+        return self_q / (self_q + other_q)
+
+    def rating_changes(self, other: "PlayerInfo", win: bool):
+        return round(32 * ((1 if win else 0) - self.expected_win(other)))
+
 
 @dataclass(eq=True, frozen=True)
 class Player(PlayerInfo):
     admin: bool = field(hash=False, compare=False)
     auth_token: UUID = field(hash=False, compare=False)
     transfer_code: UUID | None = field(hash=False, compare=False)
-
-    def expected_win(self, other: "Player"):
-        self_q = 10 ** (self.rating / 400)
-        other_q = 10 ** (other.rating / 400)
-        return self_q / (self_q + other_q)
-
-    def rating_changes(self, other: "Player", win: bool):
-        return round(32 * ((1 if win else 0) - self.expected_win(other)))
 
 
 @define
@@ -189,6 +189,13 @@ class PlayerCreateArgs:
 class RoomPlayerSubmitData:
     player: PlayerId
     board: BoardId
+
+
+@dataclass
+class GameEndData:
+    win: PlayerId
+    rating_change: int
+    new_stat: PlayerInfo
 
 
 @dataclass
