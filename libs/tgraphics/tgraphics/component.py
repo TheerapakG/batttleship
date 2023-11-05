@@ -1140,7 +1140,7 @@ class ComponentMeta(type):
                             )()
 
                             _models = _override_values.get("models", []).copy()
-                            _models.append(result)
+                            _models.append(_model)
 
                             _ref_list = _override_values.get("_ref_list", []).copy()
                             _ref_list.append(result)
