@@ -39,6 +39,17 @@ class Player(PlayerInfo):
     admin: bool = field(hash=False, compare=False)
     auth_token: UUID = field(hash=False, compare=False)
     transfer_code: UUID | None = field(hash=False, compare=False)
+    ships: list["ShipVariantId"] = field(hash=False, compare=False)
+    emotes: list["EmoteVariantId"] = field(hash=False, compare=False)
+
+
+@dataclass(eq=True, frozen=True)
+class EmoteVariantId:
+    id: UUID  # pylint: disable=C0103
+
+    @classmethod
+    def from_emote_variant(cls, emote_variant: "EmoteVariantId"):
+        return cls(emote_variant.id)
 
 
 @define

@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from . import db
 from . import models as server_models
 from ..shared import models
+from ..shared.ship_type import NORMAL_SHIP_VARIANT
 from ..shared.logging import setup_logging
 
 
@@ -108,14 +109,14 @@ class BattleshipServer(Server):
         self, _session: Session, args: models.PlayerCreateArgs
     ) -> models.Player:
         async with self.db_session_maker() as db_session:
-            stmt = insert(db.Player).values(name=args.name).returning(db.Player)
-            result = await db_session.execute(stmt)
-            await db_session.commit()
+            db_player = db.Player(name=args.name)
+            db_player.ships = [
+                db.Ship(variant_id=NORMAL_SHIP_VARIANT.id) for _ in range(4)
+            ]
 
-            if db_player := result.scalars().one_or_none():
-                return db_player.to_shared()
-            else:
-                raise ResponseError("not_create", b"")
+            db_session.add(db_player)
+            await db_session.commit()
+            return db_player.to_shared()
 
     @Route.simple
     @ensure_session_player
@@ -317,4 +318,8 @@ class BattleshipServer(Server):
             (player_id := self.known_player_session_rev[session]) in room
         ):
             return await room.do_shot_submit(player_id, args.shot)
+        raise ResponseError("not_found", b"")
+
+    @Route.simple
+    async def gacha(self, session: Session) -> models.EmoteVariantId:
         raise ResponseError("not_found", b"")

@@ -18,6 +18,10 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
     player_infos = Ref(room.players)
     player_readies = Ref(set(room.readies))
 
+    emotes = Ref(
+        {models.PlayerId.from_player_info(player): Ref(None) for player in room.players}
+    )
+
     ready = Ref(False)
     class_ready = Ref(False)
 
@@ -25,6 +29,9 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
         return computed(
             lambda: "ready" if player_id in unref(player_readies) else "not ready"
         )
+
+    def get_player_emote(player_id: models.PlayerId):
+        return computed(lambda: unref(unref(emotes).get(player_id)))
 
     async def subscribe_player_join():
         async for player_info in client.on_room_join():
@@ -107,6 +114,11 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
                 handle-ComponentMountedEvent="on_mounted"
             >
                 <Column t-for="player_info in player_infos" t-style="g[3]">
+                    <Layer>
+                        <Image 
+                            t-if="unref(get_player_emote(models.PlayerId.from_player_info(player_info))) is not None" 
+                            name="f'emote_{unref(get_player_emote(models.PlayerId.from_player_info(player_info))).name}.png'"
+                        />
                         <RoundedRectLabelButton
                             t-if="store.user.is_player(models.PlayerId.from_player_info(player_info))"
                             text="'Ready'"
@@ -134,18 +146,19 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
                                 handle-ClickEvent="class_select"
                             />
                         </Row>
-                    <Label
-                        text="get_player_ready_text(models.PlayerId.from_player_info(player_info))" 
-                        text_color="colors['white']" 
-                    />
-                    <Label
-                        text="f'rating: {str(player_info.rating)}'" 
-                        text_color="colors['white']" 
-                    />
-                    <Label
-                        text="player_info.name" 
-                        text_color="colors['white']" 
-                    />
+                        <Label
+                            text="get_player_ready_text(models.PlayerId.from_player_info(player_info))" 
+                            text_color="colors['white']" 
+                        />
+                        <Label
+                            text="f'rating: {str(player_info.rating)}'" 
+                            text_color="colors['white']" 
+                        />
+                        <Label
+                            text="player_info.name" 
+                            text_color="colors['white']" 
+                        />
+                    </Layer>
                 </Column>
             </Row>
         </Layer>
