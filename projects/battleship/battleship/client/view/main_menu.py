@@ -70,6 +70,11 @@ def main_menu(
 
         await window.set_scene(profile(window, client))
 
+    async def on_gacha_button(_e):
+        from .gacha import gacha
+
+        await window.set_scene(gacha(window, client))
+
     return Component.render_xml(
         """
         <Layer handle-ComponentMountedEvent="on_mounted">
@@ -86,12 +91,10 @@ def main_menu(
                 </Pad>
             </Layer>
             <Column 
-                t-style="w['full'](window) | h['full'](window) | g[12]"
+                t-style="w['full'](window) | h['full'](window) | g[8]"
             >
+                <Label text="f'There are currently {unref(online_count)} player(s) online.'" text_color="colors['white']" />
                 <Column t-style="g[2]">
-                    <Pad pad_top="90">
-                        <Label text="f'There are currently {unref(online_count)} player(s) online.'" text_color="colors['white']" />
-                    </Pad>
                     <Layer>
                         <Pad pad_bottom="20">
                             <Pad pad_right="310">
@@ -131,20 +134,19 @@ def main_menu(
                             </Pad>
                         </Row>    
                     </Layer>
-                    <Layer>
-                        <Pad pad_top="25">
-                            <RoundedRectLabelButton 
-                                text="'Public Match'"
-                                t-style="c['teal'][400] | hover_c['teal'][500] | disabled_c['slate'][500] | text_c['white'] | w[64] | h[12]"
-                                handle-ClickEvent="on_public_room_match_button"
-                            />
-                        </Pad>
-                    </Layer>
+                    <RoundedRectLabelButton 
+                        text="'Public Match'"
+                        t-style="c['teal'][400] | hover_c['teal'][500] | disabled_c['slate'][500] | text_c['white'] | w[64] | h[12]"
+                        handle-ClickEvent="on_public_room_match_button"
+                    />
+                    <RoundedRectLabelButton 
+                        text="'Gacha'"
+                        t-style="c['teal'][400] | hover_c['teal'][500] | disabled_c['slate'][500] | text_c['white'] | w[64] | h[12]"
+                        handle-ClickEvent="on_gacha_button"
+                    />
                 </Column>
-                    <Label text="'BATTLESHIP'" bold="True" text_color="colors['white']" font_size="88" />
-                <Column t-style="g[1]">
-                    <Label text="f'Welcome, {unref(store.user.name)}'" />
-                </Column>
+                <Label text="'BATTLESHIP'" bold="True" text_color="colors['white']" font_size="88" />
+                <Label text="f'Welcome, {unref(store.user.name)}'" />
             </Column>
             <CreatePlayerModal t-if="unref(store.user.player) is None" window="window" client="client" />
         </Layer>

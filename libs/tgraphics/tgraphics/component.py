@@ -757,16 +757,16 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
 
     @event_handler(ComponentUnmountedEvent)
     async def component_unmounted_handler(self, _: ComponentUnmountedEvent):
+        for watcher in self.bound_watchers:
+            watcher.unwatch()
+        self.bound_watchers.clear()
         for task in self.bound_tasks:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
         self.bound_tasks.clear()
-        for watcher in self.bound_watchers:
-            watcher.unwatch()
         for child in unref(use_children(self)):
             await unref(child).capture(ComponentUnmountedEvent(unref(child)))
-        self.bound_watchers.clear()
         self.before_mounted_data.value = None
         self.after_mounted_data.value = None
         self.mount_duration.value = 0
@@ -1565,9 +1565,13 @@ class LayerInstance(ComponentInstance["Layer"]):
 
             pad_x = computed(
                 lambda: (unref(use_width(self)) - unref(use_width(child))) / 2
+                if unref(self.component.center_x)
+                else 0
             )
             pad_y = computed(
                 lambda: (unref(use_height(self)) - unref(use_height(child))) / 2
+                if unref(self.component.center_y)
+                else 0
             )
 
             off_x = computed(lambda: unref(pad_x) * unref(use_acc_scale_x(self)))
@@ -1640,6 +1644,8 @@ class Layer(Component):
     children: list["Component" | ReadRef["Component"]] | ReadRef[
         list["Component" | ReadRef["Component"]]
     ] = field(default_factory=list["Component" | ReadRef["Component"]])
+    center_x: bool | ReadRef[bool] = field(default=True)
+    center_y: bool | ReadRef[bool] = field(default=True)
 
     def get_instance(self):
         return LayerInstance(component=self)
@@ -2242,12 +2248,6 @@ class ImageInstance(ComponentInstance["Image"]):
         self.after_mounted_data.value = AfterMountedComponentInstanceData(
             width, height, []
         )
-
-    @event_handler(ComponentUnmountedEvent)
-    async def component_unmounted_handler(self, event: ComponentUnmountedEvent):
-        super().component_unmounted_handler(event)
-        self._sprite.delete()
-        del self._sprite
 
 
 @dataclass
@@ -3130,6 +3130,72 @@ def rounded_rect_label_button(
                 italic="italic" 
                 width="label_width" 
                 height="label_height" 
+            />
+        </Layer>
+        """,
+        **kwargs,
+    )
+
+
+@Component.register("RoundedRectImageButton")
+def rounded_rect_image_button(
+    name: str | ReadRef[str],
+    color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]],
+    hover_color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]],
+    disabled_color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]],
+    width: float | ReadRef[float],
+    height: float | ReadRef[float],
+    radius_bottom_left: int | float | None | ReadRef[int | float | None] = None,
+    radius_bottom_right: int | float | None | ReadRef[int | float | None] = None,
+    radius_top_left: int | float | None | ReadRef[int | float | None] = None,
+    radius_top_right: int | float | None | ReadRef[int | float | None] = None,
+    disabled: bool | ReadRef[bool] = False,
+    **kwargs,
+):
+    hover = Ref(False)
+    bg_color = computed(
+        lambda: unref(disabled_color)
+        if unref(disabled)
+        else (unref(hover_color) if unref(hover) else unref(color))
+    )
+
+    image_diff = computed(
+        lambda: min(unref(width), unref(height)) * (1 - math.sqrt(1 / 2))
+    )
+
+    image_width = computed(lambda: unref(width) - unref(image_diff))
+    image_height = computed(lambda: unref(height) - unref(image_diff))
+
+    def on_mounted(event: ComponentMountedEvent):
+        event.instance.bound_watchers.update(
+            [
+                w
+                for w in [Watcher.ifref(use_hover(event.instance), hover.set_value)]
+                if w is not None
+            ]
+        )
+
+    async def on_click(event: MousePressEvent):
+        if not (unref(event.instance.component.disabled)):
+            await event.instance.capture(ClickEvent(event.instance))
+        return StopPropagate
+
+    return Component.render_xml(
+        """
+        <Layer handle-ComponentMountedEvent="on_mounted" handle-MousePressEvent="on_click" disabled="disabled">
+            <RoundedRect 
+                width="width" 
+                height="height" 
+                color="bg_color" 
+                radius_bottom_left="radius_bottom_left" 
+                radius_bottom_right="radius_bottom_right"
+                radius_top_left="radius_top_left"
+                radius_top_right="radius_top_right"
+            />
+            <Image 
+                name="name"
+                width="image_width" 
+                height="image_height" 
             />
         </Layer>
         """,

@@ -39,8 +39,9 @@ class Player(PlayerInfo):
     admin: bool = field(hash=False, compare=False)
     auth_token: UUID = field(hash=False, compare=False)
     transfer_code: UUID | None = field(hash=False, compare=False)
-    ships: list["ShipVariantId"] = field(hash=False, compare=False)
-    emotes: list["EmoteVariantId"] = field(hash=False, compare=False)
+    coins: int = field(hash=False, compare=False)
+    ships: list[UUID] = field(hash=False, compare=False)
+    emotes: list[UUID] = field(hash=False, compare=False)
 
 
 @dataclass(eq=True, frozen=True)
@@ -230,3 +231,21 @@ class DisplayBoardArgs:
 class ShotSubmitArgs:
     room: RoomId
     shot: Shot
+
+
+@dataclass
+class EmoteDisplayArgs:
+    room: RoomId
+    emote: EmoteVariantId
+
+
+@dataclass
+class EmoteDisplayData:
+    player: PlayerId
+    emote: EmoteVariantId
+
+
+@dataclass
+class GachaResult:
+    player: Player
+    emote: EmoteVariantId

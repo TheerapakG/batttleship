@@ -8,6 +8,7 @@ from tgraphics.event import ComponentMountedEvent
 from tgraphics.reactivity import Ref, computed, unref
 from tgraphics.style import c, text_c, hover_c, disabled_c, w, h, r_b, r_t, r_l, r_r, g
 
+from ..component import emote_picker
 from .. import store
 from ..client import BattleshipClient
 from ...shared import models
@@ -15,12 +16,12 @@ from ...shared import models
 
 @Component.register("Lobby")
 def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwargs):
+    store.game.window.value = window
+    store.game.client.value = client
+    store.game.room.value = models.RoomId.from_room_info(room)
+
     player_infos = Ref(room.players)
     player_readies = Ref(set(room.readies))
-
-    emotes = Ref(
-        {models.PlayerId.from_player_info(player): Ref(None) for player in room.players}
-    )
 
     ready = Ref(False)
     class_ready = Ref(False)
@@ -29,9 +30,6 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
         return computed(
             lambda: "ready" if player_id in unref(player_readies) else "not ready"
         )
-
-    def get_player_emote(player_id: models.PlayerId):
-        return computed(lambda: unref(unref(emotes).get(player_id)))
 
     async def subscribe_player_join():
         async for player_info in client.on_room_join():
@@ -57,9 +55,6 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
         async for _ in client.on_room_ready():
             from .ship_setup import ship_setup
 
-            store.game.window.value = window
-            store.game.client.value = client
-            store.game.room.value = models.RoomId.from_room_info(room)
             store.game.players.value = {
                 models.PlayerId.from_player_info(player_info): player_info
                 for player_info in unref(player_infos)
@@ -80,13 +75,16 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
                 asyncio.create_task(subscribe_player_leave()),
                 asyncio.create_task(subscribe_room_player_ready()),
                 asyncio.create_task(subscribe_room_ready()),
+                asyncio.create_task(store.game.subscribe_emote_display()),
             ]
         )
 
     async def return_button(_e):
+        await client.room_leave(models.RoomId.from_room_info(room))
+
         from .main_menu import main_menu
 
-        # await window.set_scene(main_menu(window, client))
+        await window.set_scene(main_menu(window, client))
 
     async def on_ready_button(_e):
         ready.value = True
@@ -99,68 +97,66 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
     return Component.render_xml(
         """
         <Layer handle-ComponentMountedEvent="on_mounted">
-            <Pad pad_right="800">
-                <Pad pad_bottom="440">
-                    <RoundedRectLabelButton 
-                        text="'Return'"
-                        font_size="20"
-                        t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[24] | h[10]"
-                        handle-ClickEvent="return_button"
-                    />
-                </Pad>
+            <Pad pad_right="800" pad_bottom="440">
+                <RoundedRectLabelButton 
+                    text="'Return'"
+                    font_size="20"
+                    t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[24] | h[10]"
+                    handle-ClickEvent="return_button"
+                />
             </Pad>
-            <Row 
-                t-style="w['full'](window) | h['full'](window) | g[4]"
-                handle-ComponentMountedEvent="on_mounted"
-            >
-                <Column t-for="player_info in player_infos" t-style="g[3]">
-                    <Layer>
+            <Column t-style="w['full'](window) | h['full'](window) | g[4]">
+                <EmotePicker client="client" />
+                <Row t-style="g[4]">
+                    <Layer t-for="player_info in player_infos">
+                        <Column t-style="w[48] | h[64] | g[3]">
+                            <RoundedRectLabelButton
+                                t-if="store.user.is_player(models.PlayerId.from_player_info(player_info))"
+                                text="'Ready'"
+                                disabled="not(unref(ready)^unref(class_ready))"
+                                t-style="c['teal'][400] | hover_c['teal'][500] | disabled_c['slate'][500] | text_c['white'] | w[48] | h[12]"
+                                handle-ClickEvent="on_ready_button"
+                            />
+                            <Row t-if="store.user.is_player(models.PlayerId.from_player_info(player_info))" t-style="g[4]">
+                                <RoundedRectLabelButton 
+                                    text="'NAVY'"
+                                    disabled="class_ready"
+                                    t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[12] | h[12]"
+                                    handle-ClickEvent="class_select"
+                                />
+                                <RoundedRectLabelButton 
+                                    text="'Scout'"
+                                    disabled="class_ready"
+                                    t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[12] | h[12]"
+                                    handle-ClickEvent="class_select"
+                                />
+                                <RoundedRectLabelButton 
+                                    text="'Pirate'"
+                                    disabled="class_ready"
+                                    t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[12] | h[12]"
+                                    handle-ClickEvent="class_select"
+                                />
+                            </Row>
+                            <Label
+                                text="get_player_ready_text(models.PlayerId.from_player_info(player_info))" 
+                                text_color="colors['white']" 
+                            />
+                            <Label
+                                text="f'rating: {str(player_info.rating)}'" 
+                                text_color="colors['white']" 
+                            />
+                            <Label
+                                text="player_info.name" 
+                                text_color="colors['white']" 
+                            />
+                        </Column>
                         <Image 
-                            t-if="unref(get_player_emote(models.PlayerId.from_player_info(player_info))) is not None" 
-                            name="f'emote_{unref(get_player_emote(models.PlayerId.from_player_info(player_info))).name}.png'"
-                        />
-                        <RoundedRectLabelButton
-                            t-if="store.user.is_player(models.PlayerId.from_player_info(player_info))"
-                            text="'Ready'"
-                            disabled="not(unref(ready)^unref(class_ready))"
-                            t-style="c['teal'][400] | hover_c['teal'][500] | disabled_c['slate'][500] | text_c['white'] | w[48] | h[12]"
-                            handle-ClickEvent="on_ready_button"
-                        />
-                        <Row t-if="store.user.is_player(models.PlayerId.from_player_info(player_info))" t-style="g[4]">
-                            <RoundedRectLabelButton 
-                                text="'NAVY'"
-                                disabled="class_ready"
-                                t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[12] | h[12]"
-                                handle-ClickEvent="class_select"
-                            />
-                            <RoundedRectLabelButton 
-                                text="'Scout'"
-                                disabled="class_ready"
-                                t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[12] | h[12]"
-                                handle-ClickEvent="class_select"
-                            />
-                            <RoundedRectLabelButton 
-                                text="'Pirate'"
-                                disabled="class_ready"
-                                t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[12] | h[12]"
-                                handle-ClickEvent="class_select"
-                            />
-                        </Row>
-                        <Label
-                            text="get_player_ready_text(models.PlayerId.from_player_info(player_info))" 
-                            text_color="colors['white']" 
-                        />
-                        <Label
-                            text="f'rating: {str(player_info.rating)}'" 
-                            text_color="colors['white']" 
-                        />
-                        <Label
-                            text="player_info.name" 
-                            text_color="colors['white']" 
+                            t-if="unref(store.game.get_player_emote(models.PlayerId.from_player_info(player_info))) is not None" 
+                            name="unref(store.game.get_player_emote(models.PlayerId.from_player_info(player_info)))"
                         />
                     </Layer>
-                </Column>
-            </Row>
+                </Row>
+            </Column>
         </Layer>
         """,
         **kwargs,

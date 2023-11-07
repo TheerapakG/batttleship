@@ -1,3 +1,4 @@
+from cattrs import ClassValidationError
 from dataclasses import replace, asdict
 from pathlib import Path
 
@@ -22,8 +23,11 @@ def is_player(_player: models.PlayerId):
 
 def load():
     Path("./.data").mkdir(parents=True, exist_ok=True)
-    with open("./.data/user.json", encoding="utf-8") as f:
-        player.value = converter.loads(f.read(), models.Player)
+    try:
+        with open("./.data/user.json", encoding="utf-8") as f:
+            player.value = converter.loads(f.read(), models.Player)
+    except ClassValidationError:
+        pass
 
 
 def save(_player: models.Player):
@@ -31,6 +35,7 @@ def save(_player: models.Player):
     with open("./.data/user.json", "w+", encoding="utf-8") as f:
         f.write(converter.dumps(_player))
     player.value = _player
+    player.update()
 
 
 def save_info(_player: models.PlayerInfo):
@@ -40,3 +45,4 @@ def save_info(_player: models.PlayerInfo):
         with open("./.data/user.json", "w+", encoding="utf-8") as f:
             f.write(converter.dumps(new_user))
         player.value = new_user
+        player.update()

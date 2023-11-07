@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
 from . import db
 from . import models as server_models
-from ..shared import models
+from ..shared import models, emote_type
 from ..shared.ship_type import NORMAL_SHIP_VARIANT
 from ..shared.logging import setup_logging
 
@@ -47,7 +47,7 @@ class BattleshipServer(Server):
             result = await db_session.execute(stmt)
 
             if db_player := result.scalars().one_or_none():
-                return db_player.to_shared()
+                return await db_player.to_shared(db_session)
             else:
                 raise ResponseError("not_found", b"")
 
@@ -64,7 +64,7 @@ class BattleshipServer(Server):
             result = await db_session.execute(stmt)
 
             if db_player := result.scalars().one_or_none():
-                return db_player.to_shared()
+                return await db_player.to_shared(db_session)
             else:
                 raise ResponseError("not_found", b"")
 
@@ -116,7 +116,7 @@ class BattleshipServer(Server):
 
             db_session.add(db_player)
             await db_session.commit()
-            return db_player.to_shared()
+            return await db_player.to_shared(db_session)
 
     @Route.simple
     @ensure_session_player
@@ -134,7 +134,9 @@ class BattleshipServer(Server):
             result = await db_session.execute(stmt)
 
             if db_player := result.scalars().one_or_none():
-                return models.PlayerInfo.from_player(db_player.to_shared())
+                return models.PlayerInfo.from_player(
+                    await db_player.to_shared(db_session)
+                )
             else:
                 raise ResponseError("not_found", b"")
 
@@ -153,7 +155,7 @@ class BattleshipServer(Server):
             await db_session.commit()
 
             if db_player := result.scalars().one_or_none():
-                return db_player.to_shared()
+                return await db_player.to_shared(db_session)
             else:
                 raise ResponseError("not_found", b"")
 
@@ -213,6 +215,10 @@ class BattleshipServer(Server):
 
     @emit
     async def on_game_reset(self, _session: Session, args: Empty):
+        raise NotImplementedError()
+
+    @emit
+    async def on_emote_display(self, _session: Session, args: models.EmoteDisplayData):
         raise NotImplementedError()
 
     @Route.simple
@@ -321,5 +327,43 @@ class BattleshipServer(Server):
         raise ResponseError("not_found", b"")
 
     @Route.simple
-    async def gacha(self, session: Session) -> models.EmoteVariantId:
+    async def emote_display(
+        self, session: Session, args: models.EmoteDisplayArgs
+    ) -> Empty:
+        if (room := self.rooms.get(args.room, None)) and (
+            (player_id := self.known_player_session_rev[session]) in room
+        ):
+            await room.do_emote_display(player_id, args.emote)
+            return Empty()
         raise ResponseError("not_found", b"")
+
+    def _gacha(self, db_session: AsyncSession, db_player: db.Player):
+        emote = random.choice([*emote_type.EMOTE_VARIANTS.keys()])
+        db_player.coins -= 100
+        db_player.emotes.append(db.Emote(variant_id=emote))
+        db_session.add(db_player)
+        return emote
+
+    @Route.simple
+    @ensure_session_player
+    async def gacha(
+        self, session: Session, args: models.BearingPlayerAuth
+    ) -> models.GachaResult:
+        async with self.db_session_maker() as db_session:
+            stmt = (
+                select(db.Player)
+                .where(db.Player.auth_token == args.auth_token, db.Player.coins >= 100)
+                .limit(1)
+            )
+            result = await db_session.execute(stmt)
+
+            if (db_player := result.scalars().one_or_none()) is not None:
+                emote = await db_session.run_sync(
+                    lambda _: self._gacha(db_session, db_player)
+                )
+                await db_session.commit()
+                return models.GachaResult(
+                    await db_player.to_shared(db_session), models.EmoteVariantId(emote)
+                )
+            else:
+                raise ResponseError("not_found", b"")

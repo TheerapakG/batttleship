@@ -89,6 +89,10 @@ class BattleshipClient(Client):
     def on_game_reset(self) -> AsyncIterator[Empty]:
         raise NotImplementedError()
 
+    @subscribe
+    def on_emote_display(self) -> AsyncIterator[models.EmoteDisplayData]:
+        raise NotImplementedError()
+
     @Route.simple
     async def room_match(self, args: models.BearingPlayerAuth) -> models.RoomInfo:
         raise NotImplementedError()
@@ -127,4 +131,12 @@ class BattleshipClient(Client):
 
     @Route.simple
     async def shot_submit(self, args: models.ShotSubmitArgs) -> models.ShotResult:
+        raise NotImplementedError()
+
+    @Route.simple
+    async def emote_display(self, args: models.EmoteDisplayArgs) -> Empty:
+        raise NotImplementedError()
+
+    @Route.simple
+    async def gacha(self, args: models.BearingPlayerAuth) -> models.GachaResult:
         raise NotImplementedError()

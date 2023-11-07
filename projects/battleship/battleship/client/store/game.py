@@ -3,7 +3,7 @@ from contextlib import suppress
 from copy import deepcopy
 from dataclasses import replace
 from functools import partial
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from pyglet.media import Player
 
@@ -12,12 +12,12 @@ from tgraphics.reactivity import Ref, computed, unref
 
 from . import user
 from ..client import BattleshipClient
-from ...shared import models, ship_type, shot_type
+from ...shared import models, ship_type, shot_type, emote_type
 
 media_player = Player()
 
-hit_sound = loader.media("hit.wav", False)
-miss_sound = loader.media("miss.wav", False)
+hit_sound = loader.media("sfx/hit.wav", False)
+miss_sound = loader.media("sfx/miss.wav", False)
 
 window: Ref[Window | None] = Ref(None)
 client: Ref[BattleshipClient | None] = Ref(None)
@@ -30,6 +30,19 @@ dead_players = Ref(list[models.PlayerInfo]())
 
 player_scores = Ref(dict[models.PlayerId, Ref[int]]())
 player_points = Ref(dict[models.PlayerId, Ref[int]]())
+
+emotes = Ref(dict[models.PlayerId, tuple[models.EmoteVariantId, UUID]]())
+
+
+def get_player_emote(player_id: models.PlayerId):
+    return computed(
+        lambda: emote_type.EMOTE_VARIANTS[tup[0].id].name
+        if (tup := unref(emotes).get(player_id)) is not None
+        else None
+    )
+
+
+from tgraphics.reactivity import Watcher
 
 
 def _get_player_score(player: models.PlayerId):
@@ -324,6 +337,21 @@ async def subscribe_game_reset():
         asyncio.create_task(do_game_reset())
 
 
+async def do_emote_reset(player: models.PlayerId, u: UUID):
+    await asyncio.sleep(3)
+    if emotes.value[player][1] == u:
+        del emotes.value[player]
+        emotes.update()
+
+
+async def subscribe_emote_display():
+    async for emote_display in unref(client).on_emote_display():
+        u = uuid4()
+        emotes.value[emote_display.player] = (emote_display.emote, u)
+        emotes.update()
+        asyncio.create_task(do_emote_reset(emote_display.player, u))
+
+
 result: Ref[models.GameEndData | None] = Ref(None)
 
 
@@ -346,4 +374,5 @@ def get_tasks():
         asyncio.create_task(subscribe_shot_board()),
         asyncio.create_task(subscribe_game_reset()),
         asyncio.create_task(subscribe_game_end()),
+        asyncio.create_task(subscribe_emote_display()),
     ]

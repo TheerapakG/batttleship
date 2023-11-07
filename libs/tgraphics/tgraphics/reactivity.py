@@ -85,9 +85,12 @@ class Effect:
             try:
                 while True:
                     update = Effect.update_queue.popleft()
-                    if (u := update()) is not None:
+                    if (update in Effect.update_set) and ((u := update()) is not None):
                         u.trigger()
-                    Effect.update_set.remove(update)
+                    try:
+                        Effect.update_set.remove(update)
+                    except KeyError:
+                        pass
             except IndexError:
                 pass
 
@@ -679,6 +682,10 @@ class Watcher:
                 source.watchers.remove(self)
             except KeyError:
                 pass
+        try:
+            Effect.update_set.remove(weakref.ref(self))
+        except KeyError:
+            pass
 
     def trigger(self):
         with Effect.track_barrier():

@@ -418,6 +418,20 @@ class Room:
             # TODO
             raise Exception()
 
+    async def do_emote_display(
+        self, player: models.PlayerId, emote: models.EmoteVariantId
+    ):
+        async with asyncio.TaskGroup() as tg:
+            for player_info in self.players.values():
+                tg.create_task(
+                    self.server.on_emote_display(
+                        self.server.known_player_session[
+                            models.PlayerId.from_player_info(player_info)
+                        ],
+                        models.EmoteDisplayData(player, emote),
+                    )
+                )
+
     def to_room_id(self):
         return models.RoomId(self.id)
 
