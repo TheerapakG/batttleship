@@ -3,7 +3,9 @@ from tgraphics.reactivity import Ref, computed, unref
 from tgraphics.component import loader
 
 media_player = Player()
+media_player.loop = True
 bgm_volume = Ref(0.5)
+
 menu_bgm = loader.media("bgm/menu.wav", True)
 
 

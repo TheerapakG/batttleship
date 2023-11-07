@@ -86,7 +86,7 @@ class BattleshipServer(Server):
             if (
                 known_session := self.known_player_session.get(player_id, None)
             ) is not None:
-                if known_session != session:
+                if known_session.id != session.id:
                     raise ResponseError("player_in_other_session", b"")
             else:
                 self.known_player_session[player_id] = session
