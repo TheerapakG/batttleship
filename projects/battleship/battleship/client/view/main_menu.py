@@ -79,6 +79,11 @@ def main_menu(name: str | None = None, **kwargs):
 
         await store.ctx.set_scene(gacha())
 
+    async def on_setting_button(_e):
+        from .settings import settings
+
+        await store.ctx.set_scene(settings())
+
     return Component.render_xml(
         """
         <Layer handle-ComponentMountedEvent="on_mounted">
@@ -142,6 +147,11 @@ def main_menu(name: str | None = None, **kwargs):
                         text="'Public Match'"
                         t-style="c['teal'][400] | hover_c['teal'][500] | disabled_c['slate'][500] | text_c['white'] | w[64] | h[12]"
                         handle-ClickEvent="on_public_room_match_button"
+                    />
+                    <RoundedRectLabelButton 
+                        text="'Setting'"
+                        t-style="c['teal'][400] | hover_c['teal'][500] | disabled_c['slate'][500] | text_c['white'] | w[64] | h[12]"
+                        handle-ClickEvent="on_setting_button"
                     />
                     <RoundedRectLabelButton 
                         text="'Gacha'"

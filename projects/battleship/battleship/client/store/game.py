@@ -18,6 +18,7 @@ media_player = Player()
 
 hit_sound = loader.media("sfx/hit.wav", False)
 miss_sound = loader.media("sfx/miss.wav", False)
+sfx_volume = Ref(1.0)
 
 room: Ref[models.RoomId | None] = Ref(None)
 
