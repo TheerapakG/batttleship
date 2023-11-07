@@ -39,9 +39,6 @@ def get_player_emote(player_id: models.PlayerId):
     )
 
 
-from tgraphics.reactivity import Watcher
-
-
 def _get_player_score(player: models.PlayerId):
     if (player_ref := unref(player_scores).get(player)) is None:
         return 0

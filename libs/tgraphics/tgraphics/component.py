@@ -569,8 +569,11 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
     def __hash__(self) -> int:
         return id(self)
 
-    def _before_draw(self, _dt: float):
+    async def _set_mount_duration(self, _dt: float):
         self.mount_duration.value = self.mount_duration.value + _dt
+
+    def _before_draw(self, _dt: float):
+        loop.create_task(self._set_mount_duration(_dt))
 
     def _draw(self, _dt: float):
         pass

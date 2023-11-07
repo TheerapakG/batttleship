@@ -16,9 +16,11 @@ def game_end_overlay(**kwargs):
     window = store.ctx.use_window()
 
     duration = Ref[float](0)
-    duration_in_clamped_ratio = computed(lambda: min(unref(duration), 3) / 3)
-    duration_zoom_clamped_ratio = computed(
+    duration_in_clamped_ratio = computed(
         lambda: (min(max(unref(duration), 3), 6) - 3) / 3
+    )
+    duration_zoom_clamped_ratio = computed(
+        lambda: (min(max(unref(duration), 6), 9) - 6) / 3
     )
 
     async def on_mounted(event: ComponentMountedEvent):
@@ -82,7 +84,7 @@ def game_end_overlay(**kwargs):
                         </Offset>
                     </Column>
                 </Column>
-                <Column t-style="g[16]">
+                <Column t-if="unref(duration) > 9" t-style="g[16]">
                     <Column t-style="g[8]">
                         <Row t-style="g[4]">
                             <RoundedRectLabelButton 

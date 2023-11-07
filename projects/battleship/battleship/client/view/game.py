@@ -283,7 +283,7 @@ def game(**kwargs):
                     <RoundedRectLabelButton 
                         text="'Surrender'"
                         font_size="20"
-                        t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[24] | h[10]"
+                        t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[28] | h[10]"
                         handle-ClickEvent="surrender_button"
                     />
                 </Pad>

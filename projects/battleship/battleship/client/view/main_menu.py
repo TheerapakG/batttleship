@@ -31,6 +31,7 @@ def main_menu(name: str | None = None, **kwargs):
                 await asyncio.sleep(1.0)
 
     async def on_mounted(event: ComponentMountedEvent):
+        store.bgm.set_music(store.bgm.menu_bgm)
         if (client := unref(store.ctx.client)) is not None and name is not None:
             player = await client.player_create(models.PlayerCreateArgs(name))
             store.user.save(player)
