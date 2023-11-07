@@ -1,8 +1,10 @@
 from tgraphics.color import colors, with_alpha
 from tgraphics.event import Event
-from tgraphics.style import c, text_c, w, h, r_b, r_t
-from tgraphics.component import Component, Window
+from tgraphics.style import *
+from tgraphics.component import Component
 from tgraphics.reactivity import ReadRef
+
+from .. import store
 
 
 class PlayerCreatedEvent(Event):
@@ -11,11 +13,12 @@ class PlayerCreatedEvent(Event):
 
 @Component.register("Modal")
 def modal(
-    window: Window,
     name: str | ReadRef[str],
     children: list[Component] | ReadRef[list[Component]],
     **kwargs
 ):
+    window = store.ctx.use_window()
+
     return Component.render_xml(
         """
         <Layer>

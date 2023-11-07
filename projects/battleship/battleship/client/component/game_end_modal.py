@@ -1,15 +1,13 @@
 from tgraphics.color import colors, with_alpha
+from tgraphics.component import Component, ClickEvent
 from tgraphics.event import Event
-from tgraphics.style import c, text_c, hover_c, disabled_c, w, h, r_b, r_t, g
-from tgraphics.component import Component, Window, ClickEvent
-from tgraphics.reactivity import Ref, unref
+from tgraphics.style import *
+from tgraphics.reactivity import computed, unref
 
 from tsocket.shared import ResponseError
 
 from . import modal
 from .. import store
-from ..client import BattleshipClient
-from ...shared import models
 
 
 class PlayerCreatedEvent(Event):
@@ -17,27 +15,37 @@ class PlayerCreatedEvent(Event):
 
 
 @Component.register("GameEndModal")
-def game_end_modal(window: Window, client: BattleshipClient, **kwargs):
+def game_end_modal(**kwargs):
+    win_player = computed(
+        lambda: unref(store.game.players).get(player)
+        if (player := unref(store.game.result).win) is not None
+        else None
+    )
+
     async def on_rematch_button(event: ClickEvent):
         from ..view.ship_setup import ship_setup
 
-        await unref(window).set_scene(ship_setup(window, client))
+        await store.ctx.set_scene(ship_setup())
         await store.game.room_reset()
 
     async def on_return_button(event: ClickEvent):
-        if not unref(store.game.room_delete):
+        if (
+            (client := unref(store.ctx.client)) is not None
+            and (room := unref(store.game.room)) is not None
+            and not unref(store.game.room_delete)
+        ):
             try:
-                await client.room_leave(unref(store.game.room))
+                await client.room_leave(room)
             except ResponseError:
                 pass  # happens if room closes server side while we were sending
 
         from ..view.main_menu import main_menu
 
-        await window.set_scene(main_menu(window, client))
+        await store.ctx.set_scene(main_menu())
 
     return Component.render_xml(
         """
-        <Modal window="window" name="f'You Won' if unref(store.user.is_player(unref(store.game.result).win)) else 'You Lost'">
+        <Modal name="f'You Won' if unref(store.user.is_player(unref(store.game.result).win)) else 'You Lost'">
             <Column t-style="g[4]">
                 <Row t-style="g[4]">
                     <RoundedRectLabelButton 
@@ -56,8 +64,12 @@ def game_end_modal(window: Window, client: BattleshipClient, **kwargs):
                     text="f'New rating: {unref(store.game.result).new_stat.rating} ({unref(store.game.result).rating_change:+})'" 
                     text_color="colors['black']" 
                 />
+                <Label 
+                    text="f'{unref(win_player).name} won'" 
+                    text_color="colors['black']" 
+                />
             </Column>
         </Modal>
         """,
-        **kwargs
+        **kwargs,
     )

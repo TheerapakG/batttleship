@@ -1,20 +1,15 @@
 from tgraphics.color import colors
-from tgraphics.component import Component, Window
-from tgraphics.style import w, h
+from tgraphics.component import Component
+from tgraphics.style import *
 
 from . import lobby
-from ..client import BattleshipClient
+from .. import store
 from ...shared import models
 
 
 @Component.register("PrivateLobby")
-def private_lobby(
-    window: Window,
-    client: BattleshipClient,
-    join_code: str,
-    room: models.RoomInfo,
-    **kwargs
-):
+def private_lobby(join_code: str, room: models.RoomInfo, **kwargs):
+    window = store.ctx.use_window()
     return Component.render_xml(
         """
         <Layer>
@@ -23,7 +18,7 @@ def private_lobby(
                     <Label text="join_code" text_color="colors['white']" />
                 </Pad>
             </Column>
-            <Lobby window="window" client="client" room="room" />
+            <Lobby room="room" />
         </Layer>
         """,
         **kwargs,

@@ -288,26 +288,31 @@ class Server(metaclass=ServerMeta):
                     MessageFlag.RESPONSE | MessageFlag.END,
                 )
             )
-        while True:
-            if channel_method := await session.read():
-                channel, msg_method = channel_method
-                if msg_method == "close":
-                    await channel.write(
-                        Message("", b"", MessageFlag.RESPONSE | MessageFlag.END)
-                    )
-                    break
-                elif rte := self.routes.get(msg_method):
-                    await rte.run(self, channel)
-                else:
-                    await channel.write(
-                        Message(
-                            "",
-                            b"no method found",
-                            MessageFlag.RESPONSE | MessageFlag.ERROR | MessageFlag.END,
+        try:
+            while True:
+                if channel_method := await session.read():
+                    channel, msg_method = channel_method
+                    if msg_method == "close":
+                        await channel.write(
+                            Message("", b"", MessageFlag.RESPONSE | MessageFlag.END)
                         )
-                    )
-            else:
-                break
+                        break
+                    elif rte := self.routes.get(msg_method):
+                        await rte.run(self, channel)
+                    else:
+                        await channel.write(
+                            Message(
+                                "",
+                                b"no method found",
+                                MessageFlag.RESPONSE
+                                | MessageFlag.ERROR
+                                | MessageFlag.END,
+                            )
+                        )
+                else:
+                    break
+        except ConnectionError:
+            pass
 
         for cb in reversed(self.session_leave_cbs[session.id]):
             await cb(session)

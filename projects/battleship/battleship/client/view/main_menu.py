@@ -1,22 +1,21 @@
 import asyncio
 
 from tgraphics.color import colors
-from tgraphics.component import Component, Window
+from tgraphics.component import Component
 from tgraphics.event import ComponentMountedEvent
 from tgraphics.reactivity import Ref, computed, unref
 from tsocket.shared import Empty
-from tgraphics.style import c, text_c, hover_c, disabled_c, w, h, r_b, r_t, r_l, r_r, g
+from tgraphics.style import *
 
 from .. import store
-from ..client import BattleshipClient
 from ..component import create_player_modal
 from ...shared import models
 
 
 @Component.register("MainMenu")
-def main_menu(
-    window: Window, client: BattleshipClient, name: str | None = None, **kwargs
-):
+def main_menu(name: str | None = None, **kwargs):
+    window = store.ctx.use_window()
+
     try:
         store.user.load()
     except FileNotFoundError:
@@ -26,54 +25,58 @@ def main_menu(
     code = Ref("")
 
     async def set_online_count():
-        while True:
-            online_count.value = await client.online(Empty())
-            await asyncio.sleep(1.0)
+        if (client := unref(store.ctx.client)) is not None:
+            while True:
+                online_count.value = await client.online(Empty())
+                await asyncio.sleep(1.0)
 
     async def on_mounted(event: ComponentMountedEvent):
-        # TODO: async component
-        if name is not None:
+        if (client := unref(store.ctx.client)) is not None and name is not None:
             player = await client.player_create(models.PlayerCreateArgs(name))
             store.user.save(player)
         event.instance.bound_tasks.update([asyncio.create_task(set_online_count())])
 
     async def on_public_room_match_button(_e):
-        if (user := unref(store.user.player)) is not None:
+        if (client := unref(store.ctx.client)) is not None and (
+            user := unref(store.user.player)
+        ) is not None:
             room = await client.room_match(models.BearingPlayerAuth.from_player(user))
 
             from .lobby import lobby
 
-            await window.set_scene(lobby(window, client, room))
+            await store.ctx.set_scene(lobby(room))
 
     async def on_private_room_create_button(_e):
-        if (user := unref(store.user.player)) is not None:
+        if (client := unref(store.ctx.client)) is not None and (
+            user := unref(store.user.player)
+        ) is not None:
             room = await client.private_room_create(
                 models.BearingPlayerAuth.from_player(user)
             )
             from .private_lobby import private_lobby
 
-            await window.set_scene(
-                private_lobby(window, client, room.join_code, room.room)
-            )
+            await store.ctx.set_scene(private_lobby(room.join_code, room.room))
 
     async def on_private_room_join_button(_e):
-        if (user := unref(store.user.player)) is not None:
+        if (client := unref(store.ctx.client)) is not None and (
+            user := unref(store.user.player)
+        ) is not None:
             room = await client.private_room_join(
                 models.PrivateRoomJoinArgs(user.auth_token, unref(code))
             )
             from .lobby import lobby
 
-            await window.set_scene(lobby(window, client, room))
+            await store.ctx.set_scene(lobby(room))
 
     async def on_profile_button(_e):
         from .profile import profile
 
-        await window.set_scene(profile(window, client))
+        await store.ctx.set_scene(profile())
 
     async def on_gacha_button(_e):
         from .gacha import gacha
 
-        await window.set_scene(gacha(window, client))
+        await store.ctx.set_scene(gacha())
 
     return Component.render_xml(
         """
@@ -148,7 +151,7 @@ def main_menu(
                 <Label text="'BATTLESHIP'" bold="True" text_color="colors['white']" font_size="88" />
                 <Label text="f'Welcome, {unref(store.user.name)}'" />
             </Column>
-            <CreatePlayerModal t-if="unref(store.user.player) is None" window="window" client="client" />
+            <CreatePlayerModal t-if="unref(store.user.player) is None" />
         </Layer>
         """,
         **kwargs,

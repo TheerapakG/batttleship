@@ -6,19 +6,20 @@ from pyglet.window import key
 
 from tgraphics.color import colors
 from tgraphics.event import ComponentMountedEvent
-from tgraphics.component import Component, Window, ClickEvent, use_key_pressed
+from tgraphics.component import Component, ClickEvent, use_key_pressed
 from tgraphics.reactivity import computed, unref, Ref, Watcher
-from tgraphics.style import c, text_c, hover_c, disabled_c, w, h, g
+from tgraphics.style import *
 
 from .. import store
-from ..client import BattleshipClient
 from ..component import game_end_modal
 from ...shared import models, ship_type
 from ...shared.utils import add, mat_mul_vec
 
 
 @Component.register("ShipSetup")
-def ship_setup(window: Window, client: BattleshipClient, **kwargs):
+def ship_setup(**kwargs):
+    window = store.ctx.use_window()
+
     player_board = store.game.player_board
 
     player_grid = computed(
@@ -286,7 +287,7 @@ def ship_setup(window: Window, client: BattleshipClient, **kwargs):
                     </Column>
                 </Row>
             </Column>
-            <GameEndModal t-if="unref(store.game.result) is not None" window="window" client="client" />
+            <GameEndModal t-if="unref(store.game.result) is not None" />
         </Layer>
         """,
         **kwargs,

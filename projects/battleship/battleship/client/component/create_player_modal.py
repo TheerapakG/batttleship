@@ -1,12 +1,11 @@
 from tgraphics.color import colors, with_alpha
+from tgraphics.component import Component, ClickEvent
 from tgraphics.event import Event
-from tgraphics.style import c, text_c, hover_c, disabled_c, w, h, r_b, r_t, g
-from tgraphics.component import Component, Window, ClickEvent
+from tgraphics.style import *
 from tgraphics.reactivity import Ref, unref
 
 from . import modal
 from .. import store
-from ..client import BattleshipClient
 from ...shared import models
 
 
@@ -15,18 +14,20 @@ class PlayerCreatedEvent(Event):
 
 
 @Component.register("CreatePlayerModal")
-def create_player_modal(window: Window, client: BattleshipClient, **kwargs):
+def create_player_modal(**kwargs):
     name = Ref("")
 
     async def on_create_player_button(event: ClickEvent):
-        player = await client.player_create(models.PlayerCreateArgs(unref(name)))
+        player = await unref(store.ctx.use_client()).player_create(
+            models.PlayerCreateArgs(unref(name))
+        )
         store.user.save(player)
 
         await event.instance.capture(PlayerCreatedEvent(event.instance))
 
     return Component.render_xml(
         """
-        <Modal window="window" name="'registration'">
+        <Modal name="'registration'">
             <Column t-style="g[4]">
                 <RoundedRectLabelButton 
                     text="'Create User'"

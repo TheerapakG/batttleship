@@ -3,21 +3,20 @@ import contextlib
 from dataclasses import replace
 
 from tgraphics.color import colors
-from tgraphics.component import Component, Window
+from tgraphics.component import Component
 from tgraphics.event import ComponentMountedEvent
 from tgraphics.reactivity import Ref, computed, unref
-from tgraphics.style import c, text_c, hover_c, disabled_c, w, h, r_b, r_t, r_l, r_r, g
+from tgraphics.style import *
 
 from ..component import emote_picker
 from .. import store
-from ..client import BattleshipClient
 from ...shared import models
 
 
 @Component.register("Lobby")
-def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwargs):
-    store.game.window.value = window
-    store.game.client.value = client
+def lobby(room: models.RoomInfo, **kwargs):
+    window = store.ctx.use_window()
+
     store.game.room.value = models.RoomId.from_room_info(room)
 
     player_infos = Ref(room.players)
@@ -32,40 +31,44 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
         )
 
     async def subscribe_player_join():
-        async for player_info in client.on_room_join():
-            player_infos.value.append(player_info)
-            player_infos.trigger()
+        if (client := unref(store.ctx.client)) is not None:
+            async for player_info in client.on_room_join():
+                player_infos.value.append(player_info)
+                player_infos.trigger()
 
     async def subscribe_player_leave():
-        async for player_info in client.on_room_leave():
-            player_infos.value.remove(player_info)
-            player_infos.trigger()
-            with contextlib.suppress(KeyError):
-                player_readies.value.remove(
-                    models.PlayerId.from_player_info(player_info)
-                )
-                player_readies.trigger()
+        if (client := unref(store.ctx.client)) is not None:
+            async for player_info in client.on_room_leave():
+                player_infos.value.remove(player_info)
+                player_infos.trigger()
+                with contextlib.suppress(KeyError):
+                    player_readies.value.remove(
+                        models.PlayerId.from_player_info(player_info)
+                    )
+                    player_readies.trigger()
 
     async def subscribe_room_player_ready():
-        async for player_id in client.on_room_player_ready():
-            player_readies.value.add(player_id)
-            player_readies.trigger()
+        if (client := unref(store.ctx.client)) is not None:
+            async for player_id in client.on_room_player_ready():
+                player_readies.value.add(player_id)
+                player_readies.trigger()
 
     async def subscribe_room_ready():
-        async for _ in client.on_room_ready():
-            from .ship_setup import ship_setup
+        if (client := unref(store.ctx.client)) is not None:
+            async for _ in client.on_room_ready():
+                from .ship_setup import ship_setup
 
-            store.game.players.value = {
-                models.PlayerId.from_player_info(player_info): player_info
-                for player_info in unref(player_infos)
-            }
+                store.game.players.value = {
+                    models.PlayerId.from_player_info(player_info): player_info
+                    for player_info in unref(player_infos)
+                }
 
-            await window.set_scene(ship_setup(window, client))
-            await store.game.room_reset()
-            store.game.player_points.value = {
-                models.PlayerId.from_player_info(player): Ref(0)
-                for player in unref(store.game.alive_players)
-            }
+                await store.ctx.set_scene(ship_setup())
+                await store.game.room_reset()
+                store.game.player_points.value = {
+                    models.PlayerId.from_player_info(player): Ref(0)
+                    for player in unref(store.game.alive_players)
+                }
 
     def on_mounted(event: ComponentMountedEvent):
         # TODO: async component
@@ -80,15 +83,17 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
         )
 
     async def return_button(_e):
-        await client.room_leave(models.RoomId.from_room_info(room))
+        if (client := unref(store.ctx.client)) is not None:
+            await client.room_leave(models.RoomId.from_room_info(room))
 
-        from .main_menu import main_menu
+            from .main_menu import main_menu
 
-        await window.set_scene(main_menu(window, client))
+            await store.ctx.set_scene(main_menu())
 
     async def on_ready_button(_e):
-        ready.value = True
-        await client.room_ready(models.RoomId.from_room_info(room))
+        if (client := unref(store.ctx.client)) is not None:
+            ready.value = True
+            await client.room_ready(models.RoomId.from_room_info(room))
 
     async def class_select(_e):
         class_ready.value = True
@@ -106,7 +111,7 @@ def lobby(window: Window, client: BattleshipClient, room: models.RoomInfo, **kwa
                 />
             </Pad>
             <Column t-style="w['full'](window) | h['full'](window) | g[4]">
-                <EmotePicker client="client" />
+                <EmotePicker />
                 <Row t-style="g[4]">
                     <Layer t-for="player_info in player_infos">
                         <Column t-style="w[48] | h[64] | g[3]">

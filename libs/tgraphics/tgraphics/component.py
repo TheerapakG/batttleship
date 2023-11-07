@@ -867,31 +867,37 @@ def use_acc_scale_y(
 
 
 def use_width(
-    instance: ComponentInstance | ReadRef[ComponentInstance] | "Window",
-) -> float | ReadRef[float]:
+    instance: "ComponentInstance | Window | ReadRef[ComponentInstance | Window]",
+) -> int | float | ReadRef[int | float]:
     "get width of component instance unscaled"
-    if isinstance(instance, Window):
-        return instance.width
-    else:
-        return computed(
-            lambda: unref(data.width)
-            if (data := unref(unref(instance).after_mounted_data)) is not None
-            else 0
+    return computed(
+        lambda: (
+            unref(_instance.width)
+            if isinstance((_instance := unref(instance)), Window)
+            else (
+                unref(data.width)
+                if (data := unref(_instance.after_mounted_data)) is not None
+                else 0
+            )
         )
+    )
 
 
 def use_height(
-    instance: ComponentInstance | ReadRef[ComponentInstance] | "Window",
-) -> float | ReadRef[float]:
+    instance: "ComponentInstance | Window | ReadRef[ComponentInstance | Window]",
+) -> int | float | ReadRef[int | float]:
     "get height of component instance unscaled"
-    if isinstance(instance, Window):
-        return instance.height
-    else:
-        return computed(
-            lambda: unref(data.height)
-            if (data := unref(unref(instance).after_mounted_data)) is not None
-            else 0
+    return computed(
+        lambda: (
+            unref(_instance.height)
+            if isinstance((_instance := unref(instance)), Window)
+            else (
+                unref(data.height)
+                if (data := unref(_instance.after_mounted_data)) is not None
+                else 0
+            )
         )
+    )
 
 
 def use_hover(
@@ -1365,6 +1371,93 @@ class Pad(Component):
 
 
 @dataclass
+class AbsoluteInstance(ComponentInstance["Absolute"]):
+    def __hash__(self) -> int:
+        return id(self)
+
+    @event_handler(ComponentMountedEvent)
+    async def component_mounted_handler(self, _: ComponentMountedEvent):
+        child = computed(
+            lambda: unref(unref(self.component.children)[0]).get_instance()
+            if unref(self.component.children)
+            else None
+        )
+        previous_child: ComponentInstance | None = None
+
+        async def mount_child(child: ComponentInstance):
+            nonlocal previous_child
+            if previous_child is not None:
+                await previous_child.capture(ComponentUnmountedEvent(previous_child))
+            previous_child = child
+            if child is not None:
+                off_x = computed(
+                    lambda: 0
+                    if unref(self.component.stick_left)
+                    else (unref(self.component.width) - unref(use_width(child)))
+                    * unref(use_acc_scale_x(self))
+                )
+                off_y = computed(
+                    lambda: 0
+                    if unref(self.component.stick_bottom)
+                    else (unref(self.component.height) - unref(use_height(child)))
+                    * unref(use_acc_scale_y(self))
+                )
+                child.before_mounted_data.value = BeforeMountedComponentInstanceData(
+                    off_x,
+                    off_y,
+                    computed(lambda: unref(use_acc_offset_x(self)) + unref(off_x)),
+                    computed(lambda: unref(use_acc_offset_y(self)) + unref(off_y)),
+                    1,
+                    1,
+                    use_acc_scale_x(self),
+                    use_acc_scale_y(self),
+                )
+                await child.capture(ComponentMountedEvent(child))
+
+        self.bound_watchers.update(
+            [
+                w
+                for w in [
+                    Watcher.ifref(
+                        child,
+                        lambda c: asyncio.create_task(mount_child(c)),
+                        trigger_init=True,
+                    ),
+                ]
+                if w is not None
+            ]
+        )
+
+        self.after_mounted_data.value = AfterMountedComponentInstanceData(
+            self.component.width,
+            self.component.height,
+            computed(lambda: [unref(child)] if unref(child) is not None else []),
+        )
+
+    @event_handler(MouseEnterEvent)
+    async def mouse_enter_handler(self, _e: MouseEnterEvent):
+        return None
+
+    @event_handler(MouseMotionEvent)
+    async def mouse_motion_handler(self, _e: MouseMotionEvent):
+        return None
+
+
+@dataclass
+class Absolute(Component):
+    children: list["Component" | ReadRef["Component"]] | ReadRef[
+        list["Component" | ReadRef["Component"]]
+    ] = field(default_factory=list["Component" | ReadRef["Component"]])
+    width: int | float | ReadRef[int | float] = field(default=None)
+    height: int | float | ReadRef[int | float] = field(default=None)
+    stick_left: bool | ReadRef[bool] = field(default=True, kw_only=True)
+    stick_bottom: bool | ReadRef[bool] = field(default=True, kw_only=True)
+
+    def get_instance(self):
+        return AbsoluteInstance(component=self)
+
+
+@dataclass
 class OffsetInstance(ComponentInstance["Offset"]):
     def __hash__(self) -> int:
         return id(self)
@@ -1565,13 +1658,9 @@ class LayerInstance(ComponentInstance["Layer"]):
 
             pad_x = computed(
                 lambda: (unref(use_width(self)) - unref(use_width(child))) / 2
-                if unref(self.component.center_x)
-                else 0
             )
             pad_y = computed(
                 lambda: (unref(use_height(self)) - unref(use_height(child))) / 2
-                if unref(self.component.center_y)
-                else 0
             )
 
             off_x = computed(lambda: unref(pad_x) * unref(use_acc_scale_x(self)))
@@ -1644,8 +1733,6 @@ class Layer(Component):
     children: list["Component" | ReadRef["Component"]] | ReadRef[
         list["Component" | ReadRef["Component"]]
     ] = field(default_factory=list["Component" | ReadRef["Component"]])
-    center_x: bool | ReadRef[bool] = field(default=True)
-    center_y: bool | ReadRef[bool] = field(default=True)
 
     def get_instance(self):
         return LayerInstance(component=self)

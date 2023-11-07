@@ -1,29 +1,18 @@
-import asyncio
-
 from tgraphics.color import colors
-from tgraphics.component import Component, Window
-from tgraphics.event import ComponentMountedEvent
-from tgraphics.reactivity import Ref, computed, unref
-from tsocket.shared import Empty
-from tgraphics.style import c, text_c, hover_c, disabled_c, w, h, r_b, r_t, r_l, r_r, g
+from tgraphics.component import Component
+from tgraphics.style import *
 
 from .. import store
-from ..client import BattleshipClient
-from ..component import create_player_modal
-from ...shared import models
 
 
 @Component.register("profile")
-def profile(window: Window, client: BattleshipClient, **kwargs):
-    online = Ref(None)
+def profile(**kwargs):
+    window = store.ctx.use_window()
 
     async def return_button(_e):
         from .main_menu import main_menu
 
-        await window.set_scene(main_menu(window, client))
-
-    # async def set_online_status():
-    #    unref(online.replace(None,"Online")) if client.online(Empty()) else unref(online.replace(None,"Offline"))
+        await store.ctx.set_scene(main_menu())
 
     return Component.render_xml(
         """

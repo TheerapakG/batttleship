@@ -2,13 +2,12 @@ from functools import partial
 
 from tgraphics.color import colors, with_alpha
 from tgraphics.event import Event
-from tgraphics.style import c, text_c, hover_c, disabled_c, w, h, r_b, r_t, g
-from tgraphics.component import Component, Window, ClickEvent
-from tgraphics.reactivity import Ref, unref
+from tgraphics.style import *
+from tgraphics.component import Component, ClickEvent
+from tgraphics.reactivity import unref
 
 from . import modal
 from .. import store
-from ..client import BattleshipClient
 from ...shared import models, emote_type
 
 
@@ -17,13 +16,17 @@ class PlayerCreatedEvent(Event):
 
 
 @Component.register("EmotePicker")
-def emote_picker(client: BattleshipClient, **kwargs):
+def emote_picker(**kwargs):
     async def on_emote_button(emote: emote_type.EmoteVariant, event: ClickEvent):
-        await client.emote_display(
-            models.EmoteDisplayArgs(
-                unref(store.game.room), models.EmoteVariantId.from_emote_variant(emote)
+        if (client := unref(store.ctx.client)) is not None and (
+            room := unref(store.game.room)
+        ) is not None:
+            await client.emote_display(
+                models.EmoteDisplayArgs(
+                    room,
+                    models.EmoteVariantId.from_emote_variant(emote),
+                )
             )
-        )
 
     return Component.render_xml(
         """
@@ -37,5 +40,5 @@ def emote_picker(client: BattleshipClient, **kwargs):
             />
         </Row>
         """,
-        **kwargs
+        **kwargs,
     )

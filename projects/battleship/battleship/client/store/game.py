@@ -7,20 +7,17 @@ from uuid import UUID, uuid4
 
 from pyglet.media import Player
 
-from tgraphics.component import Window, loader
+from tgraphics.component import loader
 from tgraphics.reactivity import Ref, computed, unref
 
-from . import user
-from ..client import BattleshipClient
+from . import ctx, user
+from .. import store
 from ...shared import models, ship_type, shot_type, emote_type
 
 media_player = Player()
 
 hit_sound = loader.media("sfx/hit.wav", False)
 miss_sound = loader.media("sfx/miss.wav", False)
-
-window: Ref[Window | None] = Ref(None)
-client: Ref[BattleshipClient | None] = Ref(None)
 
 room: Ref[models.RoomId | None] = Ref(None)
 
@@ -117,10 +114,10 @@ async def set_board_id(board_id: models.BoardId):
     current_board_id.value = board_id
     if (
         unref(turn)
-        and (_client := unref(client)) is not None
+        and (client := unref(ctx.client)) is not None
         and (_room := unref(room)) is not None
     ):
-        await _client.display_board(models.DisplayBoardArgs(_room, board_id))
+        await client.display_board(models.DisplayBoardArgs(_room, board_id))
 
 
 shots = Ref(
@@ -224,16 +221,19 @@ def process_shot_result(shot_result: models.ShotResult, play_audio: bool = True)
 
 
 async def board_submit():
-    await unref(client).board_submit(unref(player_board))
+    if (client := unref(ctx.client)) is not None:
+        await client.board_submit(unref(player_board))
 
 
 async def shot_submit(
     shot_variant: models.ShotVariantId, position: tuple[int, int], orientation: int
 ):
-    if (_room := unref(room)) is not None and (
-        _current_board_id := unref(current_board_id)
-    ) is not None:
-        shot_result = await unref(client).shot_submit(
+    if (
+        (client := unref(ctx.client)) is not None
+        and (_room := unref(room)) is not None
+        and (_current_board_id := unref(current_board_id)) is not None
+    ):
+        shot_result = await client.shot_submit(
             models.ShotSubmitArgs(
                 _room,
                 models.Shot(shot_variant, position, orientation, _current_board_id),
@@ -244,19 +244,67 @@ async def shot_submit(
 
 
 async def subscribe_player_leave():
-    async for player in unref(client).on_room_leave():
-        alive_players.value.remove(player)
-        dead_players.value.append(player)
-        alive_players.trigger()
-        dead_players.trigger()
+    if (client := unref(ctx.client)) is not None:
+        async for player in client.on_room_leave():
+            alive_players.value.remove(player)
+            dead_players.value.append(player)
+            alive_players.trigger()
+            dead_players.trigger()
 
-        with suppress(KeyError, IndexError):
-            player_id = models.PlayerId.from_player_info(player)
-            del board_lookup.value[player_id]
-            board_id = unref(board_lookup)[player_id]
-            del boards.value[board_id]
+            with suppress(KeyError, IndexError):
+                player_id = models.PlayerId.from_player_info(player)
+                del board_lookup.value[player_id]
+                board_id = unref(board_lookup)[player_id]
+                del boards.value[board_id]
 
-            if unref(current_board_id) == board_id:
+                if unref(current_board_id) == board_id:
+                    await set_board_id(
+                        unref(board_lookup)[
+                            models.PlayerId.from_player_info(
+                                unref(alive_players_not_user)[0]
+                            )
+                        ]
+                    )
+
+
+async def subscribe_room_player_submit():
+    if (client := unref(ctx.client)) is not None:
+        async for data in client.on_room_player_submit():
+            if data.board not in unref(boards):
+                boards.value[data.board] = Ref(
+                    models.Board(
+                        data.board.id,
+                        data.player,
+                        unref(room),
+                        [[models.EmptyTile() for _ in range(8)] for _ in range(8)],
+                        [],
+                    )
+                )
+            boards.trigger()
+            board_lookup.value[data.player] = data.board
+            board_lookup.trigger()
+
+
+async def subscribe_room_submit():
+    if (client := unref(ctx.client)) is not None:
+        async for _ in client.on_room_submit():
+            await set_board_id(models.BoardId.from_board(unref(player_board)))
+            from ..view.game import game
+
+            asyncio.create_task(store.ctx.set_scene(game()))
+
+
+async def subscribe_room_delete():
+    if (client := unref(ctx.client)) is not None:
+        async for _ in client.on_room_delete():
+            room_delete.value = True
+
+
+async def subscribe_turn_start():
+    if (client := unref(ctx.client)) is not None:
+        async for player in client.on_game_turn_start():
+            turn.value = unref(user.is_player(models.PlayerId.from_player_info(player)))
+            if unref(turn):
                 await set_board_id(
                     unref(board_lookup)[
                         models.PlayerId.from_player_info(
@@ -266,75 +314,38 @@ async def subscribe_player_leave():
                 )
 
 
-async def subscribe_room_player_submit():
-    async for data in unref(client).on_room_player_submit():
-        if data.board not in unref(boards):
-            boards.value[data.board] = Ref(
-                models.Board(
-                    data.board.id,
-                    data.player,
-                    unref(room),
-                    [[models.EmptyTile() for _ in range(8)] for _ in range(8)],
-                    [],
-                )
-            )
-        boards.trigger()
-        board_lookup.value[data.player] = data.board
-        board_lookup.trigger()
-
-
-async def subscribe_room_submit():
-    async for _ in unref(client).on_room_submit():
-        await set_board_id(models.BoardId.from_board(unref(player_board)))
-        from ..view.game import game
-
-        asyncio.create_task(unref(window).set_scene(game(unref(window))))
-
-
-async def subscribe_room_delete():
-    async for _ in unref(client).on_room_delete():
-        room_delete.value = True
-
-
-async def subscribe_turn_start():
-    async for player in unref(client).on_game_turn_start():
-        turn.value = unref(user.is_player(models.PlayerId.from_player_info(player)))
-        if unref(turn):
-            await set_board_id(
-                unref(board_lookup)[
-                    models.PlayerId.from_player_info(unref(alive_players_not_user)[0])
-                ]
-            )
-
-
 async def subscribe_turn_end():
-    async for player in unref(client).on_game_turn_end():
-        if unref(user.is_player(models.PlayerId.from_player_info(player))):
-            turn.value = False
+    if (client := unref(ctx.client)) is not None:
+        async for player in client.on_game_turn_end():
+            if unref(user.is_player(models.PlayerId.from_player_info(player))):
+                turn.value = False
 
 
 async def subscribe_display_board():
-    async for board_id in unref(client).on_game_board_display():
-        if not unref(turn):
-            current_board_id.value = board_id
+    if (client := unref(ctx.client)) is not None:
+        async for board_id in client.on_game_board_display():
+            if not unref(turn):
+                current_board_id.value = board_id
 
 
 async def subscribe_shot_board():
-    async for shot_result in unref(client).on_game_board_shot():
-        if not unref(user.is_player(shot_result.player)):
-            process_shot_result(shot_result)
+    if (client := unref(ctx.client)) is not None:
+        async for shot_result in client.on_game_board_shot():
+            if not unref(user.is_player(shot_result.player)):
+                process_shot_result(shot_result)
 
 
 async def do_game_reset():
     from ..view.ship_setup import ship_setup
 
-    await unref(window).set_scene(ship_setup(unref(window), unref(client)))
+    await store.ctx.set_scene(ship_setup())
     await room_reset()
 
 
 async def subscribe_game_reset():
-    async for _ in unref(client).on_game_reset():
-        asyncio.create_task(do_game_reset())
+    if (client := unref(ctx.client)) is not None:
+        async for _ in client.on_game_reset():
+            asyncio.create_task(do_game_reset())
 
 
 async def do_emote_reset(player: models.PlayerId, u: UUID):
@@ -345,21 +356,23 @@ async def do_emote_reset(player: models.PlayerId, u: UUID):
 
 
 async def subscribe_emote_display():
-    async for emote_display in unref(client).on_emote_display():
-        u = uuid4()
-        emotes.value[emote_display.player] = (emote_display.emote, u)
-        emotes.update()
-        asyncio.create_task(do_emote_reset(emote_display.player, u))
+    if (client := unref(ctx.client)) is not None:
+        async for emote_display in client.on_emote_display():
+            u = uuid4()
+            emotes.value[emote_display.player] = (emote_display.emote, u)
+            emotes.update()
+            asyncio.create_task(do_emote_reset(emote_display.player, u))
 
 
 result: Ref[models.GameEndData | None] = Ref(None)
 
 
 async def subscribe_game_end():
-    async for game_result in unref(client).on_game_end():
-        player_points.value[game_result.win].value += 1
-        user.save_info(game_result.new_stat)
-        result.value = game_result
+    if (client := unref(ctx.client)) is not None:
+        async for game_result in client.on_game_end():
+            player_points.value[game_result.win].value += 1
+            user.save_info(game_result.new_stat)
+            result.value = game_result
 
 
 def get_tasks():

@@ -5,10 +5,10 @@ from pyglet.window import key
 
 from tgraphics.color import colors
 from tgraphics.event import ComponentMountedEvent
-from tgraphics.component import Component, Window, ClickEvent, use_key_pressed
+from tgraphics.component import Component, ClickEvent, use_key_pressed
 from tgraphics.reactivity import computed, unref, Ref, Watcher
 from tgraphics.composables import use_window
-from tgraphics.style import c, text_c, hover_c, disabled_c, w, h, g
+from tgraphics.style import *
 
 from .. import store
 from ..component import game_end_modal
@@ -23,7 +23,9 @@ def _expect_index_error(func, default):
 
 
 @Component.register("Game")
-def game(window: Window, **kwargs):
+def game(**kwargs):
+    window = store.ctx.use_window()
+
     player_grid = computed(
         lambda: (
             _player_board.grid
@@ -263,9 +265,29 @@ def game(window: Window, **kwargs):
                 ]
             )
 
+    async def surrender_button(_e):
+        if (client := unref(store.ctx.client)) is not None:
+            await client.room_leave(
+                models.RoomId.from_room_info(unref(store.game.room))
+            )
+
+            from .main_menu import main_menu
+
+            await store.ctx.set_scene(main_menu())
+
     return Component.render_xml(
         """
         <Layer>
+            <Absolute t-style="w['full'](window) | h['full'](window)" stick_bottom="False">
+                <Pad t-style="p_l[4] | p_t[4]">
+                    <RoundedRectLabelButton 
+                        text="'Surrender'"
+                        font_size="20"
+                        t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[24] | h[10]"
+                        handle-ClickEvent="surrender_button"
+                    />
+                </Pad>
+            </Absolute>
             <Column t-style="w['full'](window) | h['full'](window) | g[4]" handle-ComponentMountedEvent="on_mounted">
                 <Row t-style="g[1]">
                     <RoundedRectLabelButton 
@@ -330,7 +352,7 @@ def game(window: Window, **kwargs):
                     />
                 </Row>
             </Column>
-            <GameEndModal t-if="unref(store.game.result) is not None" window="window" client="client" />
+            <GameEndModal t-if="unref(store.game.result) is not None" />
         </Layer>
         """,
         **kwargs,

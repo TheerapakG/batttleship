@@ -7,9 +7,11 @@ import ssl
 from dotenv import load_dotenv
 import pyglet
 
+from tgraphics.reactivity import unref
 from tgraphics.component import Window, loop
 
 
+from . import store
 from .client import BattleshipClient
 from .view.main_menu import main_menu
 from ..shared.logging import setup_logging
@@ -23,20 +25,20 @@ if __name__ == "__main__":
     parser.add_argument("-n", "--name")
     args = parser.parse_args()
 
-    window = Window(resizable=True)
+    store.ctx.window.value = Window(resizable=True)
 
     ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
     ssl_context.load_verify_locations(os.environ["SSL_CERT"])
     ssl_context.check_hostname = False
-    client = BattleshipClient()
-    loop.run_until_complete(client.connect("localhost", 60000, ssl=ssl_context))
-
+    store.ctx.client.value = BattleshipClient()
     loop.run_until_complete(
-        window.set_scene(main_menu(window=window, client=client, name=args.name))
+        unref(store.ctx.use_client()).connect("localhost", 60000, ssl=ssl_context)
     )
 
+    loop.run_until_complete(store.ctx.set_scene(main_menu(name=args.name)))
+
     pyglet.app.run()
-    loop.run_until_complete(client.disconnect())
+    loop.run_until_complete(unref(store.ctx.use_client()).disconnect())
 
     async def cleanup():
         tasks = asyncio.all_tasks(loop)
