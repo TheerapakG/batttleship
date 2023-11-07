@@ -239,6 +239,7 @@ async def shot_submit(
         )
 
         process_shot_result(shot_result, False)
+        shots.value[shot_variant].value = unref(shots.value[shot_variant]) - 1
 
 
 async def subscribe_player_leave():

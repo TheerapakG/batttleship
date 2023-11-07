@@ -6,7 +6,7 @@ from pyglet.window import key
 from tgraphics.color import colors
 from tgraphics.event import ComponentMountedEvent
 from tgraphics.component import Component, ClickEvent, use_key_pressed
-from tgraphics.reactivity import computed, unref, Ref, Watcher
+from tgraphics.reactivity import computed, unref, Ref, ReadRef, Watcher
 from tgraphics.composables import use_window
 from tgraphics.style import *
 
@@ -178,6 +178,15 @@ def game(**kwargs):
 
         return computed(_get_tile_color)
 
+    def get_shot_text(shot_id: models.ShotVariantId, count: ReadRef[int]):
+        return computed(
+            lambda: (
+                shot_type.SHOT_VARIANTS[shot_id.id].text
+                if unref(count) < 0
+                else f"{shot_type.SHOT_VARIANTS[shot_id.id].text} ({unref(count)})"
+            )
+        )
+
     def get_shot_color(
         shot_id: models.ShotVariantId,
     ):
@@ -289,17 +298,17 @@ def game(**kwargs):
                 </Pad>
             </Absolute>
             <Column t-style="w['full'](window) | h['full'](window) | g[4]" handle-ComponentMountedEvent="on_mounted">
-                <Row t-style="g[1]">
+                <Row t-style="g[4]">
                     <RoundedRectLabelButton 
                         t-for="shot_id, count in unref(store.game.shots).items()"
-                        text="shot_type.SHOT_VARIANTS[shot_id.id].text" 
+                        text="get_shot_text(shot_id, count)" 
                         text_color="colors['white']"
                         color="get_shot_color(shot_id)"
                         hover_color="get_shot_hover_color(shot_id)"
                         disabled_color="colors['slate'][300]"
-                        width="128"
+                        width="192"
                         height="32"
-                        disabled="not unref(store.game.turn)"
+                        disabled="not unref(store.game.turn) or unref(count) == 0"
                         handle-ClickEvent="partial(on_shot_click, shot_id)"
                     />
                 </Row>
