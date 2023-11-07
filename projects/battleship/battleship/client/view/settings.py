@@ -22,15 +22,16 @@ def settings(**kwargs):
             return colors["red"][500]
 
     async def increase_volume(_e):
-        default_volume.value = unref(default_volume) + 1
-        store.bgm.bgm_volume.value = unref(default_volume) / 10
-        store.bgm.set_volume(unref(default_volume) / 10)
+        if (volume := unref(default_volume)) is not None:
+            default_volume.value = volume + 1
+            store.bgm.bgm_volume.value = volume / 10
+            store.bgm.set_volume(volume / 10)
 
     async def decrease_volume(_e):
-        if (client := unref(store.ctx.client)) is not None:
-            default_volume.value = unref(default_volume) - 1
-            store.bgm.bgm_volume.value = unref(default_volume) / 10
-            store.bgm.set_volume(unref(default_volume) / 10)
+        if (volume := unref(default_volume)) is not None:
+            default_volume.value = volume - 1
+            store.bgm.bgm_volume.value = volume / 10
+            store.bgm.set_volume(volume / 10)
 
     async def page_return(_e):
         from .main_menu import main_menu
