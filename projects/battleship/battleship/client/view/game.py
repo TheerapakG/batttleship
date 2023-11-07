@@ -11,7 +11,7 @@ from tgraphics.composables import use_window
 from tgraphics.style import *
 
 from .. import store
-from ..component import game_end_modal
+from ..component import game_end_overlay
 from ...shared import models, shot_type
 from ...shared.utils import add, mat_mul_vec
 
@@ -352,7 +352,7 @@ def game(**kwargs):
                     />
                 </Row>
             </Column>
-            <GameEndModal t-if="unref(store.game.result) is not None" />
+            <GameEndOverlay t-if="unref(store.game.result) is not None" />
         </Layer>
         """,
         **kwargs,

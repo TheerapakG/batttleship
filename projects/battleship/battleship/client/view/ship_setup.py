@@ -11,7 +11,7 @@ from tgraphics.reactivity import computed, unref, Ref, Watcher
 from tgraphics.style import *
 
 from .. import store
-from ..component import game_end_modal
+from ..component import game_end_overlay
 from ...shared import models, ship_type
 from ...shared.utils import add, mat_mul_vec
 
@@ -287,7 +287,7 @@ def ship_setup(**kwargs):
                     </Column>
                 </Row>
             </Column>
-            <GameEndModal t-if="unref(store.game.result) is not None" />
+            <GameEndOverlay t-if="unref(store.game.result) is not None" />
         </Layer>
         """,
         **kwargs,
