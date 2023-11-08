@@ -229,7 +229,7 @@ def process_shot_result(shot_result: models.ShotResult, play_audio: bool = True)
         else:
             if any(isinstance(r.tile, models.ShipTile) for r in shot_result.reveal):
                 media_player.queue(found_sound)
-
+        media_player.volume = unref(sfx_volume)
         media_player.play()
 
 
