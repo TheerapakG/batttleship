@@ -16,7 +16,7 @@ from pyglet import gl
 from pyglet.graphics import Batch, ShaderGroup
 from pyglet.graphics.shader import Shader, ShaderProgram
 from pyglet.graphics.vertexdomain import VertexList
-from pyglet.image import TextureRegion
+from pyglet.image import Texture, TextureRegion
 from pyglet.resource import Loader
 from pyglet.shapes import Rectangle
 from pyglet.sprite import Sprite
@@ -2300,6 +2300,9 @@ class RoundedRect(Component):
         return RoundedRectInstance(component=self)
 
 
+NULL_TEXTURE = Texture.create(1, 1)
+
+
 @dataclass
 class ImageInstance(ComponentInstance["Image"]):
     _sprite: Sprite = field(init=False)
@@ -2326,7 +2329,7 @@ class ImageInstance(ComponentInstance["Image"]):
     def _update_height(self, height: float):
         self._sprite.height = height
 
-    def _update_image(self, image: TextureRegion):
+    def _update_image(self, image: TextureRegion | None):
         self._sprite.image = image
 
     @event_handler(ComponentMountedEvent)
@@ -2336,7 +2339,7 @@ class ImageInstance(ComponentInstance["Image"]):
         image = computed(
             lambda: loader.image(texture)
             if isinstance((texture := unref(self.component.texture)), str)
-            else texture
+            else (texture if texture is not None else NULL_TEXTURE)
         )
         width = computed(
             lambda: unref(self.component.width)
@@ -2379,7 +2382,7 @@ class ImageInstance(ComponentInstance["Image"]):
 
 @dataclass
 class Image(Component):
-    texture: str | TextureRegion | ReadRef[str | TextureRegion]
+    texture: str | TextureRegion | None | ReadRef[str | TextureRegion | None]
     width: int | float | None | ReadRef[int | float | None] = field(default=None)
     height: int | float | None | ReadRef[int | float | None] = field(default=None)
 

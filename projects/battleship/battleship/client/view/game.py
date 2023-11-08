@@ -146,10 +146,8 @@ def game(**kwargs):
                         return colors["emerald"][500]
                     case models.ShipTile(hit=True):
                         return colors["red"][500]
-                    case models.ObstacleTile(hit=False):
+                    case models.ObstacleTile():
                         return colors["yellow"][500]
-                    case models.ObstacleTile(hit=True):
-                        return colors["orange"][500]
             except IndexError:
                 return colors["slate"][300]
 
@@ -177,10 +175,8 @@ def game(**kwargs):
                             return colors["emerald"][500]
                         case models.ShipTile(hit=True):
                             return colors["red"][500]
-                        case models.ObstacleTile(hit=False):
+                        case models.ObstacleTile():
                             return colors["yellow"][500]
-                        case models.ObstacleTile(hit=True):
-                            return colors["orange"][500]
                 except IndexError:
                     return colors["slate"][300]
 
