@@ -356,8 +356,8 @@ async def subscribe_shot_board():
 async def do_game_reset():
     from ..view.ship_setup import ship_setup
 
-    await store.ctx.set_scene(ship_setup())
     await room_reset()
+    await store.ctx.set_scene(ship_setup())
 
 
 async def subscribe_game_reset():

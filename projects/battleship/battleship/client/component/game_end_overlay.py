@@ -39,8 +39,8 @@ def game_end_overlay(**kwargs):
     async def on_rematch_button(event: ClickEvent):
         from ..view.ship_setup import ship_setup
 
-        await store.ctx.set_scene(ship_setup())
         await store.game.room_reset()
+        await store.ctx.set_scene(ship_setup())
 
     async def on_return_button(event: ClickEvent):
         if (

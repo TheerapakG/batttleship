@@ -13,6 +13,9 @@ from ..component import emote_picker
 from .. import store
 from ...shared import models, ship_type
 
+player_infos = Ref([])
+player_readies = Ref(set())
+
 
 @Component.register("Lobby")
 def lobby(room: models.RoomInfo, **kwargs):
@@ -20,8 +23,8 @@ def lobby(room: models.RoomInfo, **kwargs):
 
     store.game.room.value = models.RoomId.from_room_info(room)
 
-    player_infos = Ref(room.players)
-    player_readies = Ref(set(room.readies))
+    player_infos.value = room.players.copy()
+    player_readies.value = set(room.readies)
 
     ready = Ref(False)
 
@@ -62,9 +65,10 @@ def lobby(room: models.RoomInfo, **kwargs):
                     models.PlayerId.from_player_info(player_info): player_info
                     for player_info in unref(player_infos)
                 }
+                store.game.players.trigger()
 
-                await store.ctx.set_scene(ship_setup())
                 await store.game.room_reset()
+                await store.ctx.set_scene(ship_setup())
                 store.game.player_points.value = {
                     models.PlayerId.from_player_info(player): Ref(0)
                     for player in unref(store.game.alive_players)
