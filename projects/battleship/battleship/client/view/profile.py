@@ -38,7 +38,7 @@ def profile(**kwargs):
 
                 </Row>
                 <Row t-style="g[10]">
-                    <Label text="f'Status: {unref(online)}'" text_color="colors['white']" />
+                    <Label text="f'Status: '" text_color="colors['white']" />
                     <Label text="f'Ratings: {unref(store.user.rating)}'" text_color="colors['white']" />
 
                 </Row>
