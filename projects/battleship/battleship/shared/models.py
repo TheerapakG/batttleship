@@ -18,8 +18,8 @@ class PlayerId:
 
 @dataclass(eq=True, frozen=True)
 class PlayerInfo(PlayerId):
-    name: str = field(hash=False, compare=False)
-    rating: int = field(hash=False, compare=False)
+    name: str = field(hash=False)
+    rating: int = field(hash=False)
 
     @classmethod
     def from_player(cls, player: "Player"):
@@ -176,6 +176,7 @@ class Reveal:
 class ShotResult:
     player: PlayerId
     board: BoardId
+    hit: bool
     reveal: list[Reveal] = field(hash=False, compare=False)
     reveal_ship: list[Ship] = field(hash=False, compare=False)
 

@@ -18,6 +18,7 @@ media_player = Player()
 
 hit_sound = loader.media("sfx/hit.wav", False)
 miss_sound = loader.media("sfx/miss.wav", False)
+found_sound = loader.media("sfx/found.wav", False)
 sfx_volume = Ref(1.0)
 
 room: Ref[models.RoomId | None] = Ref(None)
@@ -208,10 +209,15 @@ def process_shot_result(shot_result: models.ShotResult, play_audio: bool = True)
         ship=[*set([*board.value.ship, *shot_result.reveal_ship])],
     )
     if play_audio:
-        if any(isinstance(r.tile, models.ShipTile) for r in shot_result.reveal):
-            media_player.queue(hit_sound)
+        if shot_result.hit:
+            if any(isinstance(r.tile, models.ShipTile) for r in shot_result.reveal):
+                media_player.queue(hit_sound)
+            else:
+                media_player.queue(miss_sound)
         else:
-            media_player.queue(miss_sound)
+            if any(isinstance(r.tile, models.ShipTile) for r in shot_result.reveal):
+                media_player.queue(found_sound)
+
         media_player.play()
 
 
@@ -235,7 +241,7 @@ async def shot_submit(
             ),
         )
 
-        process_shot_result(shot_result, False)
+        process_shot_result(shot_result)
         shots.value[shot_variant].value = unref(shots.value[shot_variant]) - 1
 
 

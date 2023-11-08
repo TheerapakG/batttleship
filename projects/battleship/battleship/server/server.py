@@ -62,6 +62,7 @@ class BattleshipServer(Server):
                 .returning(db.Player)
             )
             result = await db_session.execute(stmt)
+            await db_session.commit()
 
             if db_player := result.scalars().one_or_none():
                 return await db_player.to_shared(db_session)

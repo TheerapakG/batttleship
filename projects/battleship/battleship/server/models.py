@@ -365,6 +365,7 @@ class Room:
                 res = models.ShotResult(
                     player,
                     models.BoardId.from_board(board),
+                    False,
                     location_result,
                     reveal_ship,
                 )
@@ -374,6 +375,7 @@ class Room:
                 res = models.ShotResult(
                     player,
                     models.BoardId.from_board(board),
+                    True,
                     [
                         (
                             replace(r, tile=evolve(r.tile, ship=None))
@@ -387,6 +389,7 @@ class Room:
                 other_res = models.ShotResult(
                     player,
                     models.BoardId.from_board(board),
+                    True,
                     [
                         replace(r, tile=evolve(r.tile, ship=None))
                         for r in location_result

@@ -3272,7 +3272,7 @@ def rounded_rect_label_button(
 
 @Component.register("RoundedRectImageButton")
 def rounded_rect_image_button(
-    name: str | ReadRef[str],
+    texture: str | TextureRegion | ReadRef[str | TextureRegion],
     color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]],
     hover_color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]],
     disabled_color: tuple[int, int, int, int] | ReadRef[tuple[int, int, int, int]],
@@ -3326,7 +3326,7 @@ def rounded_rect_image_button(
                 radius_top_right="radius_top_right"
             />
             <Image 
-                texture="name"
+                texture="texture"
                 width="image_width" 
                 height="image_height" 
             />
