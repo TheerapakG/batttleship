@@ -24,7 +24,6 @@ def lobby(room: models.RoomInfo, **kwargs):
     player_readies = Ref(set(room.readies))
 
     ready = Ref(False)
-    class_ready = Ref(False)
 
     def get_player_ready_text(player_id: models.PlayerId):
         return computed(
@@ -96,10 +95,6 @@ def lobby(room: models.RoomInfo, **kwargs):
             ready.value = True
             await client.room_ready(models.RoomId.from_room_info(room))
 
-    async def class_select(skin: str, _e):
-        store.game.skin.value = skin
-        class_ready.value = True
-
     return Component.render_xml(
         """
         <Layer handle-ComponentMountedEvent="on_mounted">
@@ -119,19 +114,10 @@ def lobby(room: models.RoomInfo, **kwargs):
                             <RoundedRectLabelButton
                                 t-if="store.user.is_player(models.PlayerId.from_player_info(player_info))"
                                 text="'Ready'"
-                                disabled="not(unref(ready)^unref(class_ready))"
+                                disabled="ready"
                                 t-style="c['teal'][400] | hover_c['teal'][500] | disabled_c['slate'][500] | text_c['white'] | w[48] | h[12]"
                                 handle-ClickEvent="on_ready_button"
                             />
-                            <Row t-if="store.user.is_player(models.PlayerId.from_player_info(player_info))" t-style="g[4]">
-                                <RoundedRectLabelButton 
-                                    t-for="skin in ship_type.SHIP_SKIN_LOOKUP.keys()"
-                                    text="skin"
-                                    disabled="class_ready"
-                                    t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[12] | h[12]"
-                                    handle-ClickEvent="partial(class_select, skin)"
-                                />
-                            </Row>
                             <Label
                                 text="get_player_ready_text(models.PlayerId.from_player_info(player_info))" 
                                 text_color="colors['white']" 
