@@ -140,6 +140,8 @@ def ship_setup(**kwargs):
                         return colors["white"]
                     case models.ShipTile():
                         return colors["emerald"][500]
+                    case models.ObstacleTile():
+                        return colors["yellow"][500]
 
         return computed(_get_tile_color)
 

@@ -3,6 +3,7 @@ from contextlib import suppress
 from copy import deepcopy
 from dataclasses import replace
 from functools import partial
+import random
 from uuid import UUID, uuid4
 
 from pyglet.media import Player
@@ -12,7 +13,7 @@ from tgraphics.reactivity import Ref, computed, unref
 
 from . import ctx, user
 from .. import store
-from ...shared import models, ship_type, shot_type, emote_type
+from ...shared import models, ship_type, shot_type, emote_type, obstacle_type
 
 media_player = Player()
 
@@ -183,11 +184,22 @@ async def generate_board(skin: str):
             [[models.EmptyTile() for _ in range(8)] for _ in range(8)],
             [models.Ship(uuid4(), s, [], 0) for s in ship_type.SHIP_SKIN_LOOKUP[skin]],
         )
+
+        obstacles = set[tuple[int, int]]()
+        while len(obstacles) < 4:
+            obstacles.add((random.randrange(0, 8), random.randrange(0, 8)))
+
+        for o in obstacles:
+            board.grid[o[0]][o[1]] = models.ObstacleTile(
+                obstacle_variant=obstacle_type.ROCK_OBSTACLE_VARIANT
+            )
+
         board_id = models.BoardId.from_board(board)
         boards.value[board_id] = Ref(board)
         board_lookup.value[board.player] = board_id
         boards.trigger()
         board_lookup.trigger()
+
         return board
     else:
         raise Exception()
