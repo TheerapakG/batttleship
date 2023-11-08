@@ -219,6 +219,10 @@ def game(**kwargs):
 
     def on_turn(state: bool):
         if state:
+            if (c_id := unref(current_shot_type_id)) is not None and unref(
+                unref(store.game.shots)[c_id]
+            ) == 0:
+                current_shot_type_id.value = None
             turn_timer.value = 10
 
     def set_timer(durations: tuple[float | None, ...]):

@@ -261,9 +261,7 @@ async def subscribe_player_leave():
     if (client := unref(ctx.client)) is not None:
         async for player in client.on_room_leave():
             alive_players.value.remove(player)
-            dead_players.value.append(player)
             alive_players.trigger()
-            dead_players.trigger()
 
             with suppress(KeyError, IndexError):
                 player_id = models.PlayerId.from_player_info(player)
