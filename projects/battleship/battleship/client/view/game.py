@@ -308,7 +308,7 @@ def game(**kwargs):
             <Absolute t-style="w['full'](window) | h['full'](window)" stick_bottom="False" stick_left="False">
                 <Pad t-style="p_r[4] | p_t[4]">
                     <Column t-style="g[4]">
-                        <Layer t-for="player_id, player_info in unref(store.game.players).items()">
+                        <Layer t-for="player_id, player_info in unref(store.game.round_players).items()">
                             <Label
                                 t-style="text_c['white']"
                                 text="f'{player_info.name}: {unref(store.game.get_player_point(player_id))} ({unref(store.game.get_player_score(player_id))})'"

@@ -27,6 +27,7 @@ room: Ref[models.RoomId | None] = Ref(None)
 skin: Ref[str] = Ref("")
 
 players = Ref(dict[models.PlayerId, models.PlayerInfo]())
+round_players = Ref(dict[models.PlayerId, models.PlayerInfo]())
 alive_players = Ref(list[models.PlayerInfo]())
 dead_players = Ref(list[models.PlayerInfo]())
 
@@ -67,7 +68,8 @@ def get_player_point(player: models.PlayerId):
 async def room_reset():
     room_delete.value = False
     result.value = None
-    alive_players.value = [*unref(players).values()]
+    round_players.value = unref(players).copy()
+    alive_players.value = [*unref(round_players).values()]
     dead_players.value = []
     player_scores.value = {
         models.PlayerId.from_player_info(player): Ref(0)
@@ -260,8 +262,12 @@ async def shot_submit(
 async def subscribe_player_leave():
     if (client := unref(ctx.client)) is not None:
         async for player in client.on_room_leave():
+            del players.value[models.PlayerId.from_player_info(player)]
             alive_players.value.remove(player)
+            dead_players.value.append(player)
+            players.trigger()
             alive_players.trigger()
+            dead_players.trigger()
 
             with suppress(KeyError, IndexError):
                 player_id = models.PlayerId.from_player_info(player)

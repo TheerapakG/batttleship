@@ -31,7 +31,7 @@ def game_end_overlay(**kwargs):
         )
 
     win_player = computed(
-        lambda: unref(store.game.players).get(player)
+        lambda: unref(store.game.round_players).get(player)
         if (player := unref(store.game.result).win) is not None
         else None
     )
@@ -105,7 +105,7 @@ def game_end_overlay(**kwargs):
                         />
                         <Row t-style="g[4]">
                             <Label
-                                t-for="player_id, player_info in unref(store.game.players).items()"
+                                t-for="player_id, player_info in unref(store.game.round_players).items()"
                                 t-style="text_c['black']"
                                 text="f'{player_info.name}: {unref(store.game.get_player_point(player_id))} ({unref(store.game.get_player_score(player_id))})'"
                             />
