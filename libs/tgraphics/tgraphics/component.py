@@ -569,6 +569,9 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
     def __hash__(self) -> int:
         return id(self)
 
+    def __eq__(self, other):
+        return hash(self) == hash(other)
+
     async def _set_mount_duration(self, _dt: float):
         self.mount_duration.value = self.mount_duration.value + _dt
 
@@ -1283,6 +1286,9 @@ class PadInstance(ComponentInstance["Pad"]):
     def __hash__(self) -> int:
         return id(self)
 
+    def __eq__(self, other):
+        return hash(self) == hash(other)
+
     @event_handler(ComponentMountedEvent)
     async def component_mounted_handler(self, _: ComponentMountedEvent):
         child = computed(
@@ -1378,6 +1384,9 @@ class AbsoluteInstance(ComponentInstance["Absolute"]):
     def __hash__(self) -> int:
         return id(self)
 
+    def __eq__(self, other):
+        return hash(self) == hash(other)
+
     @event_handler(ComponentMountedEvent)
     async def component_mounted_handler(self, _: ComponentMountedEvent):
         child = computed(
@@ -1464,6 +1473,9 @@ class Absolute(Component):
 class OffsetInstance(ComponentInstance["Offset"]):
     def __hash__(self) -> int:
         return id(self)
+
+    def __eq__(self, other):
+        return hash(self) == hash(other)
 
     @event_handler(ComponentMountedEvent)
     async def component_mounted_handler(self, _: ComponentMountedEvent):
@@ -1553,6 +1565,9 @@ class Offset(Component):
 class ScaleInstance(ComponentInstance["Scale"]):
     def __hash__(self) -> int:
         return id(self)
+
+    def __eq__(self, other):
+        return hash(self) == hash(other)
 
     @event_handler(ComponentMountedEvent)
     async def component_mounted_handler(self, _: ComponentMountedEvent):
@@ -1644,6 +1659,9 @@ class Scale(Component):
 class LayerInstance(ComponentInstance["Layer"]):
     def __hash__(self) -> int:
         return id(self)
+
+    def __eq__(self, other):
+        return hash(self) == hash(other)
 
     @event_handler(ComponentMountedEvent)
     async def component_mounted_handler(self, _: ComponentMountedEvent):
@@ -1745,6 +1763,9 @@ class Layer(Component):
 class RowInstance(ComponentInstance["Row"]):
     def __hash__(self) -> int:
         return id(self)
+
+    def __eq__(self, other):
+        return hash(self) == hash(other)
 
     @event_handler(ComponentMountedEvent)
     async def component_mounted_handler(self, _: ComponentMountedEvent):
@@ -1857,6 +1878,9 @@ class Row(Component):
 class ColumnInstance(ComponentInstance["Column"]):
     def __hash__(self) -> int:
         return id(self)
+
+    def __eq__(self, other):
+        return hash(self) == hash(other)
 
     @event_handler(ComponentMountedEvent)
     async def component_mounted_handler(self, _: ComponentMountedEvent):
@@ -1971,6 +1995,9 @@ class RectInstance(ComponentInstance["Rect"]):
 
     def __hash__(self) -> int:
         return id(self)
+
+    def __eq__(self, other):
+        return hash(self) == hash(other)
 
     def _draw(self, _dt: float):
         self._rect.draw()
@@ -2104,6 +2131,9 @@ class RoundedRectInstance(ComponentInstance["RoundedRect"]):
 
     def __hash__(self) -> int:
         return id(self)
+
+    def __eq__(self, other):
+        return hash(self) == hash(other)
 
     def _draw(self, _dt: float):
         self._batch.draw()
@@ -2277,6 +2307,9 @@ class ImageInstance(ComponentInstance["Image"]):
     def __hash__(self) -> int:
         return id(self)
 
+    def __eq__(self, other):
+        return hash(self) == hash(other)
+
     def _draw(self, _dt: float):
         gl.glEnable(gl.GL_BLEND)
         self._sprite.draw()
@@ -2300,7 +2333,11 @@ class ImageInstance(ComponentInstance["Image"]):
     async def component_mounted_handler(self, _: ComponentMountedEvent):
         x = use_acc_offset_x(self)
         y = use_acc_offset_y(self)
-        image = computed(lambda: loader.image(unref(self.component.name)))
+        image = computed(
+            lambda: loader.image(texture)
+            if isinstance((texture := unref(self.component.texture)), str)
+            else texture
+        )
         width = computed(
             lambda: unref(self.component.width)
             if unref(self.component.width) is not None
@@ -2342,7 +2379,7 @@ class ImageInstance(ComponentInstance["Image"]):
 
 @dataclass
 class Image(Component):
-    name: str | ReadRef[str]
+    texture: str | TextureRegion | ReadRef[str | TextureRegion]
     width: int | float | None | ReadRef[int | float | None] = field(default=None)
     height: int | float | None | ReadRef[int | float | None] = field(default=None)
 
@@ -2356,6 +2393,9 @@ class LabelInstance(ComponentInstance["Label"]):
 
     def __hash__(self) -> int:
         return id(self)
+
+    def __eq__(self, other):
+        return hash(self) == hash(other)
 
     def _draw(self, _dt: float):
         self._label.value.draw()
@@ -2508,6 +2548,9 @@ class InputInstance(ComponentInstance["Input"]):
 
     def __hash__(self) -> int:
         return id(self)
+
+    def __eq__(self, other):
+        return hash(self) == hash(other)
 
     def _blink(self, _dt):
         self._caret_visible.value = (
@@ -3283,7 +3326,7 @@ def rounded_rect_image_button(
                 radius_top_right="radius_top_right"
             />
             <Image 
-                name="name"
+                texture="name"
                 width="image_width" 
                 height="image_height" 
             />

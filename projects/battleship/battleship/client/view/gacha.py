@@ -49,7 +49,7 @@ def gacha(**kwargs):
                     disabled="unref(pull_disabled)"
                     handle-ClickEvent="pull_button"
                 />
-                <Image t-if="unref(last_pull) is not None" name="unref(last_pull)" />
+                <Image t-if="unref(last_pull) is not None" texture="unref(last_pull)" />
                 <Label 
                     text="f'coins: {unref(store.user.player).coins}'"
                     t-style="text_c['white']"

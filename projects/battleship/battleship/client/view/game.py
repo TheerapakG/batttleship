@@ -286,7 +286,7 @@ def game(**kwargs):
 
     return Component.render_xml(
         """
-        <Layer>
+        <Layer handle-ComponentMountedEvent="on_mounted">
             <Absolute t-style="w['full'](window) | h['full'](window)" stick_bottom="False">
                 <Pad t-style="p_l[4] | p_t[4]">
                     <RoundedRectLabelButton 
@@ -297,7 +297,25 @@ def game(**kwargs):
                     />
                 </Pad>
             </Absolute>
-            <Column t-style="w['full'](window) | h['full'](window) | g[4]" handle-ComponentMountedEvent="on_mounted">
+            <Absolute t-style="w['full'](window) | h['full'](window)" stick_bottom="False" stick_left="False">
+                <Pad t-style="p_r[4] | p_t[4]">
+                    <Column t-style="g[4]">
+                        <Layer t-for="player_id, player_info in unref(store.game.players).items()">
+                            <Label
+                                t-style="text_c['white']"
+                                text="f'{player_info.name}: {unref(store.game.get_player_point(player_id))} ({unref(store.game.get_player_score(player_id))})'"
+                            />
+                            <Image 
+                                t-if="unref(store.game.get_player_emote(models.PlayerId.from_player_info(player_info))) is not None" 
+                                t-style="w[12] | h[12]"
+                                texture="unref(store.game.get_player_emote(models.PlayerId.from_player_info(player_info)))"
+                            />
+                        </Layer>
+                    </Column>
+                </Pad>
+            </Absolute>
+            <Column t-style="w['full'](window) | h['full'](window) | g[4]">
+                <EmotePicker />
                 <Row t-style="g[4]">
                     <RoundedRectLabelButton 
                         t-for="shot_id, count in unref(store.game.shots).items()"
@@ -352,13 +370,6 @@ def game(**kwargs):
                 </Row>
                 <Row>
                     <Label t-if="unref(store.game.turn)" text="str(round(unref(turn_timer)))" text_color="colors['white']"/>
-                </Row>
-                <Row t-style="g[4]">
-                    <Label
-                        t-for="player_id, player_info in unref(store.game.players).items()"
-                        t-style="text_c['white']"
-                        text="f'{player_info.name}: {unref(store.game.get_player_point(player_id))} ({unref(store.game.get_player_score(player_id))})'"
-                    />
                 </Row>
             </Column>
             <GameEndOverlay t-if="unref(store.game.result) is not None" />

@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 from dataclasses import replace
+from functools import partial
 
 from tgraphics.color import colors
 from tgraphics.component import Component
@@ -10,7 +11,7 @@ from tgraphics.style import *
 
 from ..component import emote_picker
 from .. import store
-from ...shared import models
+from ...shared import models, ship_type
 
 
 @Component.register("Lobby")
@@ -71,7 +72,7 @@ def lobby(room: models.RoomInfo, **kwargs):
                 }
 
     def on_mounted(event: ComponentMountedEvent):
-        # TODO: async component
+        store.bgm.set_music(store.bgm.game_bgm)
         event.instance.bound_tasks.update(
             [
                 asyncio.create_task(subscribe_player_join()),
@@ -95,9 +96,9 @@ def lobby(room: models.RoomInfo, **kwargs):
             ready.value = True
             await client.room_ready(models.RoomId.from_room_info(room))
 
-    async def class_select(_e):
+    async def class_select(skin: str, _e):
+        store.game.skin.value = skin
         class_ready.value = True
-        # TODO: assign class to player
 
     return Component.render_xml(
         """
@@ -124,22 +125,11 @@ def lobby(room: models.RoomInfo, **kwargs):
                             />
                             <Row t-if="store.user.is_player(models.PlayerId.from_player_info(player_info))" t-style="g[4]">
                                 <RoundedRectLabelButton 
-                                    text="'NAVY'"
+                                    t-for="skin in ship_type.SHIP_SKIN_LOOKUP.keys()"
+                                    text="skin"
                                     disabled="class_ready"
                                     t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[12] | h[12]"
-                                    handle-ClickEvent="class_select"
-                                />
-                                <RoundedRectLabelButton 
-                                    text="'Scout'"
-                                    disabled="class_ready"
-                                    t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[12] | h[12]"
-                                    handle-ClickEvent="class_select"
-                                />
-                                <RoundedRectLabelButton 
-                                    text="'Pirate'"
-                                    disabled="class_ready"
-                                    t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[12] | h[12]"
-                                    handle-ClickEvent="class_select"
+                                    handle-ClickEvent="partial(class_select, skin)"
                                 />
                             </Row>
                             <Label
@@ -157,7 +147,7 @@ def lobby(room: models.RoomInfo, **kwargs):
                         </Column>
                         <Image 
                             t-if="unref(store.game.get_player_emote(models.PlayerId.from_player_info(player_info))) is not None" 
-                            name="unref(store.game.get_player_emote(models.PlayerId.from_player_info(player_info)))"
+                            texture="unref(store.game.get_player_emote(models.PlayerId.from_player_info(player_info)))"
                         />
                     </Layer>
                 </Row>

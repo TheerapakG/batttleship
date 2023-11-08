@@ -22,6 +22,8 @@ sfx_volume = Ref(1.0)
 
 room: Ref[models.RoomId | None] = Ref(None)
 
+skin: Ref[str] = Ref("")
+
 players = Ref(dict[models.PlayerId, models.PlayerInfo]())
 alive_players = Ref(list[models.PlayerInfo]())
 dead_players = Ref(list[models.PlayerInfo]())
@@ -81,7 +83,7 @@ async def room_reset():
     }
     shots.trigger()
     turn.value = False
-    await generate_board()
+    await generate_board(unref(skin))
 
 
 alive_players_not_user = computed(
@@ -171,19 +173,14 @@ def is_current_board_player(player: models.PlayerId):
     )
 
 
-async def generate_board():
+async def generate_board(skin: str):
     if (user_player := unref(user.player)) is not None:
         board = models.Board(
             uuid4(),
             models.PlayerId.from_player(user_player),
             unref(room),
             [[models.EmptyTile() for _ in range(8)] for _ in range(8)],
-            [
-                models.Ship(uuid4(), ship_type.NORMAL_SHIP_VARIANT, [], 0),
-                models.Ship(uuid4(), ship_type.NORMAL_SHIP_VARIANT, [], 0),
-                models.Ship(uuid4(), ship_type.T_SHIP_VARIANT, [], 0),
-                models.Ship(uuid4(), ship_type.T_SHIP_VARIANT, [], 0),
-            ],
+            [models.Ship(uuid4(), s, [], 0) for s in ship_type.SHIP_SKIN_LOOKUP[skin]],
         )
         board_id = models.BoardId.from_board(board)
         boards.value[board_id] = Ref(board)

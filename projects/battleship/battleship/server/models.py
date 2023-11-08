@@ -267,7 +267,7 @@ class Room:
                             )
                         )
 
-            await asyncio.sleep(3)
+            await asyncio.sleep(5)
 
             player = self.alive_players.pop()
             self.alive_players.insert(0, player)

@@ -7,6 +7,7 @@ media_player.loop = True
 bgm_volume = Ref(0.5)
 
 menu_bgm = loader.media("bgm/menu.wav", True)
+game_bgm = loader.media("bgm/game.wav", True)
 
 
 def set_volume(volume):

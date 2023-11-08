@@ -16,11 +16,6 @@ from ...shared import models
 def main_menu(name: str | None = None, **kwargs):
     window = store.ctx.use_window()
 
-    try:
-        store.user.load()
-    except FileNotFoundError:
-        pass
-
     online_count = Ref(None)
     code = Ref("")
 

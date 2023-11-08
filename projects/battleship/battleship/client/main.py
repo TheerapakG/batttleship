@@ -25,6 +25,11 @@ if __name__ == "__main__":
     parser.add_argument("-n", "--name")
     args = parser.parse_args()
 
+    try:
+        store.user.load()
+    except FileNotFoundError:
+        pass
+
     store.ctx.window.value = Window(resizable=True)
 
     ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)

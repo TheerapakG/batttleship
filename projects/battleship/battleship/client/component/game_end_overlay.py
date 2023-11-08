@@ -20,7 +20,7 @@ def game_end_overlay(**kwargs):
         lambda: (min(max(unref(duration), 3), 6) - 3) / 3
     )
     duration_zoom_clamped_ratio = computed(
-        lambda: (min(max(unref(duration), 6), 9) - 6) / 3
+        lambda: (min(max(unref(duration), 6), 7) - 6) / 1
     )
 
     async def on_mounted(event: ComponentMountedEvent):
@@ -84,7 +84,7 @@ def game_end_overlay(**kwargs):
                         </Offset>
                     </Column>
                 </Column>
-                <Column t-if="unref(duration) > 9" t-style="g[16]">
+                <Column t-if="unref(duration) > 7" t-style="g[16]">
                     <Column t-style="g[8]">
                         <Row t-style="g[4]">
                             <RoundedRectLabelButton 

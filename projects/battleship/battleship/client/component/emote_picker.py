@@ -33,7 +33,7 @@ def emote_picker(**kwargs):
         <Row t-style="g[4]">
             <RoundedRectImageButton 
                 t-for="emote_id, emote_variant in emote_type.EMOTE_VARIANTS.items()"
-                name="emote_variant.name"
+                texture="emote_variant.name"
                 t-style="c['teal'][400] | hover_c['teal'][500] | disabled_c['slate'][500] | w[16] | h[16]"
                 disabled="emote_id not in unref(store.user.player).emotes"
                 handle-ClickEvent="partial(on_emote_button, emote_variant)"

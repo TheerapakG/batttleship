@@ -1,3 +1,4 @@
+from contextlib import suppress
 from copy import deepcopy
 from dataclasses import replace
 from functools import partial
@@ -14,6 +15,12 @@ from .. import store
 from ..component import game_end_overlay
 from ...shared import models, ship_type
 from ...shared.utils import add, mat_mul_vec
+
+
+def _expect_index_error(func, default):
+    with suppress(IndexError):
+        return func()
+    return default
 
 
 @Component.register("ShipSetup")
@@ -237,8 +244,8 @@ def ship_setup(**kwargs):
 
     return Component.render_xml(
         """
-        <Layer>
-            <Column t-style="w['full'](window) | h['full'](window) | g[4]" handle-ComponentMountedEvent="on_mounted">
+        <Layer handle-ComponentMountedEvent="on_mounted">
+            <Column t-style="w['full'](window) | h['full'](window) | g[4]">
                 <EmotePicker />
                 <Row t-style="g[1]">
                     <RoundedRectLabelButton 
@@ -256,7 +263,7 @@ def ship_setup(**kwargs):
                 <Column t-style="g[1]">
                     <Row t-for="col in range(unref(player_grid_col))" t-style="g[1]">
                         <RoundedRectLabelButton 
-                            t-for="row in range(unref(player_grid_rows)[col])"
+                            t-for="row in range(_expect_index_error(lambda: unref(player_grid_rows)[col], 0))"
                             text="''" 
                             text_color="colors['white']"
                             color="get_tile_color(col, row)"
@@ -284,7 +291,7 @@ def ship_setup(**kwargs):
                         <Image 
                             t-if="unref(store.game.get_player_emote(models.PlayerId.from_player_info(player_info))) is not None" 
                             t-style="w[12] | h[12]"
-                            name="unref(store.game.get_player_emote(models.PlayerId.from_player_info(player_info)))"
+                            texture="unref(store.game.get_player_emote(models.PlayerId.from_player_info(player_info)))"
                         />
                     </Layer>
                     <RoundedRectLabelButton

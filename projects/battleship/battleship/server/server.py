@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from . import db
 from . import models as server_models
 from ..shared import models, emote_type
-from ..shared.ship_type import NORMAL_SHIP_VARIANT
+from ..shared.ship_type import NORMAL_NAVY_SHIP_VARIANT
 from ..shared.logging import setup_logging
 
 
@@ -111,7 +111,7 @@ class BattleshipServer(Server):
         async with self.db_session_maker() as db_session:
             db_player = db.Player(name=args.name)
             db_player.ships = [
-                db.Ship(variant_id=NORMAL_SHIP_VARIANT.id) for _ in range(4)
+                db.Ship(variant_id=NORMAL_NAVY_SHIP_VARIANT.id) for _ in range(4)
             ]
 
             db_session.add(db_player)

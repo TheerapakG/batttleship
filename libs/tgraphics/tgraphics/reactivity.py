@@ -676,7 +676,10 @@ class Watcher:
     def __hash__(self) -> int:
         return id(self)
 
-    def unwatch(self):
+    def __eq__(self, other):
+        return hash(self) != hash(other)
+
+    def __del__(self):
         for source in self._sources:
             try:
                 source.watchers.remove(self)
@@ -686,6 +689,9 @@ class Watcher:
             Effect.update_set.remove(weakref.ref(self))
         except KeyError:
             pass
+
+    def unwatch(self):
+        self.__del__()
 
     def trigger(self):
         with Effect.track_barrier():
