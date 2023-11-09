@@ -308,18 +308,31 @@ def game(**kwargs):
             <Absolute t-style="w['full'](window) | h['full'](window)" stick_bottom="False" stick_left="False">
                 <Pad t-style="p_r[4] | p_t[4]">
                     <Column t-style="g[4]">
-                        <Layer t-for="player_id, player_info in unref(store.game.round_players).items()">
+                        <Row 
+                            t-for="player_id, player_info in unref(store.game.round_players).items()"
+                            t-style="h[6] | g[6]"
+                        >
                             <Label
-                                t-style="text_c['white']"
                                 text="f'{player_info.name}: {unref(store.game.get_player_point(player_id))} ({unref(store.game.get_player_score(player_id))})'"
+                                t-style="text_c['white']"
                             />
                             <Image 
                                 t-if="unref(store.game.get_player_emote(models.PlayerId.from_player_info(player_info))) is not None" 
-                                t-style="w[12] | h[12]"
+                                t-style="w[8] | h[8]"
                                 texture="unref(store.game.get_player_emote(models.PlayerId.from_player_info(player_info)))"
                             />
-                        </Layer>
+                        </Row>
                     </Column>
+                </Pad>
+            </Absolute>
+            <Absolute t-style="w['full'](window) | h['full'](window)">
+                <Pad t-style="p_l[4] | p_b[4]">
+                    <Label 
+                        t-if="unref(store.game.turn)" 
+                        text="str(round(unref(turn_timer)))" 
+                        font_size="80" bold="True" 
+                        text_color="colors['white'] if round(unref(turn_timer)) > 3 else colors['red'][500]"
+                    />
                 </Pad>
             </Absolute>
             <Column t-style="w['full'](window) | h['full'](window) | g[4]">
@@ -375,9 +388,6 @@ def game(**kwargs):
                         text="player_info.name"
                         handle-ClickEvent="partial(on_player_click, player_info)"
                     />
-                </Row>
-                <Row>
-                    <Label t-if="unref(store.game.turn)" text="str(round(unref(turn_timer)))" text_color="colors['white']"/>
                 </Row>
             </Column>
             <GameEndOverlay t-if="unref(store.game.result) is not None" />

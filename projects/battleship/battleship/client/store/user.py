@@ -11,6 +11,7 @@ player = Ref[models.Player | None](None)
 
 name = computed(lambda: user.name if (user := unref(player)) is not None else None)
 rating = computed(lambda: user.rating if (user := unref(player)) is not None else None)
+coins = computed(lambda: user.coins if (user := unref(player)) is not None else None)
 
 
 def is_player(_player: models.PlayerId):

@@ -253,6 +253,32 @@ def ship_setup(**kwargs):
     return Component.render_xml(
         """
         <Layer handle-ComponentMountedEvent="on_mounted">
+            <Absolute t-style="w['full'](window) | h['full'](window)" stick_bottom="False" stick_left="False">
+                <Pad t-style="p_r[4] | p_t[4]">
+                    <Column t-style="g[4]">
+                        <RoundedRectLabelButton
+                            text="'Submit'"
+                            disabled="not_submitable"
+                            t-style="c['teal'][400] | hover_c['teal'][500] | disabled_c['slate'][500] | text_c['white'] | w[48] | h[12]"
+                            handle-ClickEvent="on_submit_button"
+                        />
+                        <Row 
+                            t-for="player_id, player_info in unref(store.game.round_players).items()"
+                            t-style="h[6] | g[6]"
+                        >
+                            <Label
+                                text="f'{player_info.name}: {unref(store.game.get_player_point(player_id))} ({unref(store.game.get_player_score(player_id))})'"
+                                text_color="get_player_submit_color(player_id)" 
+                            />
+                            <Image 
+                                t-if="unref(store.game.get_player_emote(models.PlayerId.from_player_info(player_info))) is not None" 
+                                t-style="w[8] | h[8]"
+                                texture="unref(store.game.get_player_emote(models.PlayerId.from_player_info(player_info)))"
+                            />
+                        </Row>
+                    </Column>
+                </Pad>
+            </Absolute>
             <Column t-style="w['full'](window) | h['full'](window) | g[4]">
                 <EmotePicker />
                 <Row t-style="g[1]">
@@ -284,27 +310,6 @@ def ship_setup(**kwargs):
                         />
                     </Row>
                 </Column>
-                <Row t-style="g[4]">
-                    <Layer t-for="player_id, player_info in unref(store.game.players).items()">
-                        <Column>
-                            <Label
-                                text="f'{player_info.name}: {unref(store.game.get_player_point(player_id))} ({unref(store.game.get_player_score(player_id))})'" 
-                                text_color="get_player_submit_color(player_id)" 
-                            />
-                        </Column>
-                        <Image 
-                            t-if="unref(store.game.get_player_emote(models.PlayerId.from_player_info(player_info))) is not None" 
-                            t-style="w[12] | h[12]"
-                            texture="unref(store.game.get_player_emote(models.PlayerId.from_player_info(player_info)))"
-                        />
-                    </Layer>
-                    <RoundedRectLabelButton
-                        text="'Submit'"
-                        disabled="not_submitable"
-                        t-style="c['teal'][400] | hover_c['teal'][500] | disabled_c['slate'][500] | text_c['white'] | w[48] | h[12]"
-                        handle-ClickEvent="on_submit_button"
-                    />
-                </Row>
             </Column>
             <GameEndOverlay t-if="unref(store.game.result) is not None" />
         </Layer>

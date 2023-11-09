@@ -102,18 +102,16 @@ def main_menu(name: str | None = None, **kwargs):
     return Component.render_xml(
         """
         <Layer handle-ComponentMountedEvent="on_mounted">
-            <Layer>
-                <Pad pad_right="800">
-                    <Pad pad_bottom="440">
-                        <RoundedRectLabelButton 
-                            text="'Profile'"
-                            font_size="20"
-                            t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[24] | h[10]"
-                            handle-ClickEvent="on_profile_button"
-                        />
-                    </Pad>
+            <Absolute t-style="w['full'](window) | h['full'](window)" stick_bottom="False">
+                <Pad t-style="p_l[4] | p_t[4]">
+                    <RoundedRectLabelButton 
+                        text="'Profile'"
+                        font_size="20"
+                        t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[24] | h[10]"
+                        handle-ClickEvent="on_profile_button"
+                    />
                 </Pad>
-            </Layer>
+            </Absolute>
             <Column 
                 t-style="w['full'](window) | h['full'](window) | g[8]"
             >

@@ -13,7 +13,7 @@ from ...shared import models, emote_type
 def gacha(**kwargs):
     window = store.ctx.use_window()
 
-    pull_disabled = computed(lambda: unref(store.user.player).coins < 100)
+    pull_disabled = computed(lambda: unref(store.user.coins) < 100)
     last_pull = Ref(None)
 
     async def return_button(_e):
@@ -51,7 +51,7 @@ def gacha(**kwargs):
                 />
                 <Image t-if="unref(last_pull) is not None" texture="unref(last_pull)" />
                 <Label 
-                    text="f'coins: {unref(store.user.player).coins}'"
+                    text="f'coins: {unref(store.user.coins)}'"
                     t-style="text_c['white']"
                 />
             </Column>

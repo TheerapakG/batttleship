@@ -18,8 +18,8 @@ def profile(**kwargs):
     return Component.render_xml(
         """
         <Layer>
-            <Pad pad_right="800">
-                <Pad pad_bottom="440">
+            <Absolute t-style="w['full'](window) | h['full'](window)" stick_bottom="False">
+                <Pad t-style="p_l[4] | p_t[4]">
                     <RoundedRectLabelButton 
                         text="'Return'"
                         font_size="20"
@@ -27,7 +27,7 @@ def profile(**kwargs):
                         handle-ClickEvent="return_button"
                     />
                 </Pad>
-            </Pad>
+            </Absolute>
             <Pad pad_bottom="440">
                 <Label text="f'{unref(store.user.name)}'" font_size="36"/>
             </Pad>
@@ -38,9 +38,8 @@ def profile(**kwargs):
 
                 </Row>
                 <Row t-style="g[10]">
-                    <Label text="f'Status: '" text_color="colors['white']" />
                     <Label text="f'Ratings: {unref(store.user.rating)}'" text_color="colors['white']" />
-
+                    <Label text="f'Coins: {unref(store.user.coins)}'" text_color="colors['white']" />
                 </Row>
             </Column>
         </Layer>

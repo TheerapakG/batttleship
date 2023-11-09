@@ -2819,7 +2819,7 @@ class InputInstance(ComponentInstance["Input"]):
     @event_handler(TextEvent)
     async def text_handler(self, event: TextEvent):
         position = unref(self._position_clamped)
-        new_text = event.text.replace("\r", "\n")
+        new_text = event.text.replace("\r", "").replace("\n", "")
         text = unref(self.component.text)
         self._position.value = position + len(new_text)
         await self.capture(
