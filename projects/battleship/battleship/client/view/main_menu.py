@@ -55,7 +55,7 @@ def main_menu(name: str | None = None, **kwargs):
             room = await client.private_room_create(
                 models.BearingPlayerAuth.from_player(user)
             )
-            store.game.room.value = models.RoomId.from_room_info(room)
+            store.game.room.value = models.RoomId.from_room_info(room.room)
             store.game.players.value = {
                 models.PlayerId.from_player_info(player_info): player_info
                 for player_info in room.players
