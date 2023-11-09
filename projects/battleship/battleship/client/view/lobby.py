@@ -129,6 +129,11 @@ def lobby(**kwargs):
                         />
                     </Layer>
                     <Column t-style="w[48] | g[2]">
+                        <Label
+                            t-if="not unref(store.game.players_not_user)"
+                            text="'waiting...'" 
+                            text_color="colors['white']" 
+                        />
                         <Layer t-for="player_id, player_info in unref(store.game.players_not_user).items()">
                             <Row t-style="g[2]">
                                 <Label
