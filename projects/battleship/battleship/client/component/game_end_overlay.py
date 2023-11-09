@@ -1,3 +1,4 @@
+import asyncio
 from tgraphics.animation import ease_out
 from tgraphics.color import colors, with_alpha
 from tgraphics.component import Component, ClickEvent
@@ -29,10 +30,12 @@ def game_end_overlay(**kwargs):
                 Watcher.ifref(event.instance.mount_duration, duration.set_value),
             ]
         )
+        store.game.ready_players.value = {}
         if unref(store.user.is_player(unref(store.game.result).win)):
             store.game.media_player.queue(store.game.win_sound)
         else:
             store.game.media_player.queue(store.game.lose_sound)
+        store.game.media_player.play()
 
     win_player = computed(
         lambda: unref(store.game.round_players).get(player)
@@ -41,10 +44,10 @@ def game_end_overlay(**kwargs):
     )
 
     async def on_rematch_button(event: ClickEvent):
-        from ..view.ship_setup import ship_setup
+        from ..view.rematch_lobby import rematch_lobby
 
         await store.game.room_reset()
-        await store.ctx.set_scene(ship_setup())
+        asyncio.create_task(store.ctx.set_scene(rematch_lobby()))
 
     async def on_return_button(event: ClickEvent):
         if (
@@ -59,7 +62,7 @@ def game_end_overlay(**kwargs):
 
         from ..view.main_menu import main_menu
 
-        await store.ctx.set_scene(main_menu())
+        asyncio.create_task(store.ctx.set_scene(main_menu()))
 
     return Component.render_xml(
         """
@@ -104,11 +107,11 @@ def game_end_overlay(**kwargs):
                             />
                         </Row>
                         <Label 
-                            text="f'Coins: {unref(store.game.result).new_stat.coins} ({unref(store.game.result).coin_change:+})'" 
+                            text="f'Coins: {r.new_stat.coins} ({r.coin_change:+})' if (r := unref(store.game.result)) is not None else ''" 
                             text_color="colors['black']" 
                         />
                         <Label 
-                            text="f'New rating: {unref(store.game.result).new_stat.rating} ({unref(store.game.result).rating_change:+})'" 
+                            text="f'New rating: {r.new_stat.rating} ({r.rating_change:+})' if (r := unref(store.game.result)) is not None else ''" 
                             text_color="colors['black']" 
                         />
                         <Row t-style="g[4]">
@@ -124,7 +127,7 @@ def game_end_overlay(**kwargs):
                         />
                     </Column>
                     <Label 
-                        text="f'You Won' if unref(store.user.is_player(unref(store.game.result).win)) else 'You Lose'" 
+                        text="f'You Won' if (r := unref(store.game.result)) and unref(store.user.is_player(r.win)) else 'You Lose'" 
                         text_color="colors['black']"
                         font_size="64"
                     />

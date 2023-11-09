@@ -768,7 +768,7 @@ class ComponentInstance(Generic[C], metaclass=ComponentInstanceMeta):
         self.bound_watchers.clear()
         for task in self.bound_tasks:
             task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
+            with contextlib.suppress(Exception, asyncio.CancelledError):
                 await task
         self.bound_tasks.clear()
         for child in unref(use_children(self)):
@@ -1912,28 +1912,31 @@ class ColumnInstance(ComponentInstance["Column"]):
         )
 
         async def mount_child(index: int):
-            child = unref(collapsed_children)[index]
+            try:
+                child = unref(collapsed_children)[index]
 
-            pad_x = computed(lambda: (unref(width) - unref(use_width(child))) / 2)
-            pad_y = computed(
-                lambda: ((unref(height) - unref(sum_height)) / 2)
-                + sum(unref(c_h) for c_h in unref(children_height)[:index])
-                + index * unref(self.component.gap)
-            )
+                pad_x = computed(lambda: (unref(width) - unref(use_width(child))) / 2)
+                pad_y = computed(
+                    lambda: ((unref(height) - unref(sum_height)) / 2)
+                    + sum(unref(c_h) for c_h in unref(children_height)[:index])
+                    + index * unref(self.component.gap)
+                )
 
-            off_x = computed(lambda: unref(pad_x) * unref(use_acc_scale_x(self)))
-            off_y = computed(lambda: unref(pad_y) * unref(use_acc_scale_y(self)))
-            child.before_mounted_data.value = BeforeMountedComponentInstanceData(
-                off_x,
-                off_y,
-                computed(lambda: unref(use_acc_offset_x(self)) + unref(off_x)),
-                computed(lambda: unref(use_acc_offset_y(self)) + unref(off_y)),
-                1,
-                1,
-                use_acc_scale_x(self),
-                use_acc_scale_y(self),
-            )
-            await child.capture(ComponentMountedEvent(child))
+                off_x = computed(lambda: unref(pad_x) * unref(use_acc_scale_x(self)))
+                off_y = computed(lambda: unref(pad_y) * unref(use_acc_scale_y(self)))
+                child.before_mounted_data.value = BeforeMountedComponentInstanceData(
+                    off_x,
+                    off_y,
+                    computed(lambda: unref(use_acc_offset_x(self)) + unref(off_x)),
+                    computed(lambda: unref(use_acc_offset_y(self)) + unref(off_y)),
+                    1,
+                    1,
+                    use_acc_scale_x(self),
+                    use_acc_scale_y(self),
+                )
+                await child.capture(ComponentMountedEvent(child))
+            except Exception:
+                pass
 
         async def mount_children(current_collapsed_children: list[ComponentInstance]):
             nonlocal previous_collapsed_children

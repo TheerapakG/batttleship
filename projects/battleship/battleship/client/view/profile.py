@@ -13,7 +13,7 @@ def profile(**kwargs):
     async def return_button(_e):
         from .main_menu import main_menu
 
-        await store.ctx.set_scene(main_menu())
+        asyncio.create_task(store.ctx.set_scene(main_menu()))
 
     return Component.render_xml(
         """

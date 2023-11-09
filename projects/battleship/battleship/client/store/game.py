@@ -275,7 +275,8 @@ async def subscribe_player_leave():
     if (client := unref(ctx.client)) is not None:
         async for player in client.on_room_leave():
             del players.value[models.PlayerId.from_player_info(player)]
-            alive_players.value.remove(player)
+            with suppress(ValueError):
+                alive_players.value.remove(player)
             dead_players.value.append(player)
             players.trigger()
             alive_players.trigger()
@@ -369,7 +370,7 @@ async def do_game_reset():
     from ..view.ship_setup import ship_setup
 
     await room_reset()
-    await store.ctx.set_scene(ship_setup())
+    asyncio.create_task(store.ctx.set_scene(ship_setup()))
 
 
 async def subscribe_game_reset():
@@ -400,7 +401,9 @@ result: Ref[models.GameEndData | None] = Ref(None)
 async def subscribe_game_end():
     if (client := unref(ctx.client)) is not None:
         async for game_result in client.on_game_end():
-            player_points.value[game_result.win].value += 1
+            player_points.value[game_result.win].value = (
+                unref(player_points.value[game_result.win]) + 1
+            )
             user.save(game_result.new_stat)
             result.value = game_result
 

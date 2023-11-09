@@ -106,6 +106,10 @@ class BattleshipClient(Client):
         raise NotImplementedError()
 
     @Route.simple
+    async def room_surrender(self, args: models.RoomId) -> Empty:
+        raise NotImplementedError()
+
+    @Route.simple
     async def private_room_create(
         self, args: models.BearingPlayerAuth
     ) -> models.PrivateRoomCreateResults:

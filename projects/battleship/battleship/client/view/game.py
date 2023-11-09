@@ -284,13 +284,7 @@ def game(**kwargs):
 
     async def surrender_button(_e):
         if (client := unref(store.ctx.client)) is not None:
-            await client.room_leave(
-                models.RoomId.from_room_info(unref(store.game.room))
-            )
-
-            from .main_menu import main_menu
-
-            await store.ctx.set_scene(main_menu())
+            await client.room_surrender(unref(store.game.room))
 
     return Component.render_xml(
         """
@@ -301,6 +295,7 @@ def game(**kwargs):
                         text="'Surrender'"
                         font_size="20"
                         t-style="c['teal'][300] | hover_c['teal'][400] | disabled_c['slate'][500] | text_c['white'] | w[28] | h[10]"
+                        disabled="not unref(store.game.user_alive)"
                         handle-ClickEvent="surrender_button"
                     />
                 </Pad>

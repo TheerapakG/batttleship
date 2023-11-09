@@ -19,7 +19,7 @@ def gacha(**kwargs):
     async def return_button(_e):
         from .main_menu import main_menu
 
-        await store.ctx.set_scene(main_menu())
+        asyncio.create_task(store.ctx.set_scene(main_menu()))
 
     async def pull_button(_e):
         if (client := unref(store.ctx.client)) is not None and (

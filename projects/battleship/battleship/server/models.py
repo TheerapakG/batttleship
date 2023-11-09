@@ -71,7 +71,7 @@ class Room:
     async def do_cancel_next_player_task(self):
         if (n_task := self.next_player_task) is not None:
             n_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await n_task
         self.next_player_task = None
 
@@ -133,6 +133,7 @@ class Room:
                 )
         if len(self.alive_players) == 1:
             self.lost_players.append(self.alive_players.pop())
+            self.readies = set()
             rating_changes = {}
             coin_changes = {}
             new_stats = {}
@@ -163,20 +164,22 @@ class Room:
                         )
             async with asyncio.TaskGroup() as tg:
                 for player_id, player_info in self.players.items():
-                    tg.create_task(
-                        self.server.on_game_end(
-                            self.server.known_player_session[
-                                models.PlayerId.from_player_info(player_info)
-                            ],
-                            models.GameEndData(
-                                models.PlayerId.from_player_info(self.lost_players[-1]),
-                                rating_changes.get(player_id, 0),
-                                coin_changes.get(player_id, 0),
-                                await new_stats.get(player_id),
-                            ),
+                    if (new_stat := new_stats.get(player_id)) is not None:
+                        tg.create_task(
+                            self.server.on_game_end(
+                                self.server.known_player_session[
+                                    models.PlayerId.from_player_info(player_info)
+                                ],
+                                models.GameEndData(
+                                    models.PlayerId.from_player_info(
+                                        self.lost_players[-1]
+                                    ),
+                                    rating_changes.get(player_id, 0),
+                                    coin_changes.get(player_id, 0),
+                                    await new_stat,
+                                ),
+                            )
                         )
-                    )
-            await self.do_room_reset()
 
     async def remove_player(self, player_id: models.PlayerId):
         async with self.lock:

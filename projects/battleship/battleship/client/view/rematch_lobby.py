@@ -8,17 +8,17 @@ from tgraphics.component import Component
 from tgraphics.event import ComponentMountedEvent
 from tgraphics.reactivity import Ref, Watcher, computed, unref
 from tgraphics.style import *
+from tsocket.shared import ResponseError
 
 from ..component import emote_picker
 from .. import store
 from ...shared import models, ship_type
 
 
-@Component.register("Lobby")
-def lobby(**kwargs):
+@Component.register("RematchLobby")
+def rematch_lobby(**kwargs):
     window = store.ctx.use_window()
 
-    ready = Ref(False)
     duration = Ref[float](0)
 
     dots = computed(lambda: "." * (int(unref(duration) % 3) + 1))
@@ -29,14 +29,6 @@ def lobby(**kwargs):
             if player_id in unref(store.game.ready_players)
             else colors["red"][500]
         )
-
-    async def subscribe_player_join():
-        if (client := unref(store.ctx.client)) is not None:
-            async for player_info in client.on_room_join():
-                store.game.players.value[
-                    models.PlayerId.from_player_info(player_info)
-                ] = player_info
-                store.game.players.trigger()
 
     async def subscribe_player_leave():
         if (client := unref(store.ctx.client)) is not None:
@@ -50,6 +42,15 @@ def lobby(**kwargs):
                         models.PlayerId.from_player_info(player_info)
                     )
                     store.game.ready_players.trigger()
+                if len(store.game.players.value) < 2:
+                    try:
+                        await client.room_leave(unref(store.game.room))
+                    except ResponseError:
+                        pass
+
+                    from .main_menu import main_menu
+
+                    asyncio.create_task(store.ctx.set_scene(main_menu()))
 
     async def subscribe_room_player_ready():
         if (client := unref(store.ctx.client)) is not None:
@@ -62,15 +63,9 @@ def lobby(**kwargs):
             async for _ in client.on_room_ready():
                 from .ship_setup import ship_setup
 
-                await store.game.room_reset()
-                store.game.player_points.value = {
-                    models.PlayerId.from_player_info(player): Ref(0)
-                    for player in unref(store.game.alive_players)
-                }
-
                 asyncio.create_task(store.ctx.set_scene(ship_setup()))
 
-    def on_mounted(event: ComponentMountedEvent):
+    async def on_mounted(event: ComponentMountedEvent):
         store.bgm.set_music(store.bgm.game_bgm)
         event.instance.bound_watchers.update(
             [
@@ -79,26 +74,25 @@ def lobby(**kwargs):
         )
         event.instance.bound_tasks.update(
             [
-                asyncio.create_task(subscribe_player_join()),
                 asyncio.create_task(subscribe_player_leave()),
                 asyncio.create_task(subscribe_room_player_ready()),
                 asyncio.create_task(subscribe_room_ready()),
                 asyncio.create_task(store.game.subscribe_emote_display()),
             ]
         )
+        if (client := unref(store.ctx.client)) is not None:
+            await client.room_ready(unref(store.game.room))
 
     async def return_button(_e):
         if (client := unref(store.ctx.client)) is not None:
-            await client.room_leave(unref(store.game.room))
+            try:
+                await client.room_leave(unref(store.game.room))
+            except ResponseError:
+                pass
 
             from .main_menu import main_menu
 
             asyncio.create_task(store.ctx.set_scene(main_menu()))
-
-    async def on_ready_button(_e):
-        if (client := unref(store.ctx.client)) is not None:
-            ready.value = True
-            await client.room_ready(unref(store.game.room))
 
     return Component.render_xml(
         """
@@ -116,12 +110,6 @@ def lobby(**kwargs):
                 <Row t-style="g[4]">
                     <Layer>
                         <Column t-style="w[48] | h[64] | g[3]">
-                            <RoundedRectLabelButton
-                                text="'Ready'"
-                                disabled="ready"
-                                t-style="c['teal'][400] | hover_c['teal'][500] | disabled_c['slate'][500] | text_c['white'] | w[48] | h[12]"
-                                handle-ClickEvent="on_ready_button"
-                            />
                             <Label
                                 text="f'rating: {str(unref(store.user.rating))}'" 
                                 text_color="colors['white']" 

@@ -262,6 +262,15 @@ class BattleshipServer(Server):
         raise ResponseError("not_found", b"")
 
     @Route.simple
+    async def room_surrender(self, session: Session, args: models.RoomId) -> Empty:
+        if (room := self.rooms.get(args, None)) and (
+            (player_id := self.known_player_session_rev[session]) in room
+        ):
+            await room.do_player_lost(player_id)
+            return Empty()
+        raise ResponseError("not_found", b"")
+
+    @Route.simple
     @ensure_session_player
     async def private_room_create(
         self, _session: Session, args: models.BearingPlayerAuth

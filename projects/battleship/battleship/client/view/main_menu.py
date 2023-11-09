@@ -43,10 +43,11 @@ def main_menu(name: str | None = None, **kwargs):
                 for player_info in room.players
             }
             store.game.ready_players.value = set(room.readies)
+            store.game.ready_players.trigger()
 
             from .lobby import lobby
 
-            await store.ctx.set_scene(lobby())
+            asyncio.create_task(store.ctx.set_scene(lobby()))
 
     async def on_private_room_create_button(_e):
         if (client := unref(store.ctx.client)) is not None and (
@@ -61,10 +62,11 @@ def main_menu(name: str | None = None, **kwargs):
                 for player_info in room.room.players
             }
             store.game.ready_players.value = set(room.room.readies)
+            store.game.ready_players.trigger()
 
             from .private_lobby import private_lobby
 
-            await store.ctx.set_scene(private_lobby(room.join_code))
+            asyncio.create_task(store.ctx.set_scene(private_lobby(room.join_code)))
 
     async def on_private_room_join_button(_e):
         if (client := unref(store.ctx.client)) is not None and (
@@ -79,25 +81,26 @@ def main_menu(name: str | None = None, **kwargs):
                 for player_info in room.players
             }
             store.game.ready_players.value = set(room.readies)
+            store.game.ready_players.trigger()
 
             from .lobby import lobby
 
-            await store.ctx.set_scene(lobby())
+            asyncio.create_task(store.ctx.set_scene(lobby()))
 
     async def on_profile_button(_e):
         from .profile import profile
 
-        await store.ctx.set_scene(profile())
+        asyncio.create_task(store.ctx.set_scene(profile()))
 
     async def on_gacha_button(_e):
         from .gacha import gacha
 
-        await store.ctx.set_scene(gacha())
+        asyncio.create_task(store.ctx.set_scene(gacha()))
 
     async def on_setting_button(_e):
         from .settings import settings
 
-        await store.ctx.set_scene(settings())
+        asyncio.create_task(store.ctx.set_scene(settings()))
 
     return Component.render_xml(
         """

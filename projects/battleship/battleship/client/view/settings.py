@@ -1,3 +1,4 @@
+import asyncio
 from tgraphics.color import colors
 from tgraphics.component import Component
 from tgraphics.style import *
@@ -34,7 +35,7 @@ def settings(**kwargs):
     async def page_return(_e):
         from .main_menu import main_menu
 
-        await store.ctx.set_scene(main_menu())
+        asyncio.create_task(store.ctx.set_scene(main_menu()))
 
     async def disable_sfx(_e):
         if store.game.sfx_volume.value == 1.0:
