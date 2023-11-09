@@ -124,32 +124,34 @@ def lobby(**kwargs):
                             />
                         </Column>
                         <Image 
-                            t-if="unref(store.game.get_player_emote(unref(store.user.player))) is not None" 
-                            texture="unref(store.game.get_player_emote(unref(store.user.player)))"
+                            t-if="unref(store.game.get_player_emote(models.PlayerId.from_player(unref(store.user.player)))) is not None" 
+                            texture="unref(store.game.get_player_emote(models.PlayerId.from_player(unref(store.user.player))))"
                         />
                     </Layer>
-                    <Column t-style="w[48] | g[2]">
+                    <Column t-style="w[48] | g[4]">
                         <Label
                             t-if="not unref(store.game.players_not_user)"
                             text="'waiting...'" 
                             text_color="colors['white']" 
                         />
-                        <Layer t-for="player_id, player_info in unref(store.game.players_not_user).items()">
-                            <Row t-style="g[2]">
-                                <Label
-                                    text="player_info.name" 
-                                    text_color="get_player_ready_color(player_id)" 
-                                />
-                                <Label
-                                    text="f'rating: {str(player_info.rating)}'" 
-                                    text_color="colors['white']" 
-                                />
-                            </Row>
+                        <Row 
+                            t-for="player_id, player_info in unref(store.game.players_not_user).items()"
+                            t-style="h[6] | g[6]"
+                        >
+                            <Label
+                                text="player_info.name" 
+                                text_color="get_player_ready_color(player_id)" 
+                            />
+                            <Label
+                                text="f'rating: {str(player_info.rating)}'" 
+                                text_color="colors['white']" 
+                            />
                             <Image 
                                 t-if="unref(store.game.get_player_emote(player_id)) is not None" 
+                                t-style="w[8] | h[8]"
                                 texture="unref(store.game.get_player_emote(player_id))"
                             />
-                        </Layer>
+                        </Row>
                     </Column>
                 </Row>
             </Column>
