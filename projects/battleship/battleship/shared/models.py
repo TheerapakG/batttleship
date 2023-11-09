@@ -4,6 +4,15 @@ from uuid import UUID
 
 
 @dataclass(eq=True, frozen=True)
+class AvatarVariantId:
+    id: UUID  # pylint: disable=C0103
+
+    @classmethod
+    def from_avatar_variant(cls, avatar_variant: "AvatarVariantId"):
+        return cls(avatar_variant.id)
+
+
+@dataclass(eq=True, frozen=True)
 class PlayerId:
     id: UUID  # pylint: disable=C0103
 
@@ -20,10 +29,11 @@ class PlayerId:
 class PlayerInfo(PlayerId):
     name: str = field(hash=False)
     rating: int = field(hash=False)
+    avatar: AvatarVariantId = field(hash=False)
 
     @classmethod
     def from_player(cls, player: "Player"):
-        return cls(player.id, player.name, player.rating)
+        return cls(player.id, player.name, player.rating, player.avatar)
 
     def expected_win(self, other: "PlayerInfo"):
         self_q = 10 ** (self.rating / 400)

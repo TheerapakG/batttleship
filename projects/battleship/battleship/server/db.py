@@ -19,6 +19,9 @@ class Player(Base):
     name: Mapped[str] = mapped_column(String(30), nullable=False)
     rating: Mapped[int] = mapped_column(nullable=False, default=1200)
     coins: Mapped[int] = mapped_column(nullable=False, default=1000000)
+    avatar: Mapped[UUID] = mapped_column(
+        nullable=False, default=UUID("df2c420f-9b6b-4b73-a164-d80bc39a2df8")
+    )
     admin: Mapped[bool] = mapped_column(nullable=False, default=False)
     auth_token: Mapped[UUID] = mapped_column(
         unique=True, nullable=False, index=True, default=uuid4
@@ -32,6 +35,7 @@ class Player(Base):
             self.id,
             self.name,
             self.rating,
+            models.AvatarVariantId(self.avatar),
             self.admin,
             self.auth_token,
             self.transfer_code,

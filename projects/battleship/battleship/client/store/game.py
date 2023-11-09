@@ -28,6 +28,14 @@ skin: Ref[str] = Ref("Navy")
 
 players = Ref(dict[models.PlayerId, models.PlayerInfo]())
 
+players_not_user = computed(
+    lambda: {
+        p_id: p_info
+        for p_id, p_info in unref(players).items()
+        if not unref(user.is_player(p_id))
+    }
+)
+
 ready_players = Ref(set[models.PlayerId]())
 round_players = Ref(dict[models.PlayerId, models.PlayerInfo]())
 alive_players = Ref(list[models.PlayerInfo]())

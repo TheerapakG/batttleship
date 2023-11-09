@@ -20,11 +20,11 @@ def lobby(**kwargs):
 
     ready = Ref(False)
 
-    def get_player_ready_text(player_id: models.PlayerId):
+    def get_player_ready_color(player_id: models.PlayerId):
         return computed(
-            lambda: "ready"
+            lambda: colors["green"][500]
             if player_id in unref(store.game.ready_players)
-            else "not ready"
+            else colors["red"][500]
         )
 
     async def subscribe_player_join():
@@ -106,33 +106,46 @@ def lobby(**kwargs):
             <Column t-style="w['full'](window) | h['full'](window) | g[4]">
                 <EmotePicker />
                 <Row t-style="g[4]">
-                    <Layer t-for="player_id, player_info in unref(store.game.players).items()">
+                    <Layer>
                         <Column t-style="w[48] | h[64] | g[3]">
                             <RoundedRectLabelButton
-                                t-if="store.user.is_player(player_id)"
                                 text="'Ready'"
                                 disabled="ready"
                                 t-style="c['teal'][400] | hover_c['teal'][500] | disabled_c['slate'][500] | text_c['white'] | w[48] | h[12]"
                                 handle-ClickEvent="on_ready_button"
                             />
                             <Label
-                                text="get_player_ready_text(player_id)" 
+                                text="f'rating: {str(unref(store.user.rating))}'" 
                                 text_color="colors['white']" 
                             />
                             <Label
-                                text="f'rating: {str(player_info.rating)}'" 
-                                text_color="colors['white']" 
-                            />
-                            <Label
-                                text="player_info.name" 
-                                text_color="colors['white']" 
+                                text="store.user.name" 
+                                text_color="get_player_ready_color(models.PlayerId.from_player(unref(store.user.player)))" 
                             />
                         </Column>
                         <Image 
-                            t-if="unref(store.game.get_player_emote(player_id)) is not None" 
-                            texture="unref(store.game.get_player_emote(player_id))"
+                            t-if="unref(store.game.get_player_emote(unref(store.user.player))) is not None" 
+                            texture="unref(store.game.get_player_emote(unref(store.user.player)))"
                         />
                     </Layer>
+                    <Column t-style="w[48] | g[2]">
+                        <Layer t-for="player_id, player_info in unref(store.game.players_not_user).items()">
+                            <Row t-style="g[2]">
+                                <Label
+                                    text="player_info.name" 
+                                    text_color="get_player_ready_color(player_id)" 
+                                />
+                                <Label
+                                    text="f'rating: {str(player_info.rating)}'" 
+                                    text_color="colors['white']" 
+                                />
+                            </Row>
+                            <Image 
+                                t-if="unref(store.game.get_player_emote(player_id)) is not None" 
+                                texture="unref(store.game.get_player_emote(player_id))"
+                            />
+                        </Layer>
+                    </Column>
                 </Row>
             </Column>
         </Layer>
