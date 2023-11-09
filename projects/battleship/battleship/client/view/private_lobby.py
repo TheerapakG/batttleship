@@ -13,11 +13,13 @@ def private_lobby(join_code: str, **kwargs):
     return Component.render_xml(
         """
         <Layer>
-            <Column t-style="w['full'](window) | h['full'](window)" >
-                <Pad pad_top="300">
-                    <Label text="join_code" text_color="colors['white']" />
-                </Pad>
-            </Column>
+            <Absolute t-style="w['full'](window) | h['full'](window)" >
+                <Column t-style="w['full'](window)">
+                    <Pad t-style="p_b[16]">
+                        <Label text="f'code: {join_code}'" text_color="colors['white']" />
+                    </Pad>
+                </Column>
+            </Absolute>
             <Lobby />
         </Layer>
         """,

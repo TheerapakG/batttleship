@@ -6,7 +6,7 @@ from functools import partial
 from tgraphics.color import colors
 from tgraphics.component import Component
 from tgraphics.event import ComponentMountedEvent
-from tgraphics.reactivity import Ref, computed, unref
+from tgraphics.reactivity import Ref, Watcher, computed, unref
 from tgraphics.style import *
 
 from ..component import emote_picker
@@ -19,6 +19,9 @@ def lobby(**kwargs):
     window = store.ctx.use_window()
 
     ready = Ref(False)
+    duration = Ref[float](0)
+
+    dots = computed(lambda: "." * (int(unref(duration) % 3) + 1))
 
     def get_player_ready_color(player_id: models.PlayerId):
         return computed(
@@ -69,6 +72,11 @@ def lobby(**kwargs):
 
     def on_mounted(event: ComponentMountedEvent):
         store.bgm.set_music(store.bgm.game_bgm)
+        event.instance.bound_watchers.update(
+            [
+                Watcher.ifref(event.instance.mount_duration, duration.set_value),
+            ]
+        )
         event.instance.bound_tasks.update(
             [
                 asyncio.create_task(subscribe_player_join()),
@@ -131,7 +139,7 @@ def lobby(**kwargs):
                     <Column t-style="w[48] | g[4]">
                         <Label
                             t-if="not unref(store.game.players_not_user)"
-                            text="'waiting...'" 
+                            text="f'waiting{unref(dots)}'" 
                             text_color="colors['white']" 
                         />
                         <Row 

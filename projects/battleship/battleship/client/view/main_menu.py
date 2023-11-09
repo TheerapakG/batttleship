@@ -58,7 +58,7 @@ def main_menu(name: str | None = None, **kwargs):
             store.game.room.value = models.RoomId.from_room_info(room.room)
             store.game.players.value = {
                 models.PlayerId.from_player_info(player_info): player_info
-                for player_info in room.players
+                for player_info in room.room.players
             }
             store.game.ready_players.value = set(room.room.readies)
 

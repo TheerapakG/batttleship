@@ -83,11 +83,17 @@ def ship_setup(**kwargs):
     )
     player_submits = computed(lambda: [*unref(store.game.board_lookup).keys()])
 
-    def check_submit(player: models.PlayerId):
-        if not unref(store.user.is_player(player)):
-            return computed(lambda: player in unref(player_submits))
+    def get_player_submit_color(player_id: models.PlayerId):
+        if not unref(store.user.is_player(player_id)):
+            return computed(
+                lambda: colors["green"][500]
+                if player_id in unref(player_submits)
+                else colors["red"][500]
+            )
         else:
-            return submit
+            return computed(
+                lambda: colors["green"][500] if unref(submit) else colors["red"][500]
+            )
 
     current_placement = computed(
         lambda: (
@@ -282,12 +288,8 @@ def ship_setup(**kwargs):
                     <Layer t-for="player_id, player_info in unref(store.game.players).items()">
                         <Column>
                             <Label
-                                text="'Submitted' if unref(check_submit(player_id)) else 'Not Submitted'"
-                                text_color="colors['white']" 
-                            />
-                            <Label
                                 text="f'{player_info.name}: {unref(store.game.get_player_point(player_id))} ({unref(store.game.get_player_score(player_id))})'" 
-                                text_color="colors['white']" 
+                                text_color="get_player_submit_color(player_id)" 
                             />
                         </Column>
                         <Image 
