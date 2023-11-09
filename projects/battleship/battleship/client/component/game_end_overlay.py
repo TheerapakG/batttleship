@@ -29,6 +29,10 @@ def game_end_overlay(**kwargs):
                 Watcher.ifref(event.instance.mount_duration, duration.set_value),
             ]
         )
+        if unref(store.user.is_player(unref(store.game.result).win)):
+            store.game.media_player.queue(store.game.win_sound)
+        else:
+            store.game.media_player.queue(store.game.lose_sound)
 
     win_player = computed(
         lambda: unref(store.game.round_players).get(player)
@@ -120,7 +124,7 @@ def game_end_overlay(**kwargs):
                         />
                     </Column>
                     <Label 
-                        text="f'You Won' if unref(store.user.is_player(unref(store.game.result).win)) else 'You Lost'" 
+                        text="f'You Won' if unref(store.user.is_player(unref(store.game.result).win)) else 'You Lose'" 
                         text_color="colors['black']"
                         font_size="64"
                     />
