@@ -8,7 +8,7 @@ from ...shared import models
 
 
 @Component.register("PrivateLobby")
-def private_lobby(join_code: str, room: models.RoomInfo, **kwargs):
+def private_lobby(join_code: str, **kwargs):
     window = store.ctx.use_window()
     return Component.render_xml(
         """
@@ -18,7 +18,7 @@ def private_lobby(join_code: str, room: models.RoomInfo, **kwargs):
                     <Label text="join_code" text_color="colors['white']" />
                 </Pad>
             </Column>
-            <Lobby room="room" />
+            <Lobby />
         </Layer>
         """,
         **kwargs,

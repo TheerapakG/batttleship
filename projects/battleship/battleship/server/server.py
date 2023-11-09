@@ -51,14 +51,17 @@ class BattleshipServer(Server):
             else:
                 raise ResponseError("not_found", b"")
 
-    async def _player_update_ranking(
-        self, player: models.PlayerId, changes: int
+    async def _player_update(
+        self, player: models.PlayerId, rating_changes: int, coin_changes: int
     ) -> models.Player:
         async with self.db_session_maker() as db_session:
             stmt = (
                 update(db.Player)
                 .where(db.Player.id == player.id)
-                .values(rating=db.Player.rating + changes)
+                .values(
+                    rating=db.Player.rating + rating_changes,
+                    coins=db.Player.coins + coin_changes,
+                )
                 .returning(db.Player)
             )
             result = await db_session.execute(stmt)

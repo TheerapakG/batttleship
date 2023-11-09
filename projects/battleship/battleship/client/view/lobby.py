@@ -13,66 +13,59 @@ from ..component import emote_picker
 from .. import store
 from ...shared import models, ship_type
 
-player_infos = Ref([])
-player_readies = Ref(set())
-
 
 @Component.register("Lobby")
-def lobby(room: models.RoomInfo, **kwargs):
+def lobby(**kwargs):
     window = store.ctx.use_window()
-
-    store.game.room.value = models.RoomId.from_room_info(room)
-
-    player_infos.value = room.players.copy()
-    player_readies.value = set(room.readies)
 
     ready = Ref(False)
 
     def get_player_ready_text(player_id: models.PlayerId):
         return computed(
-            lambda: "ready" if player_id in unref(player_readies) else "not ready"
+            lambda: "ready"
+            if player_id in unref(store.game.ready_players)
+            else "not ready"
         )
 
     async def subscribe_player_join():
         if (client := unref(store.ctx.client)) is not None:
             async for player_info in client.on_room_join():
-                player_infos.value.append(player_info)
-                player_infos.trigger()
+                store.game.players.value[
+                    models.PlayerId.from_player_info(player_info)
+                ] = player_info
+                store.game.players.trigger()
 
     async def subscribe_player_leave():
         if (client := unref(store.ctx.client)) is not None:
             async for player_info in client.on_room_leave():
-                player_infos.value.remove(player_info)
-                player_infos.trigger()
+                del store.game.players.value[
+                    models.PlayerId.from_player_info(player_info)
+                ]
+                store.game.players.trigger()
                 with contextlib.suppress(KeyError):
-                    player_readies.value.remove(
+                    store.game.ready_players.value.remove(
                         models.PlayerId.from_player_info(player_info)
                     )
-                    player_readies.trigger()
+                    store.game.ready_players.trigger()
 
     async def subscribe_room_player_ready():
         if (client := unref(store.ctx.client)) is not None:
             async for player_id in client.on_room_player_ready():
-                player_readies.value.add(player_id)
-                player_readies.trigger()
+                store.game.ready_players.value.add(player_id)
+                store.game.ready_players.trigger()
 
     async def subscribe_room_ready():
         if (client := unref(store.ctx.client)) is not None:
             async for _ in client.on_room_ready():
                 from .ship_setup import ship_setup
 
-                store.game.players.value = {
-                    models.PlayerId.from_player_info(player_info): player_info
-                    for player_info in unref(player_infos)
-                }
-                store.game.players.trigger()
-
                 await store.game.room_reset()
-                await store.ctx.set_scene(ship_setup())
                 store.game.player_points.value = {
                     models.PlayerId.from_player_info(player): Ref(0)
                     for player in unref(store.game.alive_players)
                 }
+
+                await store.ctx.set_scene(ship_setup())
 
     def on_mounted(event: ComponentMountedEvent):
         store.bgm.set_music(store.bgm.game_bgm)
@@ -88,7 +81,7 @@ def lobby(room: models.RoomInfo, **kwargs):
 
     async def return_button(_e):
         if (client := unref(store.ctx.client)) is not None:
-            await client.room_leave(models.RoomId.from_room_info(room))
+            await client.room_leave(unref(store.game.room))
 
             from .main_menu import main_menu
 
@@ -97,7 +90,7 @@ def lobby(room: models.RoomInfo, **kwargs):
     async def on_ready_button(_e):
         if (client := unref(store.ctx.client)) is not None:
             ready.value = True
-            await client.room_ready(models.RoomId.from_room_info(room))
+            await client.room_ready(unref(store.game.room))
 
     return Component.render_xml(
         """
@@ -113,17 +106,17 @@ def lobby(room: models.RoomInfo, **kwargs):
             <Column t-style="w['full'](window) | h['full'](window) | g[4]">
                 <EmotePicker />
                 <Row t-style="g[4]">
-                    <Layer t-for="player_info in player_infos">
+                    <Layer t-for="player_id, player_info in unref(store.game.players).items()">
                         <Column t-style="w[48] | h[64] | g[3]">
                             <RoundedRectLabelButton
-                                t-if="store.user.is_player(models.PlayerId.from_player_info(player_info))"
+                                t-if="store.user.is_player(player_id)"
                                 text="'Ready'"
                                 disabled="ready"
                                 t-style="c['teal'][400] | hover_c['teal'][500] | disabled_c['slate'][500] | text_c['white'] | w[48] | h[12]"
                                 handle-ClickEvent="on_ready_button"
                             />
                             <Label
-                                text="get_player_ready_text(models.PlayerId.from_player_info(player_info))" 
+                                text="get_player_ready_text(player_id)" 
                                 text_color="colors['white']" 
                             />
                             <Label
@@ -136,8 +129,8 @@ def lobby(room: models.RoomInfo, **kwargs):
                             />
                         </Column>
                         <Image 
-                            t-if="unref(store.game.get_player_emote(models.PlayerId.from_player_info(player_info))) is not None" 
-                            texture="unref(store.game.get_player_emote(models.PlayerId.from_player_info(player_info)))"
+                            t-if="unref(store.game.get_player_emote(player_id)) is not None" 
+                            texture="unref(store.game.get_player_emote(player_id))"
                         />
                     </Layer>
                 </Row>

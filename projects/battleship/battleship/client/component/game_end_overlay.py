@@ -100,6 +100,10 @@ def game_end_overlay(**kwargs):
                             />
                         </Row>
                         <Label 
+                            text="f'Coins: {unref(store.game.result).new_stat.coins} ({unref(store.game.result).coin_change:+})'" 
+                            text_color="colors['black']" 
+                        />
+                        <Label 
                             text="f'New rating: {unref(store.game.result).new_stat.rating} ({unref(store.game.result).rating_change:+})'" 
                             text_color="colors['black']" 
                         />

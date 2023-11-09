@@ -24,9 +24,11 @@ sfx_volume = Ref(1.0)
 
 room: Ref[models.RoomId | None] = Ref(None)
 
-skin: Ref[str] = Ref("")
+skin: Ref[str] = Ref("Navy")
 
 players = Ref(dict[models.PlayerId, models.PlayerInfo]())
+
+ready_players = Ref(set[models.PlayerId]())
 round_players = Ref(dict[models.PlayerId, models.PlayerInfo]())
 alive_players = Ref(list[models.PlayerInfo]())
 dead_players = Ref(list[models.PlayerInfo]())
@@ -389,7 +391,7 @@ async def subscribe_game_end():
     if (client := unref(ctx.client)) is not None:
         async for game_result in client.on_game_end():
             player_points.value[game_result.win].value += 1
-            user.save_info(game_result.new_stat)
+            user.save(game_result.new_stat)
             result.value = game_result
 
 

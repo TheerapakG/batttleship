@@ -37,10 +37,16 @@ def main_menu(name: str | None = None, **kwargs):
             user := unref(store.user.player)
         ) is not None:
             room = await client.room_match(models.BearingPlayerAuth.from_player(user))
+            store.game.room.value = models.RoomId.from_room_info(room)
+            store.game.players.value = {
+                models.PlayerId.from_player_info(player_info): player_info
+                for player_info in room.players
+            }
+            store.game.ready_players.value = set(room.readies)
 
             from .lobby import lobby
 
-            await store.ctx.set_scene(lobby(room))
+            await store.ctx.set_scene(lobby())
 
     async def on_private_room_create_button(_e):
         if (client := unref(store.ctx.client)) is not None and (
@@ -49,9 +55,16 @@ def main_menu(name: str | None = None, **kwargs):
             room = await client.private_room_create(
                 models.BearingPlayerAuth.from_player(user)
             )
+            store.game.room.value = models.RoomId.from_room_info(room)
+            store.game.players.value = {
+                models.PlayerId.from_player_info(player_info): player_info
+                for player_info in room.players
+            }
+            store.game.ready_players.value = set(room.room.readies)
+
             from .private_lobby import private_lobby
 
-            await store.ctx.set_scene(private_lobby(room.join_code, room.room))
+            await store.ctx.set_scene(private_lobby(room.join_code))
 
     async def on_private_room_join_button(_e):
         if (client := unref(store.ctx.client)) is not None and (
@@ -60,9 +73,16 @@ def main_menu(name: str | None = None, **kwargs):
             room = await client.private_room_join(
                 models.PrivateRoomJoinArgs(user.auth_token, unref(code))
             )
+            store.game.room.value = models.RoomId.from_room_info(room)
+            store.game.players.value = {
+                models.PlayerId.from_player_info(player_info): player_info
+                for player_info in room.players
+            }
+            store.game.ready_players.value = set(room.readies)
+
             from .lobby import lobby
 
-            await store.ctx.set_scene(lobby(room))
+            await store.ctx.set_scene(lobby())
 
     async def on_profile_button(_e):
         from .profile import profile

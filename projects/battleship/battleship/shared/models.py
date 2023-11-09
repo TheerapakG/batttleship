@@ -208,7 +208,8 @@ class RoomPlayerSubmitData:
 class GameEndData:
     win: PlayerId
     rating_change: int
-    new_stat: PlayerInfo
+    coin_change: int
+    new_stat: Player
 
 
 @dataclass

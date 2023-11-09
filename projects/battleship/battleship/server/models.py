@@ -103,12 +103,16 @@ class Room:
                         )
                     )
 
-    async def _player_update_ranking(self, player_id: models.PlayerId, changes: int):
-        new_info = models.PlayerInfo.from_player(
-            await self.server._player_update_ranking(player_id, changes)
+    async def _player_update(
+        self, player_id: models.PlayerId, rating_changes: int, coin_changes: int
+    ):
+        player = await self.server._player_update(
+            player_id, rating_changes, coin_changes
         )
+        new_info = models.PlayerInfo.from_player(player)
         if player_id in self.players:
             self.players[player_id] = new_info
+        return player
 
     async def do_player_lost(self, player_id: models.PlayerId, remove: bool = False):
         player = self.players[player_id]
@@ -129,7 +133,9 @@ class Room:
                 )
         if len(self.alive_players) == 1:
             self.lost_players.append(self.alive_players.pop())
-            changes = {}
+            rating_changes = {}
+            coin_changes = {}
+            new_stats = {}
             if not self.start_private:
                 async with asyncio.TaskGroup() as tg:
                     for i, player in enumerate(self.lost_players):
@@ -144,10 +150,15 @@ class Room:
                                 for p in self.lost_players[i + 1 :]
                             ]
                         )
-                        changes[models.PlayerId.from_player_info(player)] = change
-                        tg.create_task(
-                            self._player_update_ranking(
-                                models.PlayerId.from_player_info(player), change
+                        rating_changes[
+                            models.PlayerId.from_player_info(player)
+                        ] = change
+                        coin_changes[models.PlayerId.from_player_info(player)] = 20 * i
+                        new_stats[
+                            models.PlayerId.from_player_info(player)
+                        ] = tg.create_task(
+                            self._player_update(
+                                models.PlayerId.from_player_info(player), change, 20 * i
                             )
                         )
             async with asyncio.TaskGroup() as tg:
@@ -159,8 +170,9 @@ class Room:
                             ],
                             models.GameEndData(
                                 models.PlayerId.from_player_info(self.lost_players[-1]),
-                                changes.get(player_id, 0),
-                                player_info,
+                                rating_changes.get(player_id, 0),
+                                coin_changes.get(player_id, 0),
+                                await new_stats.get(player_id),
                             ),
                         )
                     )
