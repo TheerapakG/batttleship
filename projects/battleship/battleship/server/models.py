@@ -270,7 +270,7 @@ class Room:
         async with self.lock:
             if not is_task and self.next_player_task is not None:
                 self.next_player_task.cancel()
-            if end_turn:
+            if self.alive_players and end_turn:
                 async with asyncio.TaskGroup() as tg:
                     for player_info in self.players.values():
                         tg.create_task(
@@ -284,19 +284,22 @@ class Room:
 
             await asyncio.sleep(5)
 
-            player = self.alive_players.pop()
-            self.alive_players.insert(0, player)
-            async with asyncio.TaskGroup() as tg:
-                for player_info in self.players.values():
-                    tg.create_task(
-                        self.server.on_game_turn_start(
-                            self.server.known_player_session[
-                                models.PlayerId.from_player_info(player_info)
-                            ],
-                            player,
+            if self.alive_players:
+                player = self.alive_players.pop()
+                self.alive_players.insert(0, player)
+                async with asyncio.TaskGroup() as tg:
+                    for player_info in self.players.values():
+                        tg.create_task(
+                            self.server.on_game_turn_start(
+                                self.server.known_player_session[
+                                    models.PlayerId.from_player_info(player_info)
+                                ],
+                                player,
+                            )
                         )
-                    )
-            self.next_player_task = asyncio.create_task(self.to_next_player_timeout())
+                self.next_player_task = asyncio.create_task(
+                    self.to_next_player_timeout()
+                )
 
     async def add_board_submit(self, board: models.Board):
         board_id = models.BoardId.from_board(board)

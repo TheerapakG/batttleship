@@ -282,27 +282,6 @@ async def subscribe_player_leave():
     if (client := unref(ctx.client)) is not None:
         async for player in client.on_room_leave():
             del players.value[models.PlayerId.from_player_info(player)]
-            with suppress(ValueError):
-                alive_players.value.remove(player)
-            dead_players.value.append(player)
-            players.trigger()
-            alive_players.trigger()
-            dead_players.trigger()
-
-            with suppress(KeyError, IndexError):
-                player_id = models.PlayerId.from_player_info(player)
-                del board_lookup.value[player_id]
-                board_id = unref(board_lookup)[player_id]
-                del boards.value[board_id]
-
-                if unref(current_board_id) == board_id:
-                    await set_board_id(
-                        unref(board_lookup)[
-                            models.PlayerId.from_player_info(
-                                unref(alive_players_not_user)[0]
-                            )
-                        ]
-                    )
 
 
 async def subscribe_room_player_submit():
@@ -386,6 +365,32 @@ async def subscribe_game_reset():
             asyncio.create_task(do_game_reset())
 
 
+async def subscribe_game_player_lost():
+    if (client := unref(ctx.client)) is not None:
+        async for player in client.on_game_player_lost():
+            with suppress(ValueError):
+                alive_players.value.remove(player)
+            dead_players.value.append(player)
+            players.trigger()
+            alive_players.trigger()
+            dead_players.trigger()
+
+            with suppress(KeyError, IndexError):
+                player_id = models.PlayerId.from_player_info(player)
+                del board_lookup.value[player_id]
+                board_id = unref(board_lookup)[player_id]
+                del boards.value[board_id]
+
+                if unref(current_board_id) == board_id:
+                    await set_board_id(
+                        unref(board_lookup)[
+                            models.PlayerId.from_player_info(
+                                unref(alive_players_not_user)[0]
+                            )
+                        ]
+                    )
+
+
 async def do_emote_reset(player: models.PlayerId, u: UUID):
     await asyncio.sleep(3)
     if emotes.value[player][1] == u:
@@ -426,6 +431,7 @@ def get_tasks():
         asyncio.create_task(subscribe_turn_end()),
         asyncio.create_task(subscribe_display_board()),
         asyncio.create_task(subscribe_shot_board()),
+        asyncio.create_task(subscribe_game_player_lost()),
         asyncio.create_task(subscribe_game_reset()),
         asyncio.create_task(subscribe_game_end()),
         asyncio.create_task(subscribe_emote_display()),
