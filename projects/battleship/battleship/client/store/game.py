@@ -271,6 +271,13 @@ async def shot_submit(
         shots.value[shot_variant].value = unref(shots.value[shot_variant]) - 1
 
 
+async def subscribe_room_player_ready():
+    if (client := unref(store.ctx.client)) is not None:
+        async for player_id in client.on_room_player_ready():
+            ready_players.value.add(player_id)
+            ready_players.trigger()
+
+
 async def subscribe_player_leave():
     if (client := unref(ctx.client)) is not None:
         async for player in client.on_room_leave():
@@ -410,6 +417,7 @@ async def subscribe_game_end():
 
 def get_tasks():
     return [
+        asyncio.create_task(subscribe_room_player_ready()),
         asyncio.create_task(subscribe_player_leave()),
         asyncio.create_task(subscribe_room_player_submit()),
         asyncio.create_task(subscribe_room_submit()),

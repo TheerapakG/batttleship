@@ -42,7 +42,9 @@ def main_menu(name: str | None = None, **kwargs):
                 models.PlayerId.from_player_info(player_info): player_info
                 for player_info in room.players
             }
-            store.game.ready_players.value = set(room.readies)
+            store.game.ready_players.value.clear()
+            store.game.ready_players.trigger()
+            store.game.ready_players.value.update(room.readies)
             store.game.ready_players.trigger()
 
             from .lobby import lobby
@@ -61,7 +63,9 @@ def main_menu(name: str | None = None, **kwargs):
                 models.PlayerId.from_player_info(player_info): player_info
                 for player_info in room.room.players
             }
-            store.game.ready_players.value = set(room.room.readies)
+            store.game.ready_players.value.clear()
+            store.game.ready_players.trigger()
+            store.game.ready_players.value.update(room.room.readies)
             store.game.ready_players.trigger()
 
             from .private_lobby import private_lobby
@@ -80,7 +84,9 @@ def main_menu(name: str | None = None, **kwargs):
                 models.PlayerId.from_player_info(player_info): player_info
                 for player_info in room.players
             }
-            store.game.ready_players.value = set(room.readies)
+            store.game.ready_players.value.clear()
+            store.game.ready_players.trigger()
+            store.game.ready_players.value.update(room.readies)
             store.game.ready_players.trigger()
 
             from .lobby import lobby

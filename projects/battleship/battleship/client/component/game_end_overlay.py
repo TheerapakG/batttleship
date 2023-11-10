@@ -30,7 +30,8 @@ def game_end_overlay(**kwargs):
                 Watcher.ifref(event.instance.mount_duration, duration.set_value),
             ]
         )
-        store.game.ready_players.value = {}
+        store.game.ready_players.value.clear()
+        store.game.ready_players.trigger()
         if unref(store.user.is_player(unref(store.game.result).win)):
             store.game.media_player.queue(store.game.win_sound)
         else:
@@ -38,9 +39,11 @@ def game_end_overlay(**kwargs):
         store.game.media_player.play()
 
     win_player = computed(
-        lambda: unref(store.game.round_players).get(player)
-        if (player := unref(store.game.result).win) is not None
-        else None
+        lambda: (
+            unref(store.game.round_players).get(r.win)
+            if (r := unref(store.game.result)) is not None
+            else None
+        )
     )
 
     async def on_rematch_button(event: ClickEvent):

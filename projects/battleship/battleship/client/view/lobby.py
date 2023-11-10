@@ -25,9 +25,11 @@ def lobby(**kwargs):
 
     def get_player_ready_color(player_id: models.PlayerId):
         return computed(
-            lambda: colors["green"][500]
-            if player_id in unref(store.game.ready_players)
-            else colors["red"][500]
+            lambda: (
+                colors["green"][500]
+                if player_id in unref(store.game.ready_players)
+                else colors["red"][500]
+            )
         )
 
     async def subscribe_player_join():
