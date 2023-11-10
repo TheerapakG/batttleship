@@ -13,7 +13,7 @@ from tgraphics.style import *
 
 from .. import store
 from ..component import game_end_overlay
-from ...shared import models, ship_type
+from ...shared import models, ship_type, avatar_type
 from ...shared.utils import add, mat_mul_vec
 
 
@@ -266,6 +266,7 @@ def ship_setup(**kwargs):
                             t-for="player_id, player_info in unref(store.game.round_players).items()"
                             t-style="h[6] | g[6]"
                         >
+                            <Image t-style="w[8] | h[8]" texture="avatar_type.AVATAR_VARIANTS[player_info.avatar.id].name" />
                             <Label
                                 text="f'{player_info.name}: {unref(store.game.get_player_point(player_id))} ({unref(store.game.get_player_score(player_id))})'"
                                 text_color="get_player_submit_color(player_id)" 

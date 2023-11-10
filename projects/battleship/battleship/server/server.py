@@ -124,6 +124,28 @@ class BattleshipServer(Server):
 
     @Route.simple
     @ensure_session_player
+    async def player_avatar_set(
+        self, _session: Session, args: models.PlayerAvatarSetArgs
+    ) -> models.Player:
+        async with self.db_session_maker() as db_session:
+            stmt = (
+                update(db.Player)
+                .where(db.Player.auth_token == args.auth_token)
+                .values(
+                    avatar=args.avatar.id,
+                )
+                .returning(db.Player)
+            )
+            result = await db_session.execute(stmt)
+            await db_session.commit()
+
+            if db_player := result.scalars().one_or_none():
+                return await db_player.to_shared(db_session)
+            else:
+                raise ResponseError("not_found", b"")
+
+    @Route.simple
+    @ensure_session_player
     async def player_get(
         self, _session: Session, args: models.BearingPlayerAuth
     ) -> models.Player:

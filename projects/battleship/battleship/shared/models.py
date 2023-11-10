@@ -261,3 +261,8 @@ class EmoteDisplayData:
 class GachaResult:
     player: Player
     emote: EmoteVariantId
+
+
+@dataclass
+class PlayerAvatarSetArgs(BearingPlayerAuth):
+    avatar: AvatarVariantId

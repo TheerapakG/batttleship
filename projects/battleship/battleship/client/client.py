@@ -22,6 +22,12 @@ class BattleshipClient(Client):
         raise NotImplementedError()
 
     @Route.simple
+    async def player_avatar_set(
+        self, args: models.PlayerAvatarSetArgs
+    ) -> models.Player:
+        raise NotImplementedError()
+
+    @Route.simple
     async def player_get(self, args: models.BearingPlayerAuth) -> models.Player:
         raise NotImplementedError()
 

@@ -5,11 +5,16 @@ from pathlib import Path
 from tgraphics.reactivity import Ref, computed, unref
 
 from ..utils import platform_app_directory, converter
-from ...shared import models
+from ...shared import models, avatar_type
 
 player = Ref[models.Player | None](None)
 
 name = computed(lambda: user.name if (user := unref(player)) is not None else None)
+avatar = computed(
+    lambda: avatar_type.AVATAR_VARIANTS[user.avatar.id]
+    if (user := unref(player)) is not None
+    else None
+)
 rating = computed(lambda: user.rating if (user := unref(player)) is not None else None)
 coins = computed(lambda: user.coins if (user := unref(player)) is not None else None)
 

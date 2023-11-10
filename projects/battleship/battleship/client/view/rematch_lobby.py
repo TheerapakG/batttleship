@@ -12,7 +12,7 @@ from tsocket.shared import ResponseError
 
 from ..component import emote_picker
 from .. import store
-from ...shared import models, ship_type
+from ...shared import models, ship_type, avatar_type
 
 
 @Component.register("RematchLobby")
@@ -114,6 +114,7 @@ def rematch_lobby(**kwargs):
                                 text="f'rating: {str(unref(store.user.rating))}'" 
                                 text_color="colors['white']" 
                             />
+                            <Image texture="unref(store.user.avatar).name" />
                             <Label
                                 text="store.user.name" 
                                 text_color="get_player_ready_color(models.PlayerId.from_player(unref(store.user.player)))" 
@@ -134,6 +135,7 @@ def rematch_lobby(**kwargs):
                             t-for="player_id, player_info in unref(store.game.players_not_user).items()"
                             t-style="h[6] | g[6]"
                         >
+                            <Image t-style="w[8] | h[8]" texture="avatar_type.AVATAR_VARIANTS[player_info.avatar.id].name" />
                             <Label
                                 text="player_info.name" 
                                 text_color="get_player_ready_color(player_id)" 
